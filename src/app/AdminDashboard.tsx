@@ -14,7 +14,7 @@ import PointsVenteManagement from './PointsVenteManagement';
 import UserManagement from './UserManagement';
 import MobileVendorsManagement from './MobileVendorsManagement';
 
-interface Notification {
+export interface Notification {
   id: number;
   type: string;
   message: string;
@@ -22,7 +22,7 @@ interface Notification {
   is_read: boolean;
 }
 
-interface StatItem {
+export interface StatItem {
   icon: string;
   title: string;
   value: string;
@@ -30,7 +30,7 @@ interface StatItem {
   color: string;
 }
 
-interface ActivityItem {
+export interface ActivityItem {
   icon: string;
   action: string;
   user: string;
@@ -38,14 +38,14 @@ interface ActivityItem {
   color: string;
 }
 
-interface AlertItem {
+export interface AlertItem {
   icon: string;
   type: string;
   message: string;
   priority: 'high' | 'medium' | 'low';
 }
 
-interface POSData {
+export interface POSData {
   pos_id: number | null;
   pos_name: string;
   stats: StatItem[];
@@ -53,7 +53,7 @@ interface POSData {
   alerts: AlertItem[];
 }
 
-interface DashboardData {
+export interface DashboardData {
   cumulative: POSData;
   pos_data: POSData[];
 }
@@ -96,6 +96,7 @@ const AdminDashboard = () => {
     const checkAuth = async () => {
       const token = localStorage.getItem('access');
       if (!token) {
+        console.warn('No access token found, redirecting to login');
         router.push('/login');
         return;
       }
@@ -103,17 +104,15 @@ const AdminDashboard = () => {
       try {
         const response = await apiService.get('/dashboard/');
         if (!response.ok) {
-          throw new Error('Failed to fetch dashboard data');
+          throw new Error(`Failed to fetch dashboard data: ${response.status}`);
         }
         const data: DashboardData = await response.json();
         setDashboardData(data);
-        
-        // Set default selected POS to "Total Général"
         setSelectedPOS(data.cumulative);
-        
         setIsLoading(false);
-      } catch (error) {
-        setError('Session invalide. Veuillez vous reconnecter.');
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
+        setError('Session invalide ou erreur serveur. Veuillez vous reconnecter.');
         logout();
         router.push('/login');
       }
@@ -139,15 +138,19 @@ const AdminDashboard = () => {
   // Fetch notifications
   useEffect(() => {
     const fetchNotifications = async () => {
+      const token = localStorage.getItem('access');
+      if (!token) return;
+      
       try {
         const response = await apiService.get('/notifications/');
         if (!response.ok) {
           if (response.status === 401) {
+            console.warn('Unauthorized, logging out');
             logout();
             router.push('/login');
             return;
           }
-          throw new Error('Failed to fetch notifications');
+          throw new Error(`Failed to fetch notifications: ${response.status}`);
         }
         const data: Notification[] = await response.json();
         setNotifications(data.map((n: Notification) => ({
@@ -157,12 +160,12 @@ const AdminDashboard = () => {
           created_at: n.created_at,
           is_read: n.is_read
         })));
-      } catch (error) {
+      } catch (err) {
+        console.error('Error fetching notifications:', err);
         setError('Erreur lors du chargement des notifications');
-        console.error('Error fetching notifications:', error);
       }
     };
-    if (localStorage.getItem('access')) fetchNotifications();
+    fetchNotifications();
   }, [router, logout]);
 
   const unreadNotifications = notifications.filter(n => !n.is_read).length;
@@ -193,7 +196,6 @@ const AdminDashboard = () => {
     
     return (
       <div className="space-y-6">
-        {/* Error Message */}
         {error && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center">
             <AlertTriangle className="text-red-600 mr-2" size={20} />
@@ -201,7 +203,6 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* Welcome Banner */}
         <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white">
           <h1 className="text-2xl font-bold mb-2">Bonjour, {'Admin'} 👋</h1>
           <p className="opacity-90">
@@ -211,7 +212,6 @@ const AdminDashboard = () => {
           </p>
         </div>
 
-        {/* Header Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {currentData.stats.map((stat, index) => {
             const IconComponent = iconComponents[stat.icon] || CheckCircle;
@@ -234,7 +234,6 @@ const AdminDashboard = () => {
           })}
         </div>
 
-        {/* Quick Actions */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold text-gray-800">Actions Rapides</h3>
@@ -281,7 +280,6 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* Recent Activity and Alerts */}
         <div className="grid lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex justify-between items-center mb-4">
@@ -372,7 +370,7 @@ const AdminDashboard = () => {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
             <div className="text-gray-400 mb-4">
               {menuItems.find(item => item.id === activeTab)?.icon && 
-                React.createElement(menuItems.find(item => item.id === activeTab).icon, { size: 48, className: 'mx-auto' })
+                React.createElement(menuItems.find(item => item.id === activeTab)!.icon, { size: 48, className: 'mx-auto' })
               }
             </div>
             <h3 className="text-xl font-semibold text-gray-800 mb-2">
@@ -405,7 +403,6 @@ const AdminDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Sidebar */}
       <div className={`fixed inset-y-0 left-0 z-50 bg-white shadow-lg transition-all duration-300 ease-in-out ${
         sidebarOpen ? 'w-64' : 'w-20'
       }`}>
@@ -492,7 +489,6 @@ const AdminDashboard = () => {
             </div>
             
             <div className="flex items-center space-x-4">
-              {/* POS Selector Dropdown */}
               <div className="relative">
                 <button 
                   onClick={() => setPosDropdownOpen(!posDropdownOpen)}
