@@ -1,7 +1,6 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiService } from './ApiService';
-
 const AuthContext = createContext();
 
 export const useAuth = () => {
