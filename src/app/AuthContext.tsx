@@ -1,152 +1,165 @@
 "use client";
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { apiService } from './ApiService';
-const AuthContext = createContext();
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import { apiService } from "./ApiService";
 
-export const useAuth = () => {
+// ✅ Typage de l'utilisateur (à adapter selon tes données réelles)
+interface User {
+  id: number;
+  username: string;
+  email: string;
+  // Ajoute ici d'autres champs selon la réponse de ton backend
+}
+
+// ✅ Typage du contexte
+interface AuthContextType {
+  user: User | null;
+  isLoading: boolean;
+  error: string | null;
+  login: (username: string, password: string) => Promise<{ success: boolean; data?: User; error?: string }>;
+  logout: () => void;
+  refreshToken: () => Promise<string>;
+  checkAuthStatus: () => Promise<void>;
+}
+
+// ✅ Création du contexte avec un type explicite
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// ✅ Hook pour utiliser le contexte
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+// ✅ Props de AuthProvider
+interface AuthProviderProps {
+  children: ReactNode;
+}
 
-  // Check if user is authenticated on mount
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     checkAuthStatus();
   }, []);
 
   const checkAuthStatus = async () => {
     try {
-      const token = localStorage.getItem('access');
+      const token = localStorage.getItem("access");
       if (!token) {
         setIsLoading(false);
         return;
       }
 
-      // Verify token by fetching user profile or dashboard data
-      const response = await apiService.get('/dashboard/');
+      const response = await apiService.get("/dashboard/");
       if (response.ok) {
-        // Token is valid, set user from stored data or fetch user info
-        const storedUser = localStorage.getItem('user_data');
+        const storedUser = localStorage.getItem("user_data");
         if (storedUser) {
           setUser(JSON.parse(storedUser));
         } else {
-          // Fetch user data from the backend
-          const userResponse = await apiService.get('/users/');
+          const userResponse = await apiService.get("/users/");
           if (userResponse.ok) {
-            const userData = await userResponse.json();
-            localStorage.setItem('user_data', JSON.stringify(userData));
+            const userData: User = await userResponse.json();
+            localStorage.setItem("user_data", JSON.stringify(userData));
             setUser(userData);
           }
         }
       } else {
-        // Token is invalid, clear storage
-        localStorage.removeItem('access');
-        localStorage.removeItem('refresh');
-        localStorage.removeItem('user_data');
+        localStorage.clear();
         setUser(null);
       }
-    } catch (error) {
-      console.error('Auth check failed:', error);
-      localStorage.removeItem('access');
-      localStorage.removeItem('refresh');
-      localStorage.removeItem('user_data');
+    } catch (err) {
+      console.error("Auth check failed:", err);
+      localStorage.clear();
       setUser(null);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const login = async (username, password) => {
+  const login = async (
+    username: string,
+    password: string
+  ): Promise<{ success: boolean; data?: User; error?: string }> => {
     try {
       setIsLoading(true);
       setError(null);
 
-      const response = await apiService.post('/token/', {
-        username,
-        password
-      });
+      const response = await apiService.post("/token/", { username, password });
 
       if (!response.ok) {
-        throw new Error('Identifiants invalides');
+        throw new Error("Identifiants invalides");
       }
 
       const data = await response.json();
-      
-      // Store tokens
-      localStorage.setItem('access', data.access);
+      localStorage.setItem("access", data.access);
       if (data.refresh) {
-        localStorage.setItem('refresh', data.refresh);
+        localStorage.setItem("refresh", data.refresh);
       }
 
-      // Fetch user data from the backend
-      const userResponse = await apiService.get('/users/');
+      const userResponse = await apiService.get("/users/");
       if (!userResponse.ok) {
-        throw new Error('Failed to fetch user data');
+        throw new Error("Failed to fetch user data");
       }
-      const userData = await userResponse.json();
 
-      localStorage.setItem('user_data', JSON.stringify(userData));
+      const userData: User = await userResponse.json();
+      localStorage.setItem("user_data", JSON.stringify(userData));
       setUser(userData);
 
       return { success: true, data: userData };
-    } catch (error) {
-      console.error('Login failed:', error);
-      setError(error.message || 'Erreur de connexion');
-      return { success: false, error: error.message };
+    } catch (err: any) {
+      console.error("Login failed:", err);
+      setError(err.message || "Erreur de connexion");
+      return { success: false, error: err.message };
     } finally {
       setIsLoading(false);
     }
   };
 
   const logout = () => {
-    localStorage.removeItem('access');
-    localStorage.removeItem('refresh');
-    localStorage.removeItem('user_data');
+    localStorage.clear();
     setUser(null);
     setError(null);
   };
 
-  const refreshToken = async () => {
+  const refreshToken = async (): Promise<string> => {
     try {
-      const refreshToken = localStorage.getItem('refresh');
-      if (!refreshToken) {
-        throw new Error('No refresh token available');
-      }
+      const refresh = localStorage.getItem("refresh");
+      if (!refresh) throw new Error("No refresh token available");
 
-      const response = await apiService.post('/token/refresh/', {
-        refresh: refreshToken
-      });
+      const response = await apiService.post("/token/refresh/", { refresh });
 
-      if (!response.ok) {
-        throw new Error('Token refresh failed');
-      }
+      if (!response.ok) throw new Error("Token refresh failed");
 
       const data = await response.json();
-      localStorage.setItem('access', data.access);
+      localStorage.setItem("access", data.access);
 
       return data.access;
-    } catch (error) {
-      console.error('Token refresh failed:', error);
+    } catch (err) {
+      console.error("Token refresh failed:", err);
       logout();
-      throw error;
+      throw err;
     }
   };
 
-  const value = {
+  const value: AuthContextType = {
     user,
     isLoading,
     error,
     login,
     logout,
     refreshToken,
-    checkAuthStatus
+    checkAuthStatus,
   };
 
   return (
