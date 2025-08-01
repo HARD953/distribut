@@ -14,7 +14,51 @@ import PointsVenteManagement from './PointsVenteManagement';
 import UserManagement from './UserManagement';
 import MobileVendorsManagement from './MobileVendorsManagement';
 
-const iconComponents = {
+interface Notification {
+  id: number;
+  type: string;
+  message: string;
+  created_at: string;
+  is_read: boolean;
+}
+
+interface StatItem {
+  icon: string;
+  title: string;
+  value: string;
+  change: string;
+  color: string;
+}
+
+interface ActivityItem {
+  icon: string;
+  action: string;
+  user: string;
+  time: string;
+  color: string;
+}
+
+interface AlertItem {
+  icon: string;
+  type: string;
+  message: string;
+  priority: 'high' | 'medium' | 'low';
+}
+
+interface POSData {
+  pos_id: number | null;
+  pos_name: string;
+  stats: StatItem[];
+  recent_activities: ActivityItem[];
+  alerts: AlertItem[];
+}
+
+interface DashboardData {
+  cumulative: POSData;
+  pos_data: POSData[];
+}
+
+const iconComponents: Record<string, React.ComponentType<any>> = {
   MapPin,
   ShoppingCart,
   Coins,
@@ -24,11 +68,12 @@ const iconComponents = {
   UserRound,
   Bike
 };
+
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [dashboardData, setDashboardData] = useState({
+  const [dashboardData, setDashboardData] = useState<DashboardData>({
     cumulative: {
       pos_id: null,
       pos_name: "Total Général",
@@ -38,12 +83,12 @@ const AdminDashboard = () => {
     },
     pos_data: []
   });
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user, logout } = useAuth();
   const router = useRouter();
-  const [selectedPOS, setSelectedPOS] = useState(null);
+  const [selectedPOS, setSelectedPOS] = useState<POSData | null>(null);
   const [posDropdownOpen, setPosDropdownOpen] = useState(false);
 
   // Check authentication and fetch data on mount
@@ -60,7 +105,7 @@ const AdminDashboard = () => {
         if (!response.ok) {
           throw new Error('Failed to fetch dashboard data');
         }
-        const data = await response.json();
+        const data: DashboardData = await response.json();
         setDashboardData(data);
         
         // Set default selected POS to "Total Général"
@@ -104,13 +149,13 @@ const AdminDashboard = () => {
           }
           throw new Error('Failed to fetch notifications');
         }
-        const data = await response.json();
-        setNotifications(data.map(n => ({
+        const data: Notification[] = await response.json();
+        setNotifications(data.map((n: Notification) => ({
           id: n.id,
-          type: n.type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          type: n.type.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
           message: n.message,
-          time: formatTimeAgo(new Date(n.created_at)),
-          read: n.is_read
+          created_at: n.created_at,
+          is_read: n.is_read
         })));
       } catch (error) {
         setError('Erreur lors du chargement des notifications');
@@ -120,11 +165,11 @@ const AdminDashboard = () => {
     if (localStorage.getItem('access')) fetchNotifications();
   }, [router, logout]);
 
-  const unreadNotifications = notifications.filter(n => !n.read).length;
+  const unreadNotifications = notifications.filter(n => !n.is_read).length;
 
-  const formatTimeAgo = (date) => {
+  const formatTimeAgo = (date: Date) => {
     const now = new Date();
-    const diff = Math.floor((now - date) / 60000); // Minutes
+    const diff = Math.floor((now.getTime() - date.getTime()) / 60000); // Minutes
     if (diff < 60) return `${diff} min`;
     const hours = Math.floor(diff / 60);
     if (hours < 24) return `${hours}h`;
@@ -137,7 +182,7 @@ const AdminDashboard = () => {
     router.push('/login');
   };
 
-  const getCurrentData = () => {
+  const getCurrentData = (): POSData => {
     if (!selectedPOS) return dashboardData.cumulative;
     if (selectedPOS.pos_id === null) return dashboardData.cumulative;
     return dashboardData.pos_data.find(pos => pos.pos_id === selectedPOS.pos_id) || dashboardData.cumulative;
@@ -522,12 +567,12 @@ const AdminDashboard = () => {
                     <div className="max-h-96 overflow-y-auto">
                       {notifications.length > 0 ? (
                         notifications.map(notification => (
-                          <div key={notification.id} className={`p-3 border-b border-gray-100 hover:bg-gray-50 ${!notification.read ? 'bg-blue-50' : ''}`}>
+                          <div key={notification.id} className={`p-3 border-b border-gray-100 hover:bg-gray-50 ${!notification.is_read ? 'bg-blue-50' : ''}`}>
                             <div className="flex justify-between">
                               <p className="font-medium text-sm">{notification.type}</p>
                               <p className="text-xs text-gray-500 flex items-center">
                                 <Clock size={12} className="mr-1" />
-                                {notification.time}
+                                {formatTimeAgo(new Date(notification.created_at))}
                               </p>
                             </div>
                             <p className="text-sm text-gray-600">{notification.message}</p>
