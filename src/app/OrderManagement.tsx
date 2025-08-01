@@ -140,7 +140,7 @@ const OrderManagement = () => {
   // Fetch initial data
   useEffect(() => {
     const fetchData = async () => {
-      const token = localStorage.getItem('access_token');
+      const token = localStorage.getItem('access');
       if (!token) {
         setError('Veuillez vous connecter.');
         return;
@@ -153,14 +153,14 @@ const OrderManagement = () => {
       try {
         setError(null);
         // Fetch Orders
-        const ordersRes = await fetch('http://127.0.0.1:8000/api/orders/', { headers });
+        const ordersRes = await fetch('https://backendsupply.onrender.com/api/orders/', { headers });
         if (!ordersRes.ok) throw new Error('Échec de la récupération des commandes');
         const ordersData = await ordersRes.json();
         setOrders(ordersData);
         setFilteredOrders(ordersData);
 
         // Fetch Products
-        const productsRes = await fetch('http://127.0.0.1:8000/api/products/', { headers });
+        const productsRes = await fetch('https://backendsupply.onrender.com/api/products/', { headers });
         if (!productsRes.ok) throw new Error('Échec de la récupération des produits');
         const productsData = await productsRes.json();
         setProducts(productsData);
@@ -248,14 +248,14 @@ const OrderManagement = () => {
 
   // Order actions
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem('access');
     if (!token) {
       setError('Veuillez vous connecter.');
       return;
     }
     try {
       setError(null);
-      const res = await fetch(`http://127.0.0.1:8000/api/orders/${orderId}/`, {
+      const res = await fetch(`https://backendsupply.onrender.com/api/orders/${orderId}/`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -276,14 +276,14 @@ const OrderManagement = () => {
 
   const deleteOrder = async (orderId: string) => {
     if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette commande ?')) return;
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem('access');
     if (!token) {
       setError('Veuillez vous connecter.');
       return;
     }
     try {
       setError(null);
-      const res = await fetch(`http://127.0.0.1:8000/api/orders/${orderId}/`, {
+      const res = await fetch(`https://backendsupply.onrender.com/api/orders/${orderId}/`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -299,7 +299,7 @@ const OrderManagement = () => {
   };
 
   const bulkStatusUpdate = async (newStatus: string) => {
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem('access');
     if (!token) {
       setError('Veuillez vous connecter.');
       return;
@@ -307,7 +307,7 @@ const OrderManagement = () => {
     try {
       setError(null);
       for (const orderId of selectedOrders) {
-        await fetch(`http://127.0.0.1:8000/api/orders/${orderId}/`, {
+        await fetch(`https://backendsupply.onrender.com/api/orders/${orderId}/`, {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -353,7 +353,7 @@ const OrderManagement = () => {
 
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem('access');
     if (!token) {
       setError('Veuillez vous connecter.');
       return;
@@ -367,7 +367,7 @@ const OrderManagement = () => {
           throw new Error(`Stock insuffisant pour ${product?.name || 'le produit'}`);
         }
       }
-      const res = await fetch('http://127.0.0.1:8000/api/orders/', {
+      const res = await fetch('https://backendsupply.onrender.com/api/orders/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

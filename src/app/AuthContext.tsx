@@ -39,7 +39,7 @@ export const AuthProvider = ({ children }) => {
           setUser(JSON.parse(storedUser));
         } else {
           // Fetch user data from the backend
-          const userResponse = await apiService.get('/users/me/');
+          const userResponse = await apiService.get('/users/');
           if (userResponse.ok) {
             const userData = await userResponse.json();
             localStorage.setItem('user_data', JSON.stringify(userData));
@@ -87,7 +87,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       // Fetch user data from the backend
-      const userResponse = await apiService.get('/users/me/');
+      const userResponse = await apiService.get('/users/');
       if (!userResponse.ok) {
         throw new Error('Failed to fetch user data');
       }

@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Package, Plus, Search, Filter, Edit, Trash2, 
   AlertTriangle, TrendingUp, TrendingDown, 
@@ -7,6 +7,7 @@ import {
   BarChart3, ShoppingCart, Truck, Clock, X,
   Save, User, MapPin, Calendar, DollarSign
 } from 'lucide-react';
+import { apiService } from './ApiService';
 
 interface Product {
   id: string;
@@ -22,11 +23,31 @@ interface Product {
   description?: string;
   status: 'en_stock' | 'stock_faible' | 'rupture' | 'surstockage';
   last_updated: string;
+  variants?: ProductVariant[];
+  images?: ProductImage[];
+}
+
+interface ProductVariant {
+  id: string;
+  name: string;
+  current_stock: number;
+  min_stock: number;
+  max_stock: number;
+  price: number;
+  barcode: string;
+}
+
+interface ProductImage {
+  id: string;
+  url: string;
+  is_featured: boolean;
+  caption?: string;
 }
 
 interface StockMovement {
   id: string;
   product: { id: string; name: string };
+  product_variant?: { id: string; name: string };
   type: 'entree' | 'sortie' | 'ajustement';
   quantity: number;
   date: string;
@@ -45,10 +66,12 @@ interface NewProduct {
   supplier_id: number | '';
   point_of_sale_id: string;
   description: string;
+  variants?: Partial<ProductVariant>[];
 }
 
 interface NewMovement {
   product_id: string;
+  product_variant_id?: string;
   type: 'entree' | 'sortie' | 'ajustement' | '';
   quantity: number;
   reason: string;
@@ -108,63 +131,79 @@ const StockManagement = () => {
     reason: ''
   });
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch initial data
+  // Fetch all data
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const [
+        overviewResponse, 
+        productsResponse, 
+        movementsResponse,
+        categoriesResponse,
+        suppliersResponse,
+        posResponse
+      ] = await Promise.all([
+        apiService.get('/stock-overview/'),
+        apiService.get('/products/?include_variants=true'),
+        apiService.get('/stock-movements/'),
+        apiService.get('/categories/'),
+        apiService.get('/suppliers/'),
+        apiService.get('/points-vente/')
+      ]);
+
+      // Map categories to ensure correct structure
+      const mappedCategories: Category[] = Array.isArray(categoriesResponse)
+        ? categoriesResponse.map((cat: any) => ({
+            id: cat.id,
+            name: cat.name
+          }))
+        : [];
+
+      // Map suppliers to ensure correct structure
+      const mappedSuppliers: Supplier[] = Array.isArray(suppliersResponse)
+        ? suppliersResponse.map((sup: any) => ({
+            id: sup.id,
+            name: sup.name
+          }))
+        : [];
+
+      setOverviewData({
+        total_products: overviewResponse?.cumulative?.total_products || 0,
+        stock_value: overviewResponse?.cumulative?.stock_value || 0,
+        alert_count: overviewResponse?.cumulative?.alert_count || 0,
+        today_movements: overviewResponse?.cumulative?.today_movements || 0,
+        critical_products: Array.isArray(overviewResponse?.cumulative?.critical_products)
+          ? overviewResponse.cumulative.critical_products
+          : []
+      });
+
+      setProducts(Array.isArray(productsResponse) ? productsResponse : []);
+      setMovements(Array.isArray(movementsResponse) ? movementsResponse : []);
+      setCategories(mappedCategories);
+      setSuppliers(mappedSuppliers);
+      setPointsOfSale(Array.isArray(posResponse) ? posResponse : []);
+
+    } catch (error: any) {
+      setError(error.message || 'Erreur lors du chargement des données');
+      setProducts([]);
+      setMovements([]);
+      setCategories([]);
+      setSuppliers([]);
+      setPointsOfSale([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      const token = localStorage.getItem('access_token');
-      if (!token) {
-        setError('Veuillez vous connecter pour accéder aux données.');
-        return;
-      }
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      };
-
-      try {
-        // Fetch Overview
-        const overviewRes = await fetch('http://127.0.0.1:8000/api/stock-overview/', { headers });
-        if (!overviewRes.ok) throw new Error('Échec de la récupération des données d\'aperçu');
-        const overviewData = await overviewRes.json();
-        setOverviewData(overviewData);
-
-        // Fetch Products
-        const productsRes = await fetch('http://127.0.0.1:8000/api/products/', { headers });
-        if (!productsRes.ok) throw new Error('Échec de la récupération des produits');
-        const productsData = await productsRes.json();
-        setProducts(productsData);
-
-        // Fetch Stock Movements
-        const movementsRes = await fetch('http://127.0.0.1:8000/api/stock-movements/', { headers });
-        if (!movementsRes.ok) throw new Error('Échec de la récupération des mouvements');
-        const movementsData = await movementsRes.json();
-        setMovements(movementsData);
-
-        // Fetch Categories
-        const categoriesRes = await fetch('http://127.0.0.1:8000/api/categories/', { headers });
-        if (!categoriesRes.ok) throw new Error('Échec de la récupération des catégories');
-        const categoriesData = await categoriesRes.json();
-        setCategories(categoriesData);
-
-        // Fetch Suppliers
-        const suppliersRes = await fetch('http://127.0.0.1:8000/api/suppliers/', { headers });
-        if (!suppliersRes.ok) throw new Error('Échec de la récupération des fournisseurs');
-        const suppliersData = await suppliersRes.json();
-        setSuppliers(suppliersData);
-
-        // Fetch Points of Sale
-        const posRes = await fetch('http://127.0.0.1:8000/api/points-vente/', { headers });
-        if (!posRes.ok) throw new Error('Échec de la récupération des points de vente');
-        const posData = await posRes.json();
-        setPointsOfSale(posData);
-      } catch (error: any) {
-        setError(error.message);
-      }
-    };
     fetchData();
   }, []);
 
+  // Product status color
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'en_stock': return 'bg-green-100 text-green-800 border-green-200';
@@ -175,6 +214,7 @@ const StockManagement = () => {
     }
   };
 
+  // Movement icon
   const getMovementIcon = (type: string) => {
     switch (type) {
       case 'entree': return <TrendingUp className="text-green-600" size={16} />;
@@ -184,48 +224,34 @@ const StockManagement = () => {
     }
   };
 
+  // Filter products
+  const filteredProducts = useMemo(() => {
+    return products.filter(product => {
+      const nameMatch = product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false;
+      const skuMatch = product.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false;
+      const categoryMatch = selectedCategory === 'all' || product.category?.name === selectedCategory;
+      return (nameMatch || skuMatch) && categoryMatch;
+    });
+  }, [products, searchTerm, selectedCategory]);
+
+  // Add new product
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      setError('Veuillez vous connecter.');
-      return;
-    }
     try {
       setError(null);
-      // Create Product
-      const productRes = await fetch('http://127.0.0.1:8000/api/products/', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          ...newProduct,
-          point_of_sale_id: newProduct.point_of_sale_id || pointsOfSale[0]?.id
-        })
+      const createdProduct = await apiService.post('/products/', {
+        ...newProduct,
+        point_of_sale_id: newProduct.point_of_sale_id || pointsOfSale[0]?.id,
+        category_id: Number(newProduct.category_id),
+        supplier_id: Number(newProduct.supplier_id)
       });
-      if (!productRes.ok) {
-        const errorData = await productRes.json();
-        throw new Error(errorData.detail || 'Échec de la création du produit');
-      }
-      const createdProduct = await productRes.json();
-
-      // Create Stock Movement if initial stock > 0
+      
       if (newProduct.current_stock > 0) {
-        await fetch('http://127.0.0.1:8000/api/stock-movements/', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            product_id: createdProduct.id,
-            type: 'entree',
-            quantity: newProduct.current_stock,
-            reason: 'Stock initial',
-            user_id: null
-          })
+        await apiService.post('/stock-movements/', {
+          product_id: createdProduct.id,
+          type: 'entree',
+          quantity: newProduct.current_stock,
+          reason: 'Stock initial'
         });
       }
 
@@ -243,164 +269,92 @@ const StockManagement = () => {
         description: ''
       });
       setShowAddModal(false);
+      await fetchData();
     } catch (error: any) {
-      setError(error.message);
+      setError(error.message || 'Erreur lors de l\'ajout du produit');
     }
   };
 
+  // Delete product
   const handleDeleteProduct = async (id: string) => {
     if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce produit ?')) return;
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      setError('Veuillez vous connecter.');
-      return;
-    }
     try {
       setError(null);
-      const res = await fetch(`http://127.0.0.1:8000/api/products/${id}/`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || 'Échec de la suppression du produit');
-      }
+      await apiService.delete(`/products/${id}/`);
       setProducts(prev => prev.filter(p => p.id !== id));
       setMovements(prev => prev.filter(m => m.product.id !== id));
     } catch (error: any) {
-      setError(error.message);
+      setError(error.message || 'Erreur lors de la suppression du produit');
     }
   };
 
+  // Edit product
   const handleEditProduct = (product: Product) => {
     setSelectedProduct(product);
     setShowEditModal(true);
   };
 
+  // Update product
   const handleUpdateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct) return;
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      setError('Veuillez vous connecter.');
-      return;
-    }
     try {
       setError(null);
-      const res = await fetch(`http://127.0.0.1:8000/api/products/${selectedProduct.id}/`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          name: selectedProduct.name,
-          category_id: selectedProduct.category.id,
-          sku: selectedProduct.sku,
-          current_stock: selectedProduct.current_stock,
-          min_stock: selectedProduct.min_stock,
-          max_stock: selectedProduct.max_stock,
-          price: selectedProduct.price,
-          supplier_id: selectedProduct.supplier.id,
-          point_of_sale_id: selectedProduct.point_of_sale.id,
-          description: selectedProduct.description || ''
-        })
+      const updatedProduct = await apiService.put(`/products/${selectedProduct.id}/`, {
+        name: selectedProduct.name,
+        category_id: selectedProduct.category.id,
+        sku: selectedProduct.sku,
+        current_stock: selectedProduct.current_stock,
+        min_stock: selectedProduct.min_stock,
+        max_stock: selectedProduct.max_stock,
+        price: selectedProduct.price,
+        supplier_id: selectedProduct.supplier.id,
+        point_of_sale_id: selectedProduct.point_of_sale.id,
+        description: selectedProduct.description || ''
       });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || 'Échec de la mise à jour du produit');
-      }
-      const updatedProduct = await res.json();
       setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
       setShowEditModal(false);
       setSelectedProduct(null);
     } catch (error: any) {
-      setError(error.message);
+      setError(error.message || 'Erreur lors de la mise à jour du produit');
     }
   };
 
+  // Replenish stock
   const handleReplenish = async (product: Product) => {
     const quantity = prompt('Entrez la quantité à réapprovisionner:', '50');
-    if (!quantity || isNaN(parseInt(quantity)) || parseInt(quantity) <= 0) {
+    if (!quantity || isNaN(parseInt(quantity))) {
       setError('Quantité invalide.');
       return;
     }
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      setError('Veuillez vous connecter.');
-      return;
-    }
     try {
       setError(null);
-      const res = await fetch('http://127.0.0.1:8000/api/stock-movements/', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          product_id: product.id,
-          type: 'entree',
-          quantity: parseInt(quantity),
-          reason: 'Réapprovisionnement',
-          user_id: null
-        })
+      const newMovement = await apiService.post('/stock-movements/', {
+        product_id: product.id,
+        type: 'entree',
+        quantity: parseInt(quantity),
+        reason: 'Réapprovisionnement'
       });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || 'Échec de la création du mouvement de stock');
-      }
-      const newMovement = await res.json();
       setMovements(prev => [newMovement, ...prev]);
-      // Refresh product
-      const productRes = await fetch(`http://127.0.0.1:8000/api/products/${product.id}/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (productRes.ok) {
-        const updatedProduct = await productRes.json();
-        setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
-      }
+      
+      const updatedProduct = await apiService.get(`/products/${product.id}/`);
+      setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
     } catch (error: any) {
-      setError(error.message);
+      setError(error.message || 'Erreur lors du réapprovisionnement');
     }
   };
 
+  // Add stock movement
   const handleAddMovement = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      setError('Veuillez vous connecter.');
-      return;
-    }
     try {
       setError(null);
-      const res = await fetch('http://127.0.0.1:8000/api/stock-movements/', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          ...newMovement,
-          user_id: null
-        })
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || 'Échec de la création du mouvement');
-      }
-      const createdMovement = await res.json();
+      const createdMovement = await apiService.post('/stock-movements/', newMovement);
       setMovements(prev => [createdMovement, ...prev]);
-      // Refresh affected product
-      const productRes = await fetch(`http://127.0.0.1:8000/api/products/${newMovement.product_id}/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (productRes.ok) {
-        const updatedProduct = await productRes.json();
-        setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
-      }
+      
+      const updatedProduct = await apiService.get(`/products/${newMovement.product_id}/`);
+      setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
+      
       setNewMovement({
         product_id: '',
         type: '',
@@ -409,17 +363,11 @@ const StockManagement = () => {
       });
       setShowMovementModal(false);
     } catch (error: any) {
-      setError(error.message);
+      setError(error.message || 'Erreur lors de l\'ajout du mouvement');
     }
   };
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.sku.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || product.category.name === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
+  // Modal component
   const Modal = ({ isOpen, onClose, title, children }: { 
     isOpen: boolean; 
     onClose: () => void; 
@@ -432,19 +380,12 @@ const StockManagement = () => {
         <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <h2 className="text-2xl font-bold text-gray-800">{title}</h2>
-            <button 
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
               <X size={24} />
             </button>
           </div>
           <div className="p-6">
-            {error && (
-              <div className="mb-4 p-4 bg-red-100 text-red-800 rounded-lg">
-                {error}
-              </div>
-            )}
+            {error && <div className="mb-4 p-4 bg-red-100 text-red-800 rounded-lg">{error}</div>}
             {children}
           </div>
         </div>
@@ -452,51 +393,51 @@ const StockManagement = () => {
     );
   };
 
+  // Overview View
   const OverviewView = () => (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-2xl border border-blue-200 shadow-lg hover:shadow-xl transition-all duration-300">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-2xl border border-blue-200 shadow-lg">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-blue-700">Total Produits</p>
               <p className="text-3xl font-bold text-blue-900">{overviewData.total_products}</p>
-              <p className="text-sm text-blue-600">+{Math.floor(overviewData.total_products * 0.1)} ce mois</p>
             </div>
             <div className="bg-blue-500 p-3 rounded-xl">
               <Package className="text-white" size={32} />
             </div>
           </div>
         </div>
-        <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-2xl border border-green-200 shadow-lg hover:shadow-xl">
+
+        <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-2xl border border-green-200 shadow-lg">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-green-700">Valeur Stock</p>
               <p className="text-3xl font-bold text-green-900">₣ {(overviewData.stock_value / 1000).toFixed(1)}K</p>
-              <p className="text-sm text-green-600">+8.5%</p>
             </div>
             <div className="bg-green-500 p-3 rounded-xl">
               <DollarSign className="text-white" size={32} />
             </div>
           </div>
         </div>
+
         <div className="bg-gradient-to-br from-red-50 to-red-100 p-6 rounded-2xl border border-red-200 shadow-lg">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-red-700">Alertes Stock</p>
               <p className="text-3xl font-bold text-red-900">{overviewData.alert_count}</p>
-              <p className="text-sm text-red-600">Action requise</p>
             </div>
             <div className="bg-red-500 p-3 rounded-xl">
               <AlertTriangle className="text-white" size={32} />
             </div>
           </div>
         </div>
+
         <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-2xl border border-purple-200 shadow-lg">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-purple-700">Mouvements Jour</p>
               <p className="text-3xl font-bold text-purple-900">{overviewData.today_movements}</p>
-              <p className="text-sm text-purple-600">Aujourd'hui</p>
             </div>
             <div className="bg-purple-500 p-3 rounded-xl">
               <RefreshCw className="text-white" size={32} />
@@ -504,6 +445,7 @@ const StockManagement = () => {
           </div>
         </div>
       </div>
+
       <div className="grid lg:grid-cols-2 gap-8">
         <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
           <div className="flex items-center justify-between mb-6">
@@ -513,13 +455,13 @@ const StockManagement = () => {
             </span>
           </div>
           <div className="space-y-4">
-            {overviewData.critical_products.map((product: Product) => (
+            {overviewData.critical_products.map((product: any) => (
               <div key={product.id} className="flex items-center justify-between p-4 border-l-4 border-red-400 bg-red-50 rounded-lg">
                 <div className="flex items-center space-x-3">
                   <AlertTriangle className={product.status === 'rupture' ? 'text-red-500' : 'text-amber-500'} size={24} />
                   <div>
                     <p className="font-semibold text-gray-800">{product.name}</p>
-                    <p className="text-sm text-gray-600">Stock: {product.current_stock} (Min: {product.min_stock})</p>
+                    <p className="text-sm text-gray-600">SKU: {product.sku}</p>
                   </div>
                 </div>
                 <button
@@ -530,12 +472,23 @@ const StockManagement = () => {
                 </button>
               </div>
             ))}
+            {overviewData.critical_products.length === 0 && (
+              <div className="text-center py-4 text-gray-500">
+                Aucune alerte de stock critique
+              </div>
+            )}
           </div>
         </div>
+
         <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-xl font-bold text-gray-800">Mouvements Récents</h3>
-            <button className="text-blue-600 hover:text-blue-800 font-medium">Voir tous</button>
+            <button 
+              onClick={() => setActiveView('movements')}
+              className="text-blue-600 hover:text-blue-800 font-medium"
+            >
+              Voir tous
+            </button>
           </div>
           <div className="space-y-4">
             {movements.slice(0, 4).map((movement) => (
@@ -553,12 +506,18 @@ const StockManagement = () => {
                 </div>
               </div>
             ))}
+            {movements.length === 0 && (
+              <div className="text-center py-4 text-gray-500">
+                Aucun mouvement récent
+              </div>
+            )}
           </div>
         </div>
       </div>
     </div>
   );
 
+  // Products View
   const ProductsView = () => (
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-lg">
@@ -580,16 +539,16 @@ const StockManagement = () => {
               onChange={(e) => setSelectedCategory(e.target.value)}
             >
               <option value="all">Toutes catégories</option>
-              {categories.map(cat => (
-                <option key={cat.id} value={cat.name}>{cat.name}</option>
-              ))}
+              {categories.length > 0 ? (
+                categories.map(cat => (
+                  <option key={cat.id} value={cat.name}>{cat.name}</option>
+                ))
+              ) : (
+                <option value="">Aucune catégorie disponible</option>
+              )}
             </select>
           </div>
           <div className="flex items-center space-x-3">
-            <button className="flex items-center space-x-2 px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors font-medium shadow-lg">
-              <Upload size={18} />
-              <span>Importer</span>
-            </button>
             <button 
               onClick={() => setShowAddModal(true)}
               className="flex items-center space-x-2 px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-medium shadow-lg"
@@ -600,6 +559,7 @@ const StockManagement = () => {
           </div>
         </div>
       </div>
+
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -619,7 +579,7 @@ const StockManagement = () => {
                   <td className="px-6 py-4">
                     <div>
                       <div className="text-sm font-semibold text-gray-900">{product.name}</div>
-                      <div className="text-sm text-gray-500">{product.category.name} • {product.sku}</div>
+                      <div className="text-sm text-gray-500">{product.category?.name} • {product.sku}</div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -635,14 +595,11 @@ const StockManagement = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-gray-900">{product.supplier.name}</div>
-                    <div className="text-sm text-gray-500">{product.point_of_sale.name}</div>
+                    <div className="text-sm font-medium text-gray-900">{product.supplier?.name}</div>
+                    <div className="text-sm text-gray-500">{product.point_of_sale?.name}</div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-3">
-                      <button className="text-blue-600 hover:text-blue-900 p-2 hover:bg-blue-50 rounded-lg transition-colors">
-                        <Eye size={16} />
-                      </button>
                       <button 
                         onClick={() => handleEditProduct(product)}
                         className="text-green-600 hover:text-green-900 p-2 hover:bg-green-50 rounded-lg transition-colors"
@@ -659,6 +616,13 @@ const StockManagement = () => {
                   </td>
                 </tr>
               ))}
+              {filteredProducts.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                    {products.length === 0 ? 'Aucun produit disponible' : 'Aucun produit correspondant à votre recherche'}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -666,6 +630,7 @@ const StockManagement = () => {
     </div>
   );
 
+  // Movements View
   const MovementsView = () => (
     <div className="space-y-6">
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
@@ -678,10 +643,6 @@ const StockManagement = () => {
             >
               <Plus size={16} />
               <span>Nouveau Mouvement</span>
-            </button>
-            <button className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
-              <Download size={16} />
-              <span>Exporter</span>
             </button>
           </div>
         </div>
@@ -703,15 +664,32 @@ const StockManagement = () => {
               <div className="text-right">
                 <p className="font-bold text-gray-800 text-lg">{movement.type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}: {movement.quantity}</p>
                 <p className="text-sm text-gray-500">{new Date(movement.date).toLocaleString()}</p>
-                <p className="text-sm text-blue-600 font-medium">{movement.user.username}</p>
+                <p className="text-xs text-blue-600 font-medium">{movement.user.username}</p>
               </div>
             </div>
           ))}
+          {movements.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              Aucun mouvement de stock enregistré
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 
+  // Analytics View
+  const AnalyticsView = () => (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-12 text-center">
+      <div className="bg-gradient-to-br from-purple-100 to-blue-100 p-8 rounded-2xl">
+        <TrendingUp className="mx-auto text-purple-600 mb-6" size={64} />
+        <h3 className="text-3xl font-bold text-gray-800 mb-4">Analyses Avancées</h3>
+        <p className="text-gray-600 text-lg">Les rapports et analyses détaillées seront développés prochainement.</p>
+      </div>
+    </div>
+  );
+
+  // Main render
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -719,11 +697,13 @@ const StockManagement = () => {
           <h1 className="text-4xl font-bold text-gray-800 mb-2">Gestion de Stock</h1>
           <p className="text-gray-600">Système de gestion intelligent pour votre inventaire</p>
         </div>
+        
         {error && (
           <div className="p-4 bg-red-100 text-red-800 rounded-lg">
             {error}
           </div>
         )}
+
         <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-2">
           <div className="flex space-x-2">
             {[
@@ -737,7 +717,7 @@ const StockManagement = () => {
                 onClick={() => setActiveView(view.id as any)}
                 className={`flex items-center space-x-2 px-6 py-3 rounded-xl transition-all font-medium ${
                   activeView === view.id 
-                    ? 'bg-blue-500 text-white shadow-lg transform scale-105' 
+                    ? 'bg-blue-500 text-white shadow-lg' 
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
                 }`}
               >
@@ -747,85 +727,64 @@ const StockManagement = () => {
             ))}
           </div>
         </div>
-        {activeView === 'overview' && <OverviewView />}
-        {activeView === 'products' && <ProductsView />}
-        {activeView === 'movements' && <MovementsView />}
-        {activeView === 'analytics' && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-12 text-center">
-            <div className="bg-gradient-to-br from-purple-100 to-blue-100 p-8 rounded-2xl">
-              <TrendingUp className="mx-auto text-purple-600 mb-6" size={64} />
-              <h3 className="text-3xl font-bold text-gray-800 mb-4">Analyses Avancées</h3>
-              <p className="text-gray-600 text-lg">Les rapports et analyses détaillées seront développés prochainement.</p>
-              <div className="mt-8 flex justify-center space-x-4">
-                <div className="bg-white p-4 rounded-lg shadow-md">
-                  <BarChart3 className="text-blue-500 mx-auto mb-2" size={32} />
-                  <p className="text-sm font-medium">Graphiques</p>
-                </div>
-                <div className="bg-white p-4 rounded-lg shadow-md">
-                  <TrendingUp className="text-green-500 mx-auto mb-2" size={32} />
-                  <p className="text-sm font-medium">Tendances</p>
-                </div>
-                <div className="bg-white p-4 rounded-lg shadow-md">
-                  <Download className="text-purple-500 mx-auto mb-2" size={32} />
-                  <p className="text-sm font-medium">Rapports</p>
-                </div>
-              </div>
-            </div>
+
+        {isLoading ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
           </div>
+        ) : (
+          <>
+            {activeView === 'overview' && <OverviewView />}
+            {activeView === 'products' && <ProductsView />}
+            {activeView === 'movements' && <MovementsView />}
+            {activeView === 'analytics' && <AnalyticsView />}
+          </>
         )}
+
+        {/* Add Product Modal */}
         <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="Ajouter un nouveau produit">
           <form onSubmit={handleAddProduct} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Package className="inline w-4 h-4 mr-1" />
-                  Nom du produit *
-                </label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Nom du produit *</label>
                 <input
                   type="text"
                   required
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={newProduct.name}
                   onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
-                  placeholder="Ex: Riz Parfumé 25kg"
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Filter className="inline w-4 h-4 mr-1" />
-                  Catégorie *
-                </label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Catégorie *</label>
                 <select
                   required
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={newProduct.category_id}
-                  onChange={(e) => setNewProduct({...newProduct, category_id: parseInt(e.target.value) || ''})}
+                  onChange={(e) => setNewProduct({...newProduct, category_id: Number(e.target.value) || ''})}
                 >
                   <option value="">Sélectionner une catégorie</option>
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
+                  {categories.length > 0 ? (
+                    categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))
+                  ) : (
+                    <option value="">Aucune catégorie disponible</option>
+                  )}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Settings className="inline w-4 h-4 mr-1" />
-                  Code SKU *
-                </label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Code SKU *</label>
                 <input
                   type="text"
                   required
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={newProduct.sku}
                   onChange={(e) => setNewProduct({...newProduct, sku: e.target.value.toUpperCase()})}
-                  placeholder="Ex: RIZ-25KG-001"
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <DollarSign className="inline w-4 h-4 mr-1" />
-                  Prix (₣) *
-                </label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Prix (₣) *</label>
                 <input
                   type="number"
                   required
@@ -833,73 +792,62 @@ const StockManagement = () => {
                   step="0.01"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={newProduct.price}
-                  onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value) || 0})}
+                  onChange={(e) => setNewProduct({...newProduct, price: Number(e.target.value) || 0})}
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Package className="inline w-4 h-4 mr-1" />
-                  Stock actuel *
-                </label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Stock actuel *</label>
                 <input
                   type="number"
                   required
                   min="0"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={newProduct.current_stock}
-                  onChange={(e) => setNewProduct({...newProduct, current_stock: parseInt(e.target.value) || 0})}
+                  onChange={(e) => setNewProduct({...newProduct, current_stock: Number(e.target.value) || 0})}
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <AlertTriangle className="inline w-4 h-4 mr-1" />
-                  Stock minimum *
-                </label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Stock minimum *</label>
                 <input
                   type="number"
                   required
                   min="0"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={newProduct.min_stock}
-                  onChange={(e) => setNewProduct({...newProduct, min_stock: parseInt(e.target.value) || 0})}
+                  onChange={(e) => setNewProduct({...newProduct, min_stock: Number(e.target.value) || 0})}
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <TrendingUp className="inline w-4 h-4 mr-1" />
-                  Stock maximum *
-                </label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Stock maximum *</label>
                 <input
                   type="number"
                   required
                   min="0"
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={newProduct.max_stock}
-                  onChange={(e) => setNewProduct({...newProduct, max_stock: parseInt(e.target.value) || 0})}
+                  onChange={(e) => setNewProduct({...newProduct, max_stock: Number(e.target.value) || 0})}
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <User className="inline w-4 h-4 mr-1" />
-                  Fournisseur *
-                </label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Fournisseur *</label>
                 <select
                   required
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={newProduct.supplier_id}
-                  onChange={(e) => setNewProduct({...newProduct, supplier_id: parseInt(e.target.value) || ''})}
+                  onChange={(e) => setNewProduct({...newProduct, supplier_id: Number(e.target.value) || ''})}
                 >
                   <option value="">Sélectionner un fournisseur</option>
-                  {suppliers.map(sup => (
-                    <option key={sup.id} value={sup.id}>{sup.name}</option>
-                  ))}
+                  {suppliers.length > 0 ? (
+                    suppliers.map(sup => (
+                      <option key={sup.id} value={sup.id}>{sup.name}</option>
+                    ))
+                  ) : (
+                    <option value="">Aucun fournisseur disponible</option>
+                  )}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <MapPin className="inline w-4 h-4 mr-1" />
-                  Point de vente *
-                </label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Point de vente *</label>
                 <select
                   required
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -907,49 +855,50 @@ const StockManagement = () => {
                   onChange={(e) => setNewProduct({...newProduct, point_of_sale_id: e.target.value})}
                 >
                   <option value="">Sélectionner un point de vente</option>
-                  {pointsOfSale.map(pos => (
-                    <option key={pos.id} value={pos.id}>{pos.name}</option>
-                  ))}
+                  {pointsOfSale.length > 0 ? (
+                    pointsOfSale.map(pos => (
+                      <option key={pos.id} value={pos.id}>{pos.name}</option>
+                    ))
+                  ) : (
+                    <option value="">Aucun point de vente disponible</option>
+                  )}
                 </select>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Description
-              </label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
               <textarea
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 rows={3}
                 value={newProduct.description}
                 onChange={(e) => setNewProduct({...newProduct, description: e.target.value})}
-                placeholder="Description détaillée du produit..."
               />
             </div>
             <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="px-6 py-3 border border-gray-600 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium">
+                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium"
+              >
                 Annuler
               </button>
               <button
                 type="submit"
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2">
-                <Save size={16} />
-                <span className="ml-2">Ajouter le produit</span>
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                Ajouter le produit
               </button>
             </div>
           </form>
         </Modal>
+
+        {/* Edit Product Modal */}
         <Modal isOpen={showEditModal} onClose={() => { setShowEditModal(false); setSelectedProduct(null); }} title="Modifier le produit">
           {selectedProduct && (
             <form onSubmit={handleUpdateProduct} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    <Package className="inline w-4 h-4 mr-1" />
-                    Nom du produit *
-                  </label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Nom du produit *</label>
                   <input
                     type="text"
                     required
@@ -959,26 +908,27 @@ const StockManagement = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    <Filter className="inline w-4 h-4 mr-1" />
-                    Catégorie *
-                  </label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Catégorie *</label>
                   <select
                     required
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={selectedProduct.category.id}
-                    onChange={(e) => setSelectedProduct({...selectedProduct, category: { ...selectedProduct.category, id: parseInt(e.target.value) }})}
+                    onChange={(e) => setSelectedProduct({
+                      ...selectedProduct,
+                      category: { ...selectedProduct.category, id: Number(e.target.value) }
+                    })}
                   >
-                    {categories.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))}
+                    {categories.length > 0 ? (
+                      categories.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))
+                    ) : (
+                      <option value="">Aucune catégorie disponible</option>
+                    )}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    <Settings className="inline w-4 h-4 mr-1" />
-                    Code SKU *
-                  </label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Code SKU *</label>
                   <input
                     type="text"
                     required
@@ -988,10 +938,7 @@ const StockManagement = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    <DollarSign className="inline w-4 h-4 mr-1" />
-                    Prix (₣) *
-                  </label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Prix (₣) *</label>
                   <input
                     type="number"
                     required
@@ -999,88 +946,85 @@ const StockManagement = () => {
                     step="0.01"
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={selectedProduct.price}
-                    onChange={(e) => setSelectedProduct({...selectedProduct, price: parseFloat(e.target.value) || 0})}
+                    onChange={(e) => setSelectedProduct({...selectedProduct, price: Number(e.target.value) || 0})}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    <Package className="inline w-4 h-4 mr-1" />
-                    Stock actuel *
-                  </label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Stock actuel *</label>
                   <input
                     type="number"
                     required
                     min="0"
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={selectedProduct.current_stock}
-                    onChange={(e) => setSelectedProduct({...selectedProduct, current_stock: parseInt(e.target.value) || 0})}
+                    onChange={(e) => setSelectedProduct({...selectedProduct, current_stock: Number(e.target.value) || 0})}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    <AlertTriangle className="inline w-4 h-4 mr-1" />
-                    Stock minimum *
-                  </label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Stock minimum *</label>
                   <input
                     type="number"
                     required
                     min="0"
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={selectedProduct.min_stock}
-                    onChange={(e) => setSelectedProduct({...selectedProduct, min_stock: parseInt(e.target.value) || 0})}
+                    onChange={(e) => setSelectedProduct({...selectedProduct, min_stock: Number(e.target.value) || 0})}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    <TrendingUp className="inline w-4 h-4 mr-1" />
-                    Stock maximum *
-                  </label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Stock maximum *</label>
                   <input
                     type="number"
                     required
                     min="0"
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={selectedProduct.max_stock}
-                    onChange={(e) => setSelectedProduct({...selectedProduct, max_stock: parseInt(e.target.value) || 0})}
+                    onChange={(e) => setSelectedProduct({...selectedProduct, max_stock: Number(e.target.value) || 0})}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    <User className="inline w-4 h-4 mr-1" />
-                    Fournisseur *
-                  </label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Fournisseur *</label>
                   <select
                     required
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={selectedProduct.supplier.id}
-                    onChange={(e) => setSelectedProduct({...selectedProduct, supplier: { ...selectedProduct.supplier, id: parseInt(e.target.value) }})}
+                    onChange={(e) => setSelectedProduct({
+                      ...selectedProduct,
+                      supplier: { ...selectedProduct.supplier, id: Number(e.target.value) }
+                    })}
                   >
-                    {suppliers.map(sup => (
-                      <option key={sup.id} value={sup.id}>{sup.name}</option>
-                    ))}
+                    {suppliers.length > 0 ? (
+                      suppliers.map(sup => (
+                        <option key={sup.id} value={sup.id}>{sup.name}</option>
+                      ))
+                    ) : (
+                      <option value="">Aucun fournisseur disponible</option>
+                    )}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    <MapPin className="inline w-4 h-4 mr-1" />
-                    Point de vente *
-                  </label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Point de vente *</label>
                   <select
                     required
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={selectedProduct.point_of_sale.id}
-                    onChange={(e) => setSelectedProduct({...selectedProduct, point_of_sale: { ...selectedProduct.point_of_sale, id: e.target.value }})}
+                    onChange={(e) => setSelectedProduct({
+                      ...selectedProduct,
+                      point_of_sale: { ...selectedProduct.point_of_sale, id: e.target.value }
+                    })}
                   >
-                    {pointsOfSale.map(pos => (
-                      <option key={pos.id} value={pos.id}>{pos.name}</option>
-                    ))}
+                    {pointsOfSale.length > 0 ? (
+                      pointsOfSale.map(pos => (
+                        <option key={pos.id} value={pos.id}>{pos.name}</option>
+                      ))
+                    ) : (
+                      <option value="">Aucun point de vente disponible</option>
+                    )}
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Description
-                </label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
                 <textarea
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   rows={3}
@@ -1092,48 +1036,51 @@ const StockManagement = () => {
                 <button
                   type="button"
                   onClick={() => { setShowEditModal(false); setSelectedProduct(null); }}
-                  className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium">
+                  className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium"
+                >
                   Annuler
                 </button>
-                <button 
-                  type="submit" 
-                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center space-x-2">
-                  <Save size={16} />
-                  <span className="ml-2">Mettre à jour</span>
+                <button
+                  type="submit"
+                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                >
+                  Mettre à jour
                 </button>
               </div>
             </form>
           )}
         </Modal>
+
+        {/* Add Movement Modal */}
         <Modal isOpen={showMovementModal} onClose={() => setShowMovementModal(false)} title="Nouveau mouvement de Stock">
           <form onSubmit={handleAddMovement} className="space-y-6">
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Package className="inline w-4 h-4 mr-2" />
-                  Produit *
-                </label>
-                <select 
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Produit *</label>
+                <select
                   required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={newMovement.product_id}
                   onChange={(e) => setNewMovement({...newMovement, product_id: e.target.value})}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                >
                   <option value="">Sélectionner un produit</option>
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
+                  {products.length > 0 ? (
+                    products.map(product => (
+                      <option key={product.id} value={product.id}>{product.name}</option>
+                    ))
+                  ) : (
+                    <option value="">Aucun produit disponible</option>
+                  )}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Filter className="inline w-4 h-4 mr-2" />
-                  Type *
-                </label>
-                <select 
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Type *</label>
+                <select
                   required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={newMovement.type}
                   onChange={(e) => setNewMovement({...newMovement, type: e.target.value as any})}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                >
                   <option value="">Sélectionner le type</option>
                   <option value="entree">Entrée</option>
                   <option value="sortie">Sortie</option>
@@ -1141,46 +1088,41 @@ const StockManagement = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <Package className="inline w-4 h-4 mr-2" />
-                  Quantité *
-                </label>
-                <input 
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Quantité *</label>
+                <input
                   type="number"
                   required
                   min="1"
-                  value={newMovement.quantity}
-                  onChange={(e) => setNewMovement({...newMovement, quantity: parseInt(e.target.value) || 0})}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={newMovement.quantity}
+                  onChange={(e) => setNewMovement({...newMovement, quantity: Number(e.target.value) || 0})}
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Raison *
-                </label>
-                <input 
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Raison *</label>
+                <input
                   type="text"
                   required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={newMovement.reason}
                   onChange={(e) => setNewMovement({...newMovement, reason: e.target.value})}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Ex: Réapprovisionnement"
                 />
               </div>
-              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-                <button 
-                  type="button" 
-                  onClick={() => setShowMovementModal(false)} 
-                  className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium">
-                  Annuler
-                </button>
-                <button 
-                  type="submit" 
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2">
-                  <Save size={16} />
-                  <span className="ml-2">Ajouter</span>
-                </button>
-              </div>
+            </div>
+            <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => setShowMovementModal(false)}
+                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                Ajouter le mouvement
+              </button>
             </div>
           </form>
         </Modal>
