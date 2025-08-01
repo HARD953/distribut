@@ -91,7 +91,6 @@ const AdminDashboard = () => {
   const [selectedPOS, setSelectedPOS] = useState<POSData | null>(null);
   const [posDropdownOpen, setPosDropdownOpen] = useState(false);
 
-  // Check authentication and fetch data on mount
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('access');
@@ -121,21 +120,6 @@ const AdminDashboard = () => {
     checkAuth();
   }, [router, logout]);
 
-  const menuItems = [
-    { id: 'dashboard', icon: Home, label: 'Dashboard', color: 'text-blue-600' },
-    { id: 'points-vente', icon: MapPin, label: 'Points de Vente', color: 'text-green-600' },
-    { id: 'vendeurs-ambulants', icon: Bike, label: 'Vendeurs Ambulants', color: 'text-amber-600' },
-    { id: 'stocks', icon: Package, label: 'Gestion Stocks', color: 'text-orange-600' },
-    { id: 'commandes', icon: ShoppingCart, label: 'Commandes', color: 'text-purple-600' },
-    { id: 'utilisateurs', icon: Users, label: 'Utilisateurs', color: 'text-indigo-600' },
-    { id: 'jetons', icon: Coins, label: 'Système Jetons', color: 'text-yellow-600' },
-    { id: 'contentieux', icon: Scale, label: 'Contentieux', color: 'text-red-600' },
-    { id: 'rapports', icon: BarChart3, label: 'Rapports', color: 'text-teal-600' },
-    { id: 'cartes', icon: Map, label: 'Cartes', color: 'text-cyan-600' },
-    { id: 'parametres', icon: Settings, label: 'Paramètres', color: 'text-gray-600' }
-  ];
-
-  // Fetch notifications
   useEffect(() => {
     const fetchNotifications = async () => {
       const token = localStorage.getItem('access');
@@ -172,7 +156,7 @@ const AdminDashboard = () => {
 
   const formatTimeAgo = (date: Date) => {
     const now = new Date();
-    const diff = Math.floor((now.getTime() - date.getTime()) / 60000); // Minutes
+    const diff = Math.floor((now.getTime() - date.getTime()) / 60000);
     if (diff < 60) return `${diff} min`;
     const hours = Math.floor(diff / 60);
     if (hours < 24) return `${hours}h`;
@@ -389,6 +373,20 @@ const AdminDashboard = () => {
         );
     }
   };
+
+  const menuItems = [
+    { id: 'dashboard', icon: Home, label: 'Dashboard', color: 'text-blue-600' },
+    { id: 'points-vente', icon: MapPin, label: 'Points de Vente', color: 'text-green-600' },
+    { id: 'vendeurs-ambulants', icon: Bike, label: 'Vendeurs Ambulants', color: 'text-amber-600' },
+    { id: 'stocks', icon: Package, label: 'Gestion Stocks', color: 'text-orange-600' },
+    { id: 'commandes', icon: ShoppingCart, label: 'Commandes', color: 'text-purple-600' },
+    { id: 'utilisateurs', icon: Users, label: 'Utilisateurs', color: 'text-indigo-600' },
+    { id: 'jetons', icon: Coins, label: 'Système Jetons', color: 'text-yellow-600' },
+    { id: 'contentieux', icon: Scale, label: 'Contentieux', color: 'text-red-600' },
+    { id: 'rapports', icon: BarChart3, label: 'Rapports', color: 'text-teal-600' },
+    { id: 'cartes', icon: Map, label: 'Cartes', color: 'text-cyan-600' },
+    { id: 'parametres', icon: Settings, label: 'Paramètres', color: 'text-gray-600' }
+  ];
 
   if (isLoading) {
     return (
