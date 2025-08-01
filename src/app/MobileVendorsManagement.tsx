@@ -6,7 +6,7 @@ import {
   ChevronLeft, ChevronRight, Frown, Smile, Meh, Check, X,
   Edit, Trash2, Save, Coins, Image as ImageIcon, Calendar, Clock as ClockIcon
 } from 'lucide-react';
-import { apiService } from './apiService';
+import { apiService } from './ApiService';
 import { useAuth } from './AuthContext';
 
 const MobileVendorsManagement = ({ selectedPOS }) => {

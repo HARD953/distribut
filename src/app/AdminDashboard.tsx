@@ -7,7 +7,7 @@ import {
   ChevronDown, LogOut, Plus, AlertTriangle, Clock, CheckCircle, Loader2, ChevronsUpDown, UserRound, Bike
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
-import { apiService } from './apiService';
+import { apiService } from './ApiService';
 import StockManagement from './StockManagement';
 import OrderManagement from './OrderManagement';
 import PointsVenteManagement from './PointsVenteManagement';
