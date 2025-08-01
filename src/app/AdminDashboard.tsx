@@ -40,7 +40,7 @@ const AdminDashboard = () => {
   });
   const [notifications, setNotifications] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const { user, logout } = useAuth();
   const router = useRouter();
   const [selectedPOS, setSelectedPOS] = useState(null);
