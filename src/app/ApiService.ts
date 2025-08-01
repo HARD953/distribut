@@ -1,21 +1,23 @@
 const API_BASE_URL = 'https://backendsupply.onrender.com/api';
 
 class ApiService {
+  private baseURL: string;
+
   constructor() {
     this.baseURL = API_BASE_URL;
   }
 
   // Get authorization header
-  getAuthHeader() {
-    const token = localStorage.getItem('access');
+  getAuthHeader(): Record<string, string> {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access') : null;
     return token ? { 'Authorization': `Bearer ${token}` } : {};
   }
 
   // Generic request method
-  async request(endpoint, options = {}) {
+  async request(endpoint: string, options: RequestInit = {}): Promise<Response> {
     const url = `${this.baseURL}${endpoint}`;
     
-    const config = {
+    const config: RequestInit = {
       headers: {
         'Content-Type': 'application/json',
         ...this.getAuthHeader(),
@@ -43,10 +45,12 @@ class ApiService {
           return await fetch(url, newConfig);
         } catch (refreshError) {
           // Refresh failed, redirect to login
-          localStorage.removeItem('access');
-          localStorage.removeItem('refresh');
-          localStorage.removeItem('user_data');
-          window.location.href = '/login';
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('access');
+            localStorage.removeItem('refresh');
+            localStorage.removeItem('user_data');
+            window.location.href = '/login';
+          }
           throw new Error('Session expired');
         }
       }
@@ -59,8 +63,8 @@ class ApiService {
   }
 
   // Refresh access token
-  async refreshToken() {
-    const refreshToken = localStorage.getItem('refresh');
+  async refreshToken(): Promise<string> {
+    const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh') : null;
     if (!refreshToken) {
       throw new Error('No refresh token available');
     }
@@ -80,180 +84,183 @@ class ApiService {
     }
 
     const data = await response.json();
-    localStorage.setItem('access', data.access);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('access', data.access);
+    }
     return data.access;
   }
 
   // HTTP methods
-  async get(endpoint, params = {}) {
+  async get(endpoint: string, params: Record<string, any> = {}): Promise<Response> {
     const queryString = new URLSearchParams(params).toString();
     const url = queryString ? `${endpoint}?${queryString}` : endpoint;
     return this.request(url, { method: 'GET' });
   }
 
-  async post(endpoint, data = {}) {
+  async post(endpoint: string, data: any = {}): Promise<Response> {
     return this.request(endpoint, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async put(endpoint, data = {}) {
+  async put(endpoint: string, data: any = {}): Promise<Response> {
     return this.request(endpoint, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
 
-  async patch(endpoint, data = {}) {
+  async patch(endpoint: string, data: any = {}): Promise<Response> {
     return this.request(endpoint, {
       method: 'PATCH',
       body: JSON.stringify(data),
     });
   }
 
-  async delete(endpoint) {
+  async delete(endpoint: string): Promise<Response> {
     return this.request(endpoint, { method: 'DELETE' });
   }
 
   // Specific API endpoints
-  async login(username, password) {
+  async login(username: string, password: string): Promise<Response> {
     return this.post('/token/', { username, password });
   }
 
-  async getDashboard() {
+  async getDashboard(): Promise<Response> {
     return this.get('/dashboard/');
   }
 
-  async getNotifications() {
+  async getNotifications(): Promise<Response> {
     return this.get('/notifications/');
   }
 
-  async getStockOverview() {
+  async getStockOverview(): Promise<Response> {
     return this.get('/stock-overview/');
   }
 
-  async getCategories() {
+  async getCategories(): Promise<Response> {
     return this.get('/categories/');
   }
 
-  async createCategory(data) {
+  async createCategory(data: any): Promise<Response> {
     return this.post('/categories/', data);
   }
 
-  async getSuppliers() {
+  async getSuppliers(): Promise<Response> {
     return this.get('/suppliers/');
   }
 
-  async createSupplier(data) {
+  async createSupplier(data: any): Promise<Response> {
     return this.post('/suppliers/', data);
   }
 
-  async getPointsVente() {
+  async getPointsVente(): Promise<Response> {
     return this.get('/points-vente/');
   }
 
-  async createPointVente(data) {
+  async createPointVente(data: any): Promise<Response> {
     return this.post('/points-vente/', data);
   }
 
-  async getUsers() {
+  async getUsers(): Promise<Response> {
     return this.get('/users/');
   }
 
-  async createUser(data) {
+  async createUser(data: any): Promise<Response> {
     return this.post('/users/', data);
   }
 
-  async getProducts() {
+  async getProducts(): Promise<Response> {
     return this.get('/products/');
   }
 
-  async createProduct(data) {
+  async createProduct(data: any): Promise<Response> {
     return this.post('/products/', data);
   }
 
-  async getProductVariants() {
+  async getProductVariants(): Promise<Response> {
     return this.get('/product-variants/');
   }
 
-  async createProductVariant(data) {
+  async createProductVariant(data: any): Promise<Response> {
     return this.post('/product-variants/', data);
   }
 
-  async getStockMovements() {
+  async getStockMovements(): Promise<Response> {
     return this.get('/stock-movements/');
   }
 
-  async createStockMovement(data) {
+  async createStockMovement(data: any): Promise<Response> {
     return this.post('/stock-movements/', data);
   }
 
-  async getOrders() {
+  async getOrders(): Promise<Response> {
     return this.get('/orders/');
   }
 
-  async createOrder(data) {
+  async createOrder(data: any): Promise<Response> {
     return this.post('/orders/', data);
   }
 
-  async getDisputes() {
+  async getDisputes(): Promise<Response> {
     return this.get('/disputes/');
   }
 
-  async createDispute(data) {
+  async createDispute(data: any): Promise<Response> {
     return this.post('/disputes/', data);
   }
 
-  async getTokens() {
+  async getTokens(): Promise<Response> {
     return this.get('/tokens/');
   }
 
-  async createToken(data) {
+  async createToken(data: any): Promise<Response> {
     return this.post('/tokens/', data);
   }
 
-  async getTokenTransactions() {
+  async getTokenTransactions(): Promise<Response> {
     return this.get('/token-transactions/');
   }
 
-  async createTokenTransaction(data) {
+  async createTokenTransaction(data: any): Promise<Response> {
     return this.post('/token-transactions/', data);
   }
 
-  async getRoles() {
+  async getRoles(): Promise<Response> {
     return this.get('/roles/');
   }
 
-  async createRole(data) {
+  async createRole(data: any): Promise<Response> {
     return this.post('/roles/', data);
   }
 
-  async getPermissions() {
+  async getPermissions(): Promise<Response> {
     return this.get('/permissions/');
   }
 
   // Generic CRUD operations
-  async getResource(endpoint, id = null) {
+  async getResource(endpoint: string, id: string | number | null = null): Promise<Response> {
     const url = id ? `${endpoint}/${id}/` : `${endpoint}/`;
     return this.get(url);
   }
 
-  async createResource(endpoint, data) {
+  async createResource(endpoint: string, data: any): Promise<Response> {
     return this.post(`${endpoint}/`, data);
   }
 
-  async updateResource(endpoint, id, data) {
+  async updateResource(endpoint: string, id: string | number, data: any): Promise<Response> {
     return this.put(`${endpoint}/${id}/`, data);
   }
 
-  async patchResource(endpoint, id, data) {
+  async patchResource(endpoint: string, id: string | number, data: any): Promise<Response> {
     return this.patch(`${endpoint}/${id}/`, data);
   }
 
-  async deleteResource(endpoint, id) {
+  async deleteResource(endpoint: string, id: string | number): Promise<Response> {
     return this.delete(`${endpoint}/${id}/`);
   }
 }
 
 export const apiService = new ApiService();
+export default ApiService;
