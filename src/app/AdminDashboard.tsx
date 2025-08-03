@@ -97,66 +97,74 @@ const AdminDashboard = () => {
   const [selectedPOS, setSelectedPOS] = useState<POSData | null>(null);
   const [posDropdownOpen, setPosDropdownOpen] = useState(false);
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      const token = localStorage.getItem('access');
-      if (!token) {
-        console.warn('No access token found, redirecting to login');
-        router.push('/login');
-        return;
-      }
-      
-      try {
-        const response = await apiService.get('/dashboard/');
-        if (!response.ok) {
-          throw new Error(`Failed to fetch dashboard data: ${response.status}`);
-        }
-        const data: DashboardData = await response.json();
-        setDashboardData(data);
-        setSelectedPOS(data.cumulative);
-        setIsLoading(false);
-      } catch (err) {
-        console.error('Error fetching dashboard data:', err);
-        setError('Session invalide ou erreur serveur. Veuillez vous reconnecter.');
-        logout();
-        router.push('/login');
-      }
-    };
-    
-    checkAuth();
-  }, [router, logout]);
+// Remplacez les lignes 74 et 108 par :
 
-  useEffect(() => {
-    const fetchNotifications = async () => {
-      const token = localStorage.getItem('access');
-      if (!token) return;
-      
-      try {
-        const response = await apiService.get('/notifications/');
-        if (!response.ok) {
-          if (response.status === 401) {
-            console.warn('Unauthorized, logging out');
-            logout();
-            router.push('/login');
-            return;
-          }
-          throw new Error(`Failed to fetch notifications: ${response.status}`);
-        }
-        const data: Notification[] = await response.json();
-        setNotifications(data.map((n: Notification) => ({
-          id: n.id,
-          type: n.type.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
-          message: n.message,
-          created_at: n.created_at,
-          is_read: n.is_read
-        })));
-      } catch (err) {
-        console.error('Error fetching notifications:', err);
-        setError('Erreur lors du chargement des notifications');
+useEffect(() => {
+  const checkAuth = async () => {
+    // Vérifier si on est côté client
+    if (typeof window === 'undefined') return;
+    
+    const token = localStorage.getItem('access');
+    if (!token) {
+      console.warn('No access token found, redirecting to login');
+      router.push('/login');
+      return;
+    }
+    
+    try {
+      const response = await apiService.get('/dashboard/');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch dashboard data: ${response.status}`);
       }
-    };
-    fetchNotifications();
-  }, [router, logout]);
+      const data: DashboardData = await response.json();
+      setDashboardData(data);
+      setSelectedPOS(data.cumulative);
+      setIsLoading(false);
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err);
+      setError('Session invalide ou erreur serveur. Veuillez vous reconnecter.');
+      logout();
+      router.push('/login');
+    }
+  };
+  
+  checkAuth();
+}, [router, logout]);
+
+useEffect(() => {
+  const fetchNotifications = async () => {
+    // Vérifier si on est côté client
+    if (typeof window === 'undefined') return;
+    
+    const token = localStorage.getItem('access');
+    if (!token) return;
+    
+    try {
+      const response = await apiService.get('/notifications/');
+      if (!response.ok) {
+        if (response.status === 401) {
+          console.warn('Unauthorized, logging out');
+          logout();
+          router.push('/login');
+          return;
+        }
+        throw new Error(`Failed to fetch notifications: ${response.status}`);
+      }
+      const data: Notification[] = await response.json();
+      setNotifications(data.map((n: Notification) => ({
+        id: n.id,
+        type: n.type.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+        message: n.message,
+        created_at: n.created_at,
+        is_read: n.is_read
+      })));
+    } catch (err) {
+      console.error('Error fetching notifications:', err);
+      setError('Erreur lors du chargement des notifications');
+    }
+  };
+  fetchNotifications();
+}, [router, logout]);
 
   const unreadNotifications = notifications.filter(n => !n.is_read).length;
 
