@@ -14,16 +14,16 @@ class ApiService {
   }
 
   // Generic request method
-  async request(endpoint: string, options: RequestInit = {}): Promise<Response> {
+  async request(endpoint: string, options: RequestInit = {}, isFormData: boolean = false): Promise<Response> {
     const url = `${this.baseURL}${endpoint}`;
     
     const config: RequestInit = {
+      ...options,
       headers: {
-        'Content-Type': 'application/json',
+        ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
         ...this.getAuthHeader(),
         ...options.headers,
       },
-      ...options,
     };
 
     try {
@@ -97,25 +97,25 @@ class ApiService {
     return this.request(url, { method: 'GET' });
   }
 
-  async post(endpoint: string, data: any = {}): Promise<Response> {
+  async post(endpoint: string, data: any = {}, isFormData: boolean = false): Promise<Response> {
     return this.request(endpoint, {
       method: 'POST',
-      body: JSON.stringify(data),
-    });
+      body: isFormData ? data : JSON.stringify(data),
+    }, isFormData);
   }
 
-  async put(endpoint: string, data: any = {}): Promise<Response> {
+  async put(endpoint: string, data: any = {}, isFormData: boolean = false): Promise<Response> {
     return this.request(endpoint, {
       method: 'PUT',
-      body: JSON.stringify(data),
-    });
+      body: isFormData ? data : JSON.stringify(data),
+    }, isFormData);
   }
 
-  async patch(endpoint: string, data: any = {}): Promise<Response> {
+  async patch(endpoint: string, data: any = {}, isFormData: boolean = false): Promise<Response> {
     return this.request(endpoint, {
       method: 'PATCH',
-      body: JSON.stringify(data),
-    });
+      body: isFormData ? data : JSON.stringify(data),
+    }, isFormData);
   }
 
   async delete(endpoint: string): Promise<Response> {
@@ -245,16 +245,16 @@ class ApiService {
     return this.get(url);
   }
 
-  async createResource(endpoint: string, data: any): Promise<Response> {
-    return this.post(`${endpoint}/`, data);
+  async createResource(endpoint: string, data: any, isFormData: boolean = false): Promise<Response> {
+    return this.post(`${endpoint}/`, data, isFormData);
   }
 
-  async updateResource(endpoint: string, id: string | number, data: any): Promise<Response> {
-    return this.put(`${endpoint}/${id}/`, data);
+  async updateResource(endpoint: string, id: string | number, data: any, isFormData: boolean = false): Promise<Response> {
+    return this.put(`${endpoint}/${id}/`, data, isFormData);
   }
 
-  async patchResource(endpoint: string, id: string | number, data: any): Promise<Response> {
-    return this.patch(`${endpoint}/${id}/`, data);
+  async patchResource(endpoint: string, id: string | number, data: any, isFormData: boolean = false): Promise<Response> {
+    return this.patch(`${endpoint}/${id}/`, data, isFormData);
   }
 
   async deleteResource(endpoint: string, id: string | number): Promise<Response> {

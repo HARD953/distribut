@@ -7,13 +7,15 @@ import {
   Download, RefreshCw, ChevronDown, ChevronUp, Star
 } from 'lucide-react';
 
+type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+
 interface Order {
   id: string;
   customer_name: string;
   customer_email: string;
   customer_phone: string;
   customer_address: string;
-  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  status: OrderStatus;
   total: number;
   items: OrderItem[];
   order_date: string;
@@ -60,9 +62,9 @@ const OrderManagement = () => {
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('order_date');
+  const [sortBy, setSortBy] = useState<keyof Order>('order_date');
   const [sortOrder, setSortOrder] = useState('desc');
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -92,7 +94,7 @@ const OrderManagement = () => {
     gray: { light: '#F9FAFB', DEFAULT: '#6B7280', dark: '#374151', text: '#111827' }
   };
 
-  const orderStatuses = {
+  const orderStatuses: Record<OrderStatus, { label: string; color: string; icon: any; bgColor: string; borderColor: string }> = {
     pending: { 
       label: 'En Attente', 
       color: `bg-amber-100 text-amber-800`, 
@@ -186,11 +188,11 @@ const OrderManagement = () => {
     });
 
     filtered.sort((a, b) => {
-      let aValue, bValue;
+      let aValue: any, bValue: any;
       switch (sortBy) {
         case 'order_date':
-          aValue = new Date(a.order_date);
-          bValue = new Date(b.order_date);
+          aValue = new Date(a.order_date).getTime();
+          bValue = new Date(b.order_date).getTime();
           break;
         case 'total':
           aValue = a.total;
@@ -201,10 +203,18 @@ const OrderManagement = () => {
           bValue = b.customer_name.toLowerCase();
           break;
         default:
-          aValue = a[sortBy as keyof Order];
-          bValue = b[sortBy as keyof Order];
+          aValue = a[sortBy as keyof Order] ?? '';
+          bValue = b[sortBy as keyof Order] ?? '';
+          if (typeof aValue === 'string') aValue = aValue.toLowerCase();
+          if (typeof bValue === 'string') bValue = bValue.toLowerCase();
       }
-      return sortOrder === 'asc' ? (aValue > bValue ? 1 : -1) : (aValue < bValue ? 1 : -1);
+
+      if (aValue === undefined || aValue === null) return sortOrder === 'asc' ? -1 : 1;
+      if (bValue === undefined || bValue === null) return sortOrder === 'asc' ? 1 : -1;
+
+      return sortOrder === 'asc'
+        ? aValue > bValue ? 1 : aValue < bValue ? -1 : 0
+        : aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
     });
 
     setFilteredOrders(filtered);
@@ -247,7 +257,7 @@ const OrderManagement = () => {
   };
 
   // Order actions
-  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+  const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     const token = localStorage.getItem('access');
     if (!token) {
       setError('Veuillez vous connecter.');
@@ -298,7 +308,7 @@ const OrderManagement = () => {
     }
   };
 
-  const bulkStatusUpdate = async (newStatus: string) => {
+  const bulkStatusUpdate = async (newStatus: OrderStatus) => {
     const token = localStorage.getItem('access');
     if (!token) {
       setError('Veuillez vous connecter.');
@@ -509,7 +519,7 @@ const OrderManagement = () => {
                   </tbody>
                   <tfoot className="bg-gray-100">
                     <tr>
-                      <td colSpan="3" className="px-4 py-3 text-sm font-bold text-gray-800 text-right">Total Commande:</td>
+                      <td colSpan={3} className="px-4 py-3 text-sm font-bold text-gray-800 text-right">Total Commande:</td>
                       <td className="px-4 py-3 text-sm font-bold text-gray-800 text-right">{formatCurrency(selectedOrder.total)}</td>
                     </tr>
                   </tfoot>
@@ -525,7 +535,7 @@ const OrderManagement = () => {
             <div className="flex items-center justify-between flex-wrap gap-3 pt-4 border-t border-gray-200">
               <select 
                 value={selectedOrder.status}
-                onChange={(e) => updateOrderStatus(selectedOrder.id, e.target.value)}
+                onChange={(e) => updateOrderStatus(selectedOrder.id, e.target.value as OrderStatus)}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                 {Object.entries(orderStatuses).map(([key, status]) => (
                   <option key={key} value={key}>{status.label}</option>
@@ -636,7 +646,7 @@ const OrderManagement = () => {
               value={`${sortBy}-${sortOrder}`}
               onChange={(e) => {
                 const [field, order] = e.target.value.split('-');
-                setSortBy(field);
+                setSortBy(field as keyof Order);
                 setSortOrder(order);
               }}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
@@ -672,7 +682,7 @@ const OrderManagement = () => {
                 <select 
                   onChange={(e) => {
                     if (e.target.value) {
-                      bulkStatusUpdate(e.target.value);
+                      bulkStatusUpdate(e.target.value as OrderStatus);
                       e.target.value = '';
                     }
                   }}
@@ -800,7 +810,7 @@ const OrderManagement = () => {
                   })
                 ) : (
                   <tr>
-                    <td colSpan="8" className="py-24 text-center">
+                    <td colSpan={8} className="py-24 text-center">
                       <Package className="mx-auto text-gray-400 mb-4" size={48} />
                       <h3 className="text-lg font-semibold text-gray-800 mb-2">Aucune commande trouvée</h3>
                       <p className="text-gray-600 mb-6">

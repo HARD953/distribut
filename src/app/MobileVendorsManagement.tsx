@@ -3,35 +3,99 @@ import React, { useState, useEffect } from 'react';
 import { 
   Bike, Plus, AlertTriangle, UserRound, ChevronDown, 
   Search, MoreVertical, Star, MapPin, Phone, Mail, Clock,
-  ChevronLeft, ChevronRight, Frown, Smile, Meh, Check, X,
-  Edit, Trash2, Save, Coins, Image as ImageIcon, Calendar, Clock as ClockIcon
+  ChevronLeft, ChevronRight, Frown, Smile, Meh, Check,
+  Edit, Trash2, Save, Coins, Image as ImageIcon, Calendar
 } from 'lucide-react';
 import { apiService } from './ApiService';
 import { useAuth } from './AuthContext';
+import { POSData } from './AdminDashboard';
 
-const MobileVendorsManagement = ({ selectedPOS }) => {
+interface Vendor {
+  id: number;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  email?: string;
+  status: 'actif' | 'inactif' | 'en_conge' | 'suspendu';
+  vehicle_type: 'moto' | 'tricycle' | 'velo' | 'pied' | 'autre';
+  vehicle_id?: string;
+  zones: string[];
+  photo?: string;
+  photo_url?: string;
+  is_approved: boolean;
+  notes?: string;
+  average_daily_sales: number;
+  performance: number;
+  date_joined: string;
+  last_activity?: string;
+  point_of_sale?: { id: number; name: string } | null;
+}
+
+interface FormVendor {
+  first_name: string;
+  last_name: string;
+  phone: string;
+  email: string;
+  status: 'actif' | 'inactif' | 'en_conge' | 'suspendu';
+  vehicle_type: 'moto' | 'tricycle' | 'velo' | 'pied' | 'autre';
+  vehicle_id: string;
+  zones: string;
+  point_of_sale: string;
+  photo: File | string | undefined;
+  is_approved: boolean;
+  notes: string;
+  average_daily_sales: number;
+  performance: number;
+}
+
+interface Stats {
+  total_sales: number;
+  active_days: number;
+  current_performance: number;
+  last_month_performance?: number;
+}
+
+interface Activity {
+  id: number;
+  activity_type: string;
+  timestamp: string;
+  notes?: string;
+  location?: string;
+}
+
+interface PointOfSale {
+  id: number;
+  name: string;
+  commune: string;
+}
+
+interface Props {
+  selectedPOS: POSData | null;
+}
+
+const MobileVendorsManagement = ({ selectedPOS }: Props) => {
   // States
-  const [vendors, setVendors] = useState([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedVendor, setSelectedVendor] = useState(null);
+  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const [showVendorDetails, setShowVendorDetails] = useState(false);
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({});
+  const [editForm, setEditForm] = useState<Partial<FormVendor>>({});
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newVendor, setNewVendor] = useState(getDefaultVendorForm(selectedPOS));
-  const [activeTab, setActiveTab] = useState('activities');
-  const [activities, setActivities] = useState([]);
+  const [newVendor, setNewVendor] = useState<FormVendor>(getDefaultVendorForm(selectedPOS));
+  const [activeTab, setActiveTab] = useState<'activities' | 'performance' | 'notes'>('activities');
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
-  const [photoPreview, setPhotoPreview] = useState(null);
-  const [pointsOfSale, setPointsOfSale] = useState([]);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [pointsOfSale, setPointsOfSale] = useState<PointOfSale[]>([]);
   const [loadingPOS, setLoadingPOS] = useState(false);
   const { user } = useAuth();
 
   // Helper functions
-  function getDefaultVendorForm(pos) {
+  function getDefaultVendorForm(pos: POSData | null): FormVendor {
     return {
       first_name: '',
       last_name: '',
@@ -40,9 +104,9 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
       status: 'actif',
       vehicle_type: 'moto',
       vehicle_id: '',
-      zones: [],
-      point_of_sale: pos?.id || '',
-      photo: null,
+      zones: '',
+      point_of_sale: pos?.pos_id?.toString() || '',
+      photo: undefined,
       is_approved: false,
       notes: '',
       average_daily_sales: 0,
@@ -50,13 +114,13 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
     };
   }
 
-  const getPerformanceColor = (performance) => {
+  const getPerformanceColor = (performance: number) => {
     if (performance >= 70) return 'text-green-600';
     if (performance >= 50) return 'text-yellow-600';
     return 'text-red-600';
   };
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
       case 'actif': return <Smile className="text-green-500" size={16} />;
       case 'inactif': return <Frown className="text-red-500" size={16} />;
@@ -73,23 +137,23 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
     .sort((a, b) => b.performance - a.performance);
 
   // Handlers
-  const handlePhotoUpload = (e, isEditMode = false) => {
-    const file = e.target.files[0];
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, isEditMode = false) => {
+    const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPhotoPreview(reader.result);
+        setPhotoPreview(reader.result as string);
         if (isEditMode) {
-          setEditForm(prev => ({...prev, photo: file}));
+          setEditForm(prev => ({ ...prev, photo: file }));
         } else {
-          setNewVendor(prev => ({...prev, photo: file}));
+          setNewVendor(prev => ({ ...prev, photo: file }));
         }
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleInputChange = (e, isEditMode = false) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>, isEditMode = false) => {
     const { name, value } = e.target;
     if (isEditMode) {
       setEditForm(prev => ({ ...prev, [name]: value }));
@@ -98,48 +162,58 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
     }
   };
 
-  const handleZoneChange = (e, isEditMode = false) => {
+  const handleZoneChange = (e: React.ChangeEvent<HTMLInputElement>, isEditMode = false) => {
     const { value } = e.target;
-    const zones = value.split(',').map(z => z.trim());
     if (isEditMode) {
-      setEditForm(prev => ({ ...prev, zones }));
+      setEditForm(prev => ({ ...prev, zones: value }));
     } else {
-      setNewVendor(prev => ({ ...prev, zones }));
+      setNewVendor(prev => ({ ...prev, zones: value }));
     }
   };
 
-  const viewVendorDetails = async (vendor) => {
-    try {
-      const response = await apiService.get(`/mobile-vendors/${vendor.id}/`);
-      if (!response.ok) throw new Error('Failed to fetch vendor details');
-      const data = await response.json();
-      
-      setSelectedVendor(data);
-      setEditForm({
-        ...data,
-        zones: data.zones.join(', '),
-        point_of_sale: data.point_of_sale?.id || ''
-      });
-      setPhotoPreview(data.photo ? data.photo_url : null);
-      setShowVendorDetails(true);
-      setActiveTab('activities');
-    } catch (err) {
-      setError(err.message);
-    }
-  };
+const viewVendorDetails = async (vendor: Vendor) => {
+  try {
+    const response = await apiService.get(`/mobile-vendors/${vendor.id}/`);
+    if (!response.ok) throw new Error('Failed to fetch vendor details');
+    const data: Vendor = await response.json();
+    
+    // Ensure point_of_sale has a consistent structure
+    const pointOfSale = data.point_of_sale && data.point_of_sale.id !== null 
+      ? { id: data.point_of_sale.id, name: data.point_of_sale.name }
+      : null;
+    
+    setSelectedVendor({
+      ...data,
+      point_of_sale: pointOfSale
+    });
+    
+    setEditForm({
+      ...data,
+      zones: data.zones.join(', '),
+      point_of_sale: pointOfSale?.id?.toString() || '',
+      photo: data.photo_url
+    });
+    
+    setPhotoPreview(data.photo_url || null);
+    setShowVendorDetails(true);
+    setActiveTab('activities');
+  } catch (err: any) {
+    setError(err.message);
+  }
+};
 
   const createVendor = async () => {
     try {
       const formData = new FormData();
       
       // Append all fields
-      Object.entries(newVendor).forEach(([key, value]) => {
-        if (key === 'zones') {
-          formData.append(key, JSON.stringify(value));
-        } else if (key === 'photo' && value) {
+      Object.entries(newVendor as Record<keyof FormVendor, FormVendor[keyof FormVendor]>).forEach(([key, value]) => {
+        if (key === 'zones' && typeof value === 'string') {
+          formData.append(key, JSON.stringify(value.split(',').map((z: string) => z.trim()).filter((z: string) => z)));
+        } else if (key === 'photo' && value instanceof File) {
           formData.append(key, value);
-        } else if (value !== null && value !== undefined) {
-          formData.append(key, value);
+        } else if (value !== null && value !== undefined && value !== '') {
+          formData.append(key, String(value));
         }
       });
 
@@ -150,26 +224,27 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
         throw new Error(errorData.message || 'Failed to create vendor');
       }
       
-      const createdVendor = await response.json();
+      const createdVendor: Vendor = await response.json();
       setVendors([...vendors, createdVendor]);
       setShowCreateForm(false);
       setNewVendor(getDefaultVendorForm(selectedPOS));
       setPhotoPreview(null);
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message);
     }
   };
 
   const updateVendor = async () => {
+    if (!selectedVendor) return;
     try {
       const formData = new FormData();
-      Object.entries(editForm).forEach(([key, value]) => {
-        if (key === 'zones') {
-          formData.append(key, JSON.stringify(value.split(',').map(z => z.trim())));
-        } else if (key === 'photo' && typeof value !== 'string') {
+      Object.entries(editForm as Record<keyof FormVendor, FormVendor[keyof FormVendor]>).forEach(([key, value]) => {
+        if (key === 'zones' && typeof value === 'string') {
+          formData.append(key, JSON.stringify(value.split(',').map((z: string) => z.trim()).filter((z: string) => z)));
+        } else if (key === 'photo' && value instanceof File) {
           formData.append(key, value);
-        } else if (value !== null && value !== undefined) {
-          formData.append(key, value);
+        } else if (value !== null && value !== undefined && value !== '') {
+          formData.append(key, String(value));
         }
       });
 
@@ -181,17 +256,17 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
       
       if (!response.ok) throw new Error('Failed to update vendor');
       
-      const updatedVendor = await response.json();
+      const updatedVendor: Vendor = await response.json();
       setVendors(vendors.map(v => v.id === updatedVendor.id ? updatedVendor : v));
       setSelectedVendor(updatedVendor);
       setIsEditing(false);
       setPhotoPreview(null);
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message);
     }
   };
 
-  const deleteVendor = async (vendorId) => {
+  const deleteVendor = async (vendorId: number) => {
     try {
       if (!confirm('Are you sure you want to delete this vendor?')) return;
       
@@ -203,7 +278,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
       if (selectedVendor?.id === vendorId) {
         setShowVendorDetails(false);
       }
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message);
     }
   };
@@ -214,15 +289,15 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
       try {
         setLoading(true);
         let url = '/mobile-vendors/';
-        if (selectedPOS?.id) {
-          url = `/mobile-vendors/?point_of_sale=${selectedPOS.id}`;
+        if (selectedPOS?.pos_id) {
+          url = `/mobile-vendors/?point_of_sale=${selectedPOS.pos_id}`;
         }
         
         const response = await apiService.get(url);
         if (!response.ok) throw new Error('Failed to fetch vendors');
-        const data = await response.json();
+        const data: Vendor[] = await response.json();
         setVendors(data);
-      } catch (err) {
+      } catch (err: any) {
         setError(err.message);
       } finally {
         setLoading(false);
@@ -240,7 +315,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
         if (response.ok) {
           setPointsOfSale(await response.json());
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error fetching POS:', err);
       } finally {
         setLoadingPOS(false);
@@ -306,10 +381,10 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
   );
 
   const renderVendorForm = (isEditMode = false) => {
-    const formData = isEditMode ? editForm : newVendor;
-    const handleChange = (e) => handleInputChange(e, isEditMode);
-    const handleZone = (e) => handleZoneChange(e, isEditMode);
-    const photoHandler = (e) => handlePhotoUpload(e, isEditMode);
+    const formData: Partial<FormVendor> = isEditMode ? editForm : newVendor;
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => handleInputChange(e, isEditMode);
+    const handleZone = (e: React.ChangeEvent<HTMLInputElement>) => handleZoneChange(e, isEditMode);
+    const photoHandler = (e: React.ChangeEvent<HTMLInputElement>) => handlePhotoUpload(e, isEditMode);
 
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -335,7 +410,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
           <input
             type="text"
             name="first_name"
-            value={formData.first_name}
+            value={formData.first_name || ''}
             onChange={handleChange}
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             required
@@ -347,7 +422,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
           <input
             type="text"
             name="last_name"
-            value={formData.last_name}
+            value={formData.last_name || ''}
             onChange={handleChange}
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             required
@@ -359,7 +434,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
           <input
             type="text"
             name="phone"
-            value={formData.phone}
+            value={formData.phone || ''}
             onChange={handleChange}
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             required
@@ -371,7 +446,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
           <input
             type="email"
             name="email"
-            value={formData.email}
+            value={formData.email || ''}
             onChange={handleChange}
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
           />
@@ -381,7 +456,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
           <label className="block text-sm font-medium text-gray-700">Statut *</label>
           <select
             name="status"
-            value={formData.status}
+            value={formData.status || 'actif'}
             onChange={handleChange}
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
           >
@@ -396,7 +471,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
           <label className="block text-sm font-medium text-gray-700">Type de véhicule *</label>
           <select
             name="vehicle_type"
-            value={formData.vehicle_type}
+            value={formData.vehicle_type || 'moto'}
             onChange={handleChange}
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
           >
@@ -413,7 +488,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
           <input
             type="text"
             name="vehicle_id"
-            value={formData.vehicle_id}
+            value={formData.vehicle_id || ''}
             onChange={handleChange}
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
           />
@@ -424,7 +499,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
           <input
             type="text"
             name="zones"
-            value={formData.zones}
+            value={formData.zones || ''}
             onChange={handleZone}
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             placeholder="Cocody, Plateau, Abobo"
@@ -436,7 +511,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
           <label className="block text-sm font-medium text-gray-700">Point de Vente *</label>
           <select
             name="point_of_sale"
-            value={formData.point_of_sale}
+            value={formData.point_of_sale || ''}
             onChange={handleChange}
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             required
@@ -444,7 +519,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
           >
             <option value="">-- Sélectionnez --</option>
             {pointsOfSale.map((pos) => (
-              <option key={pos.id} value={pos.id}>
+              <option key={pos.id} value={pos.id.toString()}>
                 {pos.name} ({pos.commune})
               </option>
             ))}
@@ -456,7 +531,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
           <input
             type="number"
             name="performance"
-            value={formData.performance}
+            value={formData.performance || 0}
             onChange={handleChange}
             min="0"
             max="100"
@@ -469,7 +544,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
           <input
             type="number"
             name="average_daily_sales"
-            value={formData.average_daily_sales}
+            value={formData.average_daily_sales || 0}
             onChange={handleChange}
             min="0"
             step="0.01"
@@ -481,7 +556,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
           <input
             type="checkbox"
             name="is_approved"
-            checked={formData.is_approved}
+            checked={formData.is_approved || false}
             onChange={(e) => isEditMode 
               ? setEditForm({...editForm, is_approved: e.target.checked})
               : setNewVendor({...newVendor, is_approved: e.target.checked})
@@ -495,7 +570,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
           <label className="block text-sm font-medium text-gray-700">Notes</label>
           <textarea
             name="notes"
-            value={formData.notes}
+            value={formData.notes || ''}
             onChange={handleChange}
             rows={3}
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
@@ -627,7 +702,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
                 <div>
                   <h2 className="text-xl font-bold text-gray-800">{selectedVendor.first_name} {selectedVendor.last_name}</h2>
                   <p className="text-gray-600">
-                    Vendeur ambulant • {selectedVendor.point_of_sale?.name} • {selectedVendor.vehicle_type}
+                    Vendeur ambulant • {selectedVendor.point_of_sale?.name || 'Non assigné'} • {selectedVendor.vehicle_type}
                   </p>
                 </div>
               )}
@@ -755,7 +830,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Point de vente:</span>
-                    <span className="text-sm font-medium">{selectedVendor.point_of_sale?.name}</span>
+                    <span className="text-sm font-medium">{selectedVendor.point_of_sale?.name || 'Non assigné'}</span>
                   </div>
                 </div>
               </div>
@@ -904,8 +979,8 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10 rounded-full overflow-hidden bg-gray-100">
-                        {vendor.photo ? (
-                          <img src={vendor.photo_url} alt={vendor.full_name} className="h-full w-full object-cover" />
+                        {vendor.photo_url ? (
+                          <img src={vendor.photo_url} alt={`${vendor.first_name} ${vendor.last_name}`} className="h-full w-full object-cover" />
                         ) : (
                           <div className="h-full w-full flex items-center justify-center text-gray-600">
                             {vendor.first_name.charAt(0)}{vendor.last_name.charAt(0)}
@@ -969,7 +1044,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
               ))
             ) : (
               <tr>
-                <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
+                <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">
                   {searchTerm ? 'Aucun vendeur trouvé' : 'Aucun vendeur enregistré'}
                 </td>
               </tr>
@@ -1005,7 +1080,7 @@ const MobileVendorsManagement = ({ selectedPOS }) => {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Gestion des Vendeurs Ambulants</h1>
           <p className="text-gray-600">
-            {selectedPOS?.name || "Tous les vendeurs ambulants"}
+            {selectedPOS?.pos_name || "Tous les vendeurs ambulants"}
           </p>
         </div>
         

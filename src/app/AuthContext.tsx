@@ -8,15 +8,12 @@ import React, {
 } from "react";
 import { apiService } from "./ApiService";
 
-// ✅ Typage de l'utilisateur (à adapter selon tes données réelles)
 interface User {
   id: number;
   username: string;
   email: string;
-  // Ajoute ici d'autres champs selon la réponse de ton backend
 }
 
-// ✅ Typage du contexte
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
@@ -27,10 +24,8 @@ interface AuthContextType {
   checkAuthStatus: () => Promise<void>;
 }
 
-// ✅ Création du contexte avec un type explicite
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// ✅ Hook pour utiliser le contexte
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -39,7 +34,6 @@ export const useAuth = (): AuthContextType => {
   return context;
 };
 
-// ✅ Props de AuthProvider
 interface AuthProviderProps {
   children: ReactNode;
 }

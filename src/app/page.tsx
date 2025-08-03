@@ -1,15 +1,20 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './LoginPage';
 import AdminDashboard from './AdminDashboard';
 import { AuthProvider, useAuth } from './AuthContext';
 import { Loader2 } from 'lucide-react';
 
+// Types for route components
+interface RouteProps {
+  children: ReactNode;
+}
+
 // Protected Route Component
-const ProtectedRoute = ({ children }) => {
+const ProtectedRoute = ({ children }: RouteProps) => {
   const { user, isLoading } = useAuth();
-  
+     
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -20,18 +25,18 @@ const ProtectedRoute = ({ children }) => {
       </div>
     );
   }
-  
+     
   if (!user) {
     return <Navigate to="/login" replace />;
   }
-  
-  return children;
+     
+  return <>{children}</>;
 };
 
 // Public Route Component (redirects to dashboard if authenticated)
-const PublicRoute = ({ children }) => {
+const PublicRoute = ({ children }: RouteProps) => {
   const { user, isLoading } = useAuth();
-  
+     
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -42,12 +47,12 @@ const PublicRoute = ({ children }) => {
       </div>
     );
   }
-  
+     
   if (user) {
     return <Navigate to="/dashboard" replace />;
   }
-  
-  return children;
+     
+  return <>{children}</>;
 };
 
 const AppRoutes = () => {
@@ -62,7 +67,7 @@ const AppRoutes = () => {
           </PublicRoute>
         } 
       />
-      
+             
       {/* Protected Routes */}
       <Route 
         path="/dashboard" 
@@ -72,10 +77,10 @@ const AppRoutes = () => {
           </ProtectedRoute>
         } 
       />
-      
+             
       {/* Default redirect */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      
+             
       {/* Catch all route */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>

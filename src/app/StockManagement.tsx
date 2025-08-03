@@ -92,6 +92,24 @@ interface PointOfSale {
   name: string;
 }
 
+interface OverviewData {
+  total_products: number;
+  stock_value: number;
+  alert_count: number;
+  today_movements: number;
+  critical_products: Product[];
+}
+
+interface ApiOverviewResponse {
+  cumulative?: {
+    total_products: number;
+    stock_value: number;
+    alert_count: number;
+    today_movements: number;
+    critical_products: Product[];
+  };
+}
+
 const StockManagement = () => {
   const [activeView, setActiveView] = useState<'overview' | 'products' | 'movements' | 'analytics'>('overview');
   const [searchTerm, setSearchTerm] = useState('');
@@ -105,12 +123,12 @@ const StockManagement = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [pointsOfSale, setPointsOfSale] = useState<PointOfSale[]>([]);
-  const [overviewData, setOverviewData] = useState({
+  const [overviewData, setOverviewData] = useState<OverviewData>({
     total_products: 0,
     stock_value: 0,
     alert_count: 0,
     today_movements: 0,
-    critical_products: [] as Product[]
+    critical_products: []
   });
   const [newProduct, setNewProduct] = useState<NewProduct>({
     name: '',
@@ -133,15 +151,14 @@ const StockManagement = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch all data
   const fetchData = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
       const [
-        overviewResponse, 
-        productsResponse, 
+        overviewResponse,
+        productsResponse,
         movementsResponse,
         categoriesResponse,
         suppliersResponse,
@@ -155,37 +172,107 @@ const StockManagement = () => {
         apiService.get('/points-vente/')
       ]);
 
-      // Map categories to ensure correct structure
-      const mappedCategories: Category[] = Array.isArray(categoriesResponse)
-        ? categoriesResponse.map((cat: any) => ({
-            id: cat.id,
-            name: cat.name
+      // Parse JSON responses
+      const overviewData: ApiOverviewResponse = await overviewResponse.json();
+      const productsData: Product[] = await productsResponse.json();
+      const movementsData: StockMovement[] = await movementsResponse.json();
+      const categoriesData: Category[] = await categoriesResponse.json();
+      const suppliersData: Supplier[] = await suppliersResponse.json();
+      const posData: PointOfSale[] = await posResponse.json();
+
+      // Map and validate data
+      const mappedCategories: Category[] = Array.isArray(categoriesData)
+        ? categoriesData.map((cat: Category) => ({
+            id: cat.id ?? 0,
+            name: cat.name || 'Unknown Category'
           }))
         : [];
 
-      // Map suppliers to ensure correct structure
-      const mappedSuppliers: Supplier[] = Array.isArray(suppliersResponse)
-        ? suppliersResponse.map((sup: any) => ({
-            id: sup.id,
-            name: sup.name
+      const mappedSuppliers: Supplier[] = Array.isArray(suppliersData)
+        ? suppliersData.map((sup: Supplier) => ({
+            id: sup.id ?? 0,
+            name: sup.name || 'Unknown Supplier'
           }))
+        : [];
+
+      const defaultCategory = { id: 0, name: 'Unknown Category' };
+      const defaultSupplier = { id: 0, name: 'Unknown Supplier' };
+      const defaultPointOfSale = { id: '0', name: 'Unknown Point of Sale' };
+
+      // Validate and filter critical_products
+      const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critical_products)
+        ? overviewData.cumulative.critical_products
+            .filter((product): product is Product =>
+              product != null &&
+              typeof product === 'object' &&
+              'id' in product &&
+              'name' in product &&
+              typeof product.name === 'string' &&
+              'sku' in product &&
+              'status' in product
+            )
+            .map((product) => ({
+              ...product,
+              name: product.name || 'Unnamed Product',
+              sku: product.sku || 'N/A',
+              status: product.status || 'en_stock',
+              category: product.category && typeof product.category === 'object' && 'id' in product.category && 'name' in product.category
+                ? { id: Number(product.category.id) || 0, name: String(product.category.name) || 'Unknown Category' }
+                : defaultCategory,
+              supplier: product.supplier && typeof product.supplier === 'object' && 'id' in product.supplier && 'name' in product.supplier
+                ? { id: Number(product.supplier.id) || 0, name: String(product.supplier.name) || 'Unknown Supplier' }
+                : defaultSupplier,
+              point_of_sale: product.point_of_sale && typeof product.point_of_sale === 'object' && 'id' in product.point_of_sale && 'name' in product.point_of_sale
+                ? { id: String(product.point_of_sale.id) || '0', name: String(product.point_of_sale.name) || 'Unknown Point of Sale' }
+                : defaultPointOfSale,
+              current_stock: Number(product.current_stock) || 0,
+              min_stock: Number(product.min_stock) || 0,
+              max_stock: Number(product.max_stock) || 0,
+              price: Number(product.price) || 0,
+              last_updated: product.last_updated || new Date().toISOString(),
+              description: product.description || '',
+              variants: Array.isArray(product.variants) ? product.variants : [],
+              images: Array.isArray(product.images) ? product.images : []
+            }))
         : [];
 
       setOverviewData({
-        total_products: overviewResponse?.cumulative?.total_products || 0,
-        stock_value: overviewResponse?.cumulative?.stock_value || 0,
-        alert_count: overviewResponse?.cumulative?.alert_count || 0,
-        today_movements: overviewResponse?.cumulative?.today_movements || 0,
-        critical_products: Array.isArray(overviewResponse?.cumulative?.critical_products)
-          ? overviewResponse.cumulative.critical_products
-          : []
+        total_products: overviewData?.cumulative?.total_products || 0,
+        stock_value: overviewData?.cumulative?.stock_value || 0,
+        alert_count: overviewData?.cumulative?.alert_count || 0,
+        today_movements: overviewData?.cumulative?.today_movements || 0,
+        critical_products: validatedCriticalProducts
       });
 
-      setProducts(Array.isArray(productsResponse) ? productsResponse : []);
-      setMovements(Array.isArray(movementsResponse) ? movementsResponse : []);
+      setProducts(Array.isArray(productsData)
+        ? productsData.map((product) => ({
+            ...product,
+            name: product.name || 'Unnamed Product',
+            sku: product.sku || 'N/A',
+            status: product.status || 'en_stock',
+            category: product.category && typeof product.category === 'object' && 'id' in product.category && 'name' in product.category
+              ? { id: Number(product.category.id) || 0, name: String(product.category.name) || 'Unknown Category' }
+              : defaultCategory,
+            supplier: product.supplier && typeof product.supplier === 'object' && 'id' in product.supplier && 'name' in product.supplier
+              ? { id: Number(product.supplier.id) || 0, name: String(product.supplier.name) || 'Unknown Supplier' }
+              : defaultSupplier,
+            point_of_sale: product.point_of_sale && typeof product.point_of_sale === 'object' && 'id' in product.point_of_sale && 'name' in product.point_of_sale
+              ? { id: String(product.point_of_sale.id) || '0', name: String(product.point_of_sale.name) || 'Unknown Point of Sale' }
+              : defaultPointOfSale,
+            current_stock: Number(product.current_stock) || 0,
+            min_stock: Number(product.min_stock) || 0,
+            max_stock: Number(product.max_stock) || 0,
+            price: Number(product.price) || 0,
+            last_updated: product.last_updated || new Date().toISOString(),
+            description: product.description || '',
+            variants: Array.isArray(product.variants) ? product.variants : [],
+            images: Array.isArray(product.images) ? product.images : []
+          }))
+        : []);
+      setMovements(Array.isArray(movementsData) ? movementsData : []);
       setCategories(mappedCategories);
       setSuppliers(mappedSuppliers);
-      setPointsOfSale(Array.isArray(posResponse) ? posResponse : []);
+      setPointsOfSale(Array.isArray(posData) ? posData : []);
 
     } catch (error: any) {
       setError(error.message || 'Erreur lors du chargement des données');
@@ -203,7 +290,6 @@ const StockManagement = () => {
     fetchData();
   }, []);
 
-  // Product status color
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'en_stock': return 'bg-green-100 text-green-800 border-green-200';
@@ -214,7 +300,6 @@ const StockManagement = () => {
     }
   };
 
-  // Movement icon
   const getMovementIcon = (type: string) => {
     switch (type) {
       case 'entree': return <TrendingUp className="text-green-600" size={16} />;
@@ -224,7 +309,6 @@ const StockManagement = () => {
     }
   };
 
-  // Filter products
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
       const nameMatch = product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false;
@@ -234,17 +318,17 @@ const StockManagement = () => {
     });
   }, [products, searchTerm, selectedCategory]);
 
-  // Add new product
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setError(null);
-      const createdProduct = await apiService.post('/products/', {
+      const response = await apiService.post('/products/', {
         ...newProduct,
         point_of_sale_id: newProduct.point_of_sale_id || pointsOfSale[0]?.id,
         category_id: Number(newProduct.category_id),
         supplier_id: Number(newProduct.supplier_id)
       });
+      const createdProduct: Product = await response.json();
       
       if (newProduct.current_stock > 0) {
         await apiService.post('/stock-movements/', {
@@ -275,7 +359,6 @@ const StockManagement = () => {
     }
   };
 
-  // Delete product
   const handleDeleteProduct = async (id: string) => {
     if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce produit ?')) return;
     try {
@@ -288,19 +371,17 @@ const StockManagement = () => {
     }
   };
 
-  // Edit product
   const handleEditProduct = (product: Product) => {
     setSelectedProduct(product);
     setShowEditModal(true);
   };
 
-  // Update product
   const handleUpdateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct) return;
     try {
       setError(null);
-      const updatedProduct = await apiService.put(`/products/${selectedProduct.id}/`, {
+      const response = await apiService.put(`/products/${selectedProduct.id}/`, {
         name: selectedProduct.name,
         category_id: selectedProduct.category.id,
         sku: selectedProduct.sku,
@@ -312,6 +393,7 @@ const StockManagement = () => {
         point_of_sale_id: selectedProduct.point_of_sale.id,
         description: selectedProduct.description || ''
       });
+      const updatedProduct: Product = await response.json();
       setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
       setShowEditModal(false);
       setSelectedProduct(null);
@@ -320,7 +402,6 @@ const StockManagement = () => {
     }
   };
 
-  // Replenish stock
   const handleReplenish = async (product: Product) => {
     const quantity = prompt('Entrez la quantité à réapprovisionner:', '50');
     if (!quantity || isNaN(parseInt(quantity))) {
@@ -329,30 +410,33 @@ const StockManagement = () => {
     }
     try {
       setError(null);
-      const newMovement = await apiService.post('/stock-movements/', {
+      const response = await apiService.post('/stock-movements/', {
         product_id: product.id,
         type: 'entree',
         quantity: parseInt(quantity),
         reason: 'Réapprovisionnement'
       });
+      const newMovement: StockMovement = await response.json();
       setMovements(prev => [newMovement, ...prev]);
       
-      const updatedProduct = await apiService.get(`/products/${product.id}/`);
+      const productResponse = await apiService.get(`/products/${product.id}/`);
+      const updatedProduct: Product = await productResponse.json();
       setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
     } catch (error: any) {
       setError(error.message || 'Erreur lors du réapprovisionnement');
     }
   };
 
-  // Add stock movement
   const handleAddMovement = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setError(null);
-      const createdMovement = await apiService.post('/stock-movements/', newMovement);
+      const response = await apiService.post('/stock-movements/', newMovement);
+      const createdMovement: StockMovement = await response.json();
       setMovements(prev => [createdMovement, ...prev]);
       
-      const updatedProduct = await apiService.get(`/products/${newMovement.product_id}/`);
+      const productResponse = await apiService.get(`/products/${newMovement.product_id}/`);
+      const updatedProduct: Product = await productResponse.json();
       setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
       
       setNewMovement({
@@ -367,7 +451,6 @@ const StockManagement = () => {
     }
   };
 
-  // Modal component
   const Modal = ({ isOpen, onClose, title, children }: { 
     isOpen: boolean; 
     onClose: () => void; 
@@ -393,7 +476,6 @@ const StockManagement = () => {
     );
   };
 
-  // Overview View
   const OverviewView = () => (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -455,24 +537,25 @@ const StockManagement = () => {
             </span>
           </div>
           <div className="space-y-4">
-            {overviewData.critical_products.map((product: any) => (
-              <div key={product.id} className="flex items-center justify-between p-4 border-l-4 border-red-400 bg-red-50 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <AlertTriangle className={product.status === 'rupture' ? 'text-red-500' : 'text-amber-500'} size={24} />
-                  <div>
-                    <p className="font-semibold text-gray-800">{product.name}</p>
-                    <p className="text-sm text-gray-600">SKU: {product.sku}</p>
+            {overviewData.critical_products.length > 0 ? (
+              overviewData.critical_products.map((product) => (
+                <div key={product.id} className="flex items-center justify-between p-4 border-l-4 border-red-400 bg-red-50 rounded-lg">
+                  <div className="flex items-center space-x-3">
+                    <AlertTriangle className={product.status === 'rupture' ? 'text-red-500' : 'text-amber-500'} size={24} />
+                    <div>
+                      <p className="font-semibold text-gray-800">{product.name || 'Unnamed Product'}</p>
+                      <p className="text-sm text-gray-600">SKU: {product.sku || 'N/A'}</p>
+                    </div>
                   </div>
+                  <button
+                    onClick={() => handleReplenish(product)}
+                    className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors font-medium"
+                  >
+                    Réapprovisionner
+                  </button>
                 </div>
-                <button
-                  onClick={() => handleReplenish(product)}
-                  className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors font-medium"
-                >
-                  Réapprovisionner
-                </button>
-              </div>
-            ))}
-            {overviewData.critical_products.length === 0 && (
+              ))
+            ) : (
               <div className="text-center py-4 text-gray-500">
                 Aucune alerte de stock critique
               </div>
@@ -496,13 +579,13 @@ const StockManagement = () => {
                 <div className="flex items-center space-x-3">
                   {getMovementIcon(movement.type)}
                   <div>
-                    <p className="font-semibold text-gray-800">{movement.product.name}</p>
+                    <p className="font-semibold text-gray-800">{movement.product?.name || 'Unknown Product'}</p>
                     <p className="text-sm text-gray-600">{movement.reason}</p>
                   </div>
                 </div>
                 <div className="text-right">
                   <span className="text-xs text-gray-500">{new Date(movement.date).toLocaleTimeString()}</span>
-                  <p className="text-xs text-gray-400">{movement.user.username}</p>
+                  <p className="text-xs text-gray-400">{movement.user?.username || 'Unknown User'}</p>
                 </div>
               </div>
             ))}
@@ -517,7 +600,6 @@ const StockManagement = () => {
     </div>
   );
 
-  // Products View
   const ProductsView = () => (
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-lg">
@@ -539,13 +621,9 @@ const StockManagement = () => {
               onChange={(e) => setSelectedCategory(e.target.value)}
             >
               <option value="all">Toutes catégories</option>
-              {categories.length > 0 ? (
-                categories.map(cat => (
-                  <option key={cat.id} value={cat.name}>{cat.name}</option>
-                ))
-              ) : (
-                <option value="">Aucune catégorie disponible</option>
-              )}
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.name}>{cat.name}</option>
+              ))}
             </select>
           </div>
           <div className="flex items-center space-x-3">
@@ -579,7 +657,7 @@ const StockManagement = () => {
                   <td className="px-6 py-4">
                     <div>
                       <div className="text-sm font-semibold text-gray-900">{product.name}</div>
-                      <div className="text-sm text-gray-500">{product.category?.name} • {product.sku}</div>
+                      <div className="text-sm text-gray-500">{product.category?.name || 'Unknown'} • {product.sku}</div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -595,8 +673,8 @@ const StockManagement = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-gray-900">{product.supplier?.name}</div>
-                    <div className="text-sm text-gray-500">{product.point_of_sale?.name}</div>
+                    <div className="text-sm font-medium text-gray-900">{product.supplier?.name || 'Unknown'}</div>
+                    <div className="text-sm text-gray-500">{product.point_of_sale?.name || 'Unknown'}</div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-3">
@@ -630,7 +708,6 @@ const StockManagement = () => {
     </div>
   );
 
-  // Movements View
   const MovementsView = () => (
     <div className="space-y-6">
       <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
@@ -657,14 +734,14 @@ const StockManagement = () => {
                   {getMovementIcon(movement.type)}
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-800 text-lg">{movement.product.name}</p>
+                  <p className="font-semibold text-gray-800 text-lg">{movement.product?.name || 'Unknown Product'}</p>
                   <p className="text-sm text-gray-600">{movement.reason}</p>
                 </div>
               </div>
               <div className="text-right">
                 <p className="font-bold text-gray-800 text-lg">{movement.type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}: {movement.quantity}</p>
                 <p className="text-sm text-gray-500">{new Date(movement.date).toLocaleString()}</p>
-                <p className="text-xs text-blue-600 font-medium">{movement.user.username}</p>
+                <p className="text-xs text-blue-600 font-medium">{movement.user?.username || 'Unknown User'}</p>
               </div>
             </div>
           ))}
@@ -678,7 +755,6 @@ const StockManagement = () => {
     </div>
   );
 
-  // Analytics View
   const AnalyticsView = () => (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-12 text-center">
       <div className="bg-gradient-to-br from-purple-100 to-blue-100 p-8 rounded-2xl">
@@ -689,7 +765,6 @@ const StockManagement = () => {
     </div>
   );
 
-  // Main render
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -764,13 +839,9 @@ const StockManagement = () => {
                   onChange={(e) => setNewProduct({...newProduct, category_id: Number(e.target.value) || ''})}
                 >
                   <option value="">Sélectionner une catégorie</option>
-                  {categories.length > 0 ? (
-                    categories.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))
-                  ) : (
-                    <option value="">Aucune catégorie disponible</option>
-                  )}
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -837,13 +908,9 @@ const StockManagement = () => {
                   onChange={(e) => setNewProduct({...newProduct, supplier_id: Number(e.target.value) || ''})}
                 >
                   <option value="">Sélectionner un fournisseur</option>
-                  {suppliers.length > 0 ? (
-                    suppliers.map(sup => (
-                      <option key={sup.id} value={sup.id}>{sup.name}</option>
-                    ))
-                  ) : (
-                    <option value="">Aucun fournisseur disponible</option>
-                  )}
+                  {suppliers.map(sup => (
+                    <option key={sup.id} value={sup.id}>{sup.name}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -855,13 +922,9 @@ const StockManagement = () => {
                   onChange={(e) => setNewProduct({...newProduct, point_of_sale_id: e.target.value})}
                 >
                   <option value="">Sélectionner un point de vente</option>
-                  {pointsOfSale.length > 0 ? (
-                    pointsOfSale.map(pos => (
-                      <option key={pos.id} value={pos.id}>{pos.name}</option>
-                    ))
-                  ) : (
-                    <option value="">Aucun point de vente disponible</option>
-                  )}
+                  {pointsOfSale.map(pos => (
+                    <option key={pos.id} value={pos.id}>{pos.name}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -918,13 +981,9 @@ const StockManagement = () => {
                       category: { ...selectedProduct.category, id: Number(e.target.value) }
                     })}
                   >
-                    {categories.length > 0 ? (
-                      categories.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                      ))
-                    ) : (
-                      <option value="">Aucune catégorie disponible</option>
-                    )}
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -993,13 +1052,9 @@ const StockManagement = () => {
                       supplier: { ...selectedProduct.supplier, id: Number(e.target.value) }
                     })}
                   >
-                    {suppliers.length > 0 ? (
-                      suppliers.map(sup => (
-                        <option key={sup.id} value={sup.id}>{sup.name}</option>
-                      ))
-                    ) : (
-                      <option value="">Aucun fournisseur disponible</option>
-                    )}
+                    {suppliers.map(sup => (
+                      <option key={sup.id} value={sup.id}>{sup.name}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -1013,13 +1068,9 @@ const StockManagement = () => {
                       point_of_sale: { ...selectedProduct.point_of_sale, id: e.target.value }
                     })}
                   >
-                    {pointsOfSale.length > 0 ? (
-                      pointsOfSale.map(pos => (
-                        <option key={pos.id} value={pos.id}>{pos.name}</option>
-                      ))
-                    ) : (
-                      <option value="">Aucun point de vente disponible</option>
-                    )}
+                    {pointsOfSale.map(pos => (
+                      <option key={pos.id} value={pos.id}>{pos.name}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1064,13 +1115,9 @@ const StockManagement = () => {
                   onChange={(e) => setNewMovement({...newMovement, product_id: e.target.value})}
                 >
                   <option value="">Sélectionner un produit</option>
-                  {products.length > 0 ? (
-                    products.map(product => (
-                      <option key={product.id} value={product.id}>{product.name}</option>
-                    ))
-                  ) : (
-                    <option value="">Aucun produit disponible</option>
-                  )}
+                  {products.map(product => (
+                    <option key={product.id} value={product.id}>{product.name}</option>
+                  ))}
                 </select>
               </div>
               <div>

@@ -58,6 +58,12 @@ export interface DashboardData {
   pos_data: POSData[];
 }
 
+export interface User {
+  id: string;
+  username?: string;
+  email?: string;
+}
+
 const iconComponents: Record<string, React.ComponentType<any>> = {
   MapPin,
   ShoppingCart,
@@ -175,6 +181,26 @@ const AdminDashboard = () => {
     return dashboardData.pos_data.find(pos => pos.pos_id === selectedPOS.pos_id) || dashboardData.cumulative;
   };
 
+  const getUserInitials = () => {
+    if (user?.username) {
+      return user.username.slice(0, 2).toUpperCase();
+    }
+    if (user?.email) {
+      return user.email.slice(0, 2).toUpperCase();
+    }
+    return 'AU';
+  };
+
+  const getUserDisplayName = () => {
+    if (user?.username) {
+      return user.username;
+    }
+    if (user?.email) {
+      return user.email;
+    }
+    return 'Admin User';
+  };
+
   const DashboardContent = () => {
     const currentData = getCurrentData();
     
@@ -225,43 +251,43 @@ const AdminDashboard = () => {
               Voir plus <ChevronDown size={16} className="ml-1" />
             </button>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { 
-                icon: Plus, 
-                label: 'Ajouter Point de Vente', 
-                color: 'from-green-500 to-green-600',
-                onClick: () => setActiveTab('points-vente')
-              },
-              { 
-                icon: Package, 
-                label: 'Gérer Stocks', 
-                color: 'from-orange-500 to-orange-600',
-                onClick: () => setActiveTab('stocks')
-              },
-              { 
-                icon: ShoppingCart, 
-                label: 'Nouvelle Commande', 
-                color: 'from-purple-500 to-purple-600',
-                onClick: () => setActiveTab('commandes')
-              },
-              { 
-                icon: BarChart3, 
-                label: 'Vue Rapports', 
-                color: 'from-blue-500 to-blue-600',
-                onClick: () => setActiveTab('rapports')
-              }
-            ].map((action, index) => (
-              <button 
-                key={index} 
-                onClick={action.onClick}
-                className={`bg-gradient-to-r ${action.color} text-white p-4 rounded-lg transition-all hover:shadow-lg flex flex-col items-center space-y-2`}
-              >
-                <action.icon size={24} />
-                <span className="text-sm font-medium text-center">{action.label}</span>
-              </button>
-            ))}
-          </div>
+<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+  {[
+    { 
+      icon: Plus, 
+      label: 'Ajouter Point de Vente', 
+      color: 'from-green-500 to-green-600',
+      onClick: () => setActiveTab('points-vente')
+    },
+    { 
+      icon: Package, 
+      label: 'Gérer Stocks', 
+      color: 'from-orange-500 to-orange-600',
+      onClick: () => setActiveTab('stocks')
+    },
+    { 
+      icon: ShoppingCart, 
+      label: 'Nouvelle Commande', 
+      color: 'from-purple-500 to-purple-600',
+      onClick: () => setActiveTab('commandes')
+    },
+    { 
+      icon: BarChart3, 
+      label: 'Vue Rapports', 
+      color: 'from-blue-500 to-blue-600',
+      onClick: () => setActiveTab('rapports')
+    }
+  ].map((action, index) => (
+    <button 
+      key={index} 
+      onClick={action.onClick}
+      className={`bg-gradient-to-r ${action.color} text-white p-4 rounded-lg transition-all hover:shadow-lg flex flex-col items-center space-y-2`}
+    >
+      <action.icon size={24} />
+      <span className="text-sm font-medium text-center">{action.label}</span>
+    </button>
+  ))}
+</div>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-6">
@@ -340,15 +366,15 @@ const AdminDashboard = () => {
       case 'dashboard':
         return <DashboardContent />;
       case 'points-vente':
-        return <PointsVenteManagement selectedPOS={selectedPOS} />;
+        return React.createElement(PointsVenteManagement as any, { selectedPOS });
       case 'stocks':
-        return <StockManagement selectedPOS={selectedPOS} />;
+        return React.createElement(StockManagement as any, { selectedPOS });
       case 'commandes':
-        return <OrderManagement selectedPOS={selectedPOS} />;
+        return React.createElement(OrderManagement as any, { selectedPOS });
       case 'vendeurs-ambulants':
-        return <MobileVendorsManagement selectedPOS={selectedPOS} />;
+        return React.createElement(MobileVendorsManagement as any, { selectedPOS });
       case 'utilisateurs':
-        return <UserManagement />;
+        return React.createElement(UserManagement as any);
       default:
         return (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
@@ -451,11 +477,11 @@ const AdminDashboard = () => {
           <div className="p-4 border-t border-gray-200">
             <div className={`flex items-center ${sidebarOpen ? 'space-x-3' : 'justify-center'}`}>
               <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-medium">
-                {user?.name?.slice(0, 2).toUpperCase() || 'AU'}
+                {getUserInitials()}
               </div>
               {sidebarOpen && (
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-800">{user?.name || 'Admin User'}</p>
+                  <p className="text-sm font-medium text-gray-800">{getUserDisplayName()}</p>
                   <p className="text-xs text-gray-500">{user?.email || 'admin@lanfiatech.com'}</p>
                 </div>
               )}
@@ -585,7 +611,7 @@ const AdminDashboard = () => {
               
               <div className="flex items-center space-x-2">
                 <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                  {user?.name?.slice(0, 2).toUpperCase() || 'AU'}
+                  {getUserInitials()}
                 </div>
                 <button 
                   onClick={handleLogout}

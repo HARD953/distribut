@@ -22,6 +22,8 @@ const MapWithNoSSR = dynamic(() => import('@/components/Map'), {
   )
 });
 
+
+
 interface PointOfSale {
   id: string;
   name: string;
@@ -814,6 +816,7 @@ const PointsVenteManagement = () => {
                         center={[isValidCoordinate(selectedPoint.latitude) ? selectedPoint.latitude : 5.3599517, 
                                 isValidCoordinate(selectedPoint.longitude) ? selectedPoint.longitude : -4.0082563]} 
                         zoom={15} 
+                        onPointClick={setSelectedPoint}
                         singleMarker
                       />
                     </div>

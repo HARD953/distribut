@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import { useAuth } from './AuthContext';
 import { 
   Eye, EyeOff, User, Lock, ArrowRight, Loader2, 
@@ -13,11 +13,11 @@ const LoginPage = () => {
     password: ''
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState({});
-  const navigate = useNavigate();
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const router = useRouter();
   const { login, isLoading, error } = useAuth();
 
-  const handleInputChange = useCallback((e) => {
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -26,17 +26,17 @@ const LoginPage = () => {
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
-        [name]: ''
+        [name]: '' 
       }));
     }
   }, [errors]);
 
   const validateForm = useCallback(() => {
-    const newErrors = {};
+    const newErrors: { [key: string]: string } = {};
     
     if (!formData.username) {
       newErrors.username = "L'identifiant est requis";
-    } // Add custom validation if needed, e.g., for username format
+    }
     
     if (!formData.password) {
       newErrors.password = 'Le mot de passe est requis';
@@ -47,7 +47,7 @@ const LoginPage = () => {
     return newErrors;
   }, [formData]);
 
-  const handleSubmit = useCallback(async (e) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     const validationErrors = validateForm();
@@ -61,14 +61,14 @@ const LoginPage = () => {
     try {
       const result = await login(formData.username, formData.password);
       if (result.success) {
-        navigate('/dashboard');
+        router.push('/dashboard');
       } else {
         setErrors({ general: result.error || 'Identifiants invalides. Veuillez réessayer.' });
       }
     } catch (error) {
       setErrors({ general: 'Erreur de connexion. Veuillez réessayer.' });
     }
-  }, [formData, login, navigate, validateForm]);
+  }, [formData, login, router, validateForm]);
 
   const features = useMemo(() => [
     {
@@ -204,7 +204,7 @@ const LoginPage = () => {
                     </div>
                     <input
                       type="text"
-                      name="username" // Changed to match formData key
+                      name="username"
                       value={formData.username}
                       onChange={handleInputChange}
                       className={`w-full pl-10 pr-4 py-3 bg-white/10 backdrop-blur-sm border rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/50 transition-all ${
@@ -321,5 +321,4 @@ const LoginPage = () => {
     </div>
   );
 };
-
 export default LoginPage;
