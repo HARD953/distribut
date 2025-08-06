@@ -14,22 +14,19 @@ interface Product {
   name: string;
   category: { id: number; name: string };
   sku: string;
-  current_stock: number;
-  min_stock: number;
-  max_stock: number;
-  price: number;
   supplier: { id: number; name: string };
   point_of_sale: { id: string; name: string };
   description?: string;
+  main_image?: string;
   status: 'en_stock' | 'stock_faible' | 'rupture' | 'surstockage';
   last_updated: string;
-  variants?: ProductVariant[];
-  images?: ProductImage[];
+  created_at: string;
 }
 
 interface ProductVariant {
   id: string;
   product_id: string;
+  product: { id: string; name: string };
   format: { id: number; name: string; description?: string };
   current_stock: number;
   min_stock: number;
@@ -43,13 +40,6 @@ interface ProductFormat {
   id: number;
   name: string;
   description?: string;
-}
-
-interface ProductImage {
-  id: string;
-  url: string;
-  is_featured: boolean;
-  caption?: string;
 }
 
 interface StockMovement {
@@ -67,15 +57,11 @@ interface NewProduct {
   name: string;
   category_id: number | '';
   sku: string;
-  current_stock: number;
-  min_stock: number;
-  max_stock: number;
-  price: number;
   supplier_id: number | '';
   point_of_sale_id: string;
   description: string;
-  images?: File[];
-  variants?: Partial<ProductVariant>[];
+  status: 'en_stock' | 'stock_faible' | 'rupture' | 'surstockage';
+  main_image?: File;
 }
 
 interface NewVariant {
@@ -133,6 +119,7 @@ interface ApiOverviewResponse {
     today_movements: number;
     critical_products: Product[];
   };
+  pos_data?: any[];
 }
 
 const StockManagement = () => {
@@ -144,8 +131,10 @@ const StockManagement = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showMovementModal, setShowMovementModal] = useState(false);
   const [showAddVariantModal, setShowAddVariantModal] = useState(false);
+  const [showEditVariantModal, setShowEditVariantModal] = useState(false);
   const [showAddFormatModal, setShowAddFormatModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [variants, setVariants] = useState<ProductVariant[]>([]);
   const [formats, setFormats] = useState<ProductFormat[]>([]);
@@ -164,14 +153,10 @@ const StockManagement = () => {
     name: '',
     category_id: '',
     sku: '',
-    current_stock: 0,
-    min_stock: 0,
-    max_stock: 0,
-    price: 0,
     supplier_id: '',
     point_of_sale_id: '',
     description: '',
-    images: []
+    status: 'en_stock'
   });
   const [newVariant, setNewVariant] = useState<NewVariant>({
     product_id: '',
@@ -211,7 +196,7 @@ const StockManagement = () => {
         posResponse
       ] = await Promise.all([
         apiService.get('/stock-overview/'),
-        apiService.get('/products/?include_variants=true&include_images=true'),
+        apiService.get('/products/'),
         apiService.get('/product-variants/'),
         apiService.get('/products-formats/'),
         apiService.get('/stock-movements/'),
@@ -220,117 +205,34 @@ const StockManagement = () => {
         apiService.get('/points-vente/')
       ]);
 
-      const overviewData: ApiOverviewResponse = await overviewResponse.json();
-      const productsData: Product[] = await productsResponse.json();
-      const variantsData: ProductVariant[] = await variantsResponse.json();
-      const formatsData: ProductFormat[] = await formatsResponse.json();
-      const movementsData: StockMovement[] = await movementsResponse.json();
-      const categoriesData: Category[] = await categoriesResponse.json();
-      const suppliersData: Supplier[] = await suppliersResponse.json();
-      const posData: PointOfSale[] = await posResponse.json();
+      const overviewData = await overviewResponse.json();
+      const productsData = await productsResponse.json();
+      const variantsData = await variantsResponse.json();
+      const formatsData = await formatsResponse.json();
+      const movementsData = await movementsResponse.json();
+      const categoriesData = await categoriesResponse.json();
+      const suppliersData = await suppliersResponse.json();
+      const posData = await posResponse.json();
 
-      const mappedCategories: Category[] = Array.isArray(categoriesData)
-        ? categoriesData.map((cat: Category) => ({
-            id: cat.id ?? 0,
-            name: cat.name || 'Unknown Category'
-          }))
-        : [];
-
-      const mappedSuppliers: Supplier[] = Array.isArray(suppliersData)
-        ? suppliersData.map((sup: Supplier) => ({
-            id: sup.id ?? 0,
-            name: sup.name || 'Unknown Supplier'
-          }))
-        : [];
-
-      const defaultCategory = { id: 0, name: 'Unknown Category' };
-      const defaultSupplier = { id: 0, name: 'Unknown Supplier' };
-      const defaultPointOfSale = { id: '0', name: 'Unknown Point of Sale' };
-
-const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critical_products)
-      ? overviewData.cumulative.critical_products
-          .filter((product): product is Product =>
-            product != null &&
-            typeof product === 'object' &&
-            'id' in product &&
-            'name' in product &&
-            typeof product.name === 'string' &&
-            'sku' in product &&
-            'status' in product
-          )
-          .map((product) => ({
-            ...product,
-            name: product.name || 'Unnamed Product',
-            sku: product.sku || 'N/A',
-            status: product.status || 'en_stock',
-            category: product.category && typeof product.category === 'object' && 'id' in product.category && 'name' in product.category
-              ? { id: Number(product.category.id) || 0, name: String(product.category.name) || 'Unknown Category' }
-              : defaultCategory,
-            supplier: product.supplier && typeof product.supplier === 'object' && 'id' in product.supplier && 'name' in product.supplier
-              ? { id: Number(product.supplier.id) || 0, name: String(product.supplier.name) || 'Unknown Supplier' }
-              : defaultSupplier,
-            point_of_sale: product.point_of_sale && typeof product.point_of_sale === 'object' && 'id' in product.point_of_sale && 'name' in product.point_of_sale
-              ? { id: String(product.point_of_sale.id) || '0', name: String(product.point_of_sale.name) || 'Unknown Point of Sale' }
-              : defaultPointOfSale,
-            current_stock: Number(product.current_stock) || 0,
-            min_stock: Number(product.min_stock) || 0,
-            max_stock: Number(product.max_stock) || 0,
-            price: Number(product.price) || 0,
-            last_updated: product.last_updated || new Date().toISOString(),
-            description: product.description || '',
-            variants: Array.isArray(product.variants) ? product.variants : [],
-            images: Array.isArray(product.images) ? product.images : []
-          }))
-      : [];
+      // Correction ici pour utiliser les données cumulative
       setOverviewData({
-        total_products: overviewData?.cumulative?.total_products || 0,
-        stock_value: overviewData?.cumulative?.stock_value || 0,
-        alert_count: overviewData?.cumulative?.alert_count || 0,
-        today_movements: overviewData?.cumulative?.today_movements || 0,
-        critical_products: validatedCriticalProducts
+        total_products: overviewData.cumulative?.total_products || 0,
+        stock_value: overviewData.cumulative?.stock_value || 0,
+        alert_count: overviewData.cumulative?.alert_count || 0,
+        today_movements: overviewData.cumulative?.today_movements || 0,
+        critical_products: overviewData.cumulative?.critical_products || []
       });
 
-      setProducts(Array.isArray(productsData)
-        ? productsData.map((product) => ({
-            ...product,
-            name: product.name || 'Unnamed Product',
-            sku: product.sku || 'N/A',
-            status: product.status || 'en_stock',
-            category: product.category && typeof product.category === 'object' && 'id' in product.category && 'name' in product.category
-              ? { id: Number(product.category.id) || 0, name: String(product.category.name) || 'Unknown Category' }
-              : defaultCategory,
-            supplier: product.supplier && typeof product.supplier === 'object' && 'id' in product.supplier && 'name' in product.supplier
-              ? { id: Number(product.supplier.id) || 0, name: String(product.supplier.name) || 'Unknown Supplier' }
-              : defaultSupplier,
-            point_of_sale: product.point_of_sale && typeof product.point_of_sale === 'object' && 'id' in product.point_of_sale && 'name' in product.point_of_sale
-              ? { id: String(product.point_of_sale.id) || '0', name: String(product.point_of_sale.name) || 'Unknown Point of Sale' }
-              : defaultPointOfSale,
-            current_stock: Number(product.current_stock) || 0,
-            min_stock: Number(product.min_stock) || 0,
-            max_stock: Number(product.max_stock) || 0,
-            price: Number(product.price) || 0,
-            last_updated: product.last_updated || new Date().toISOString(),
-            description: product.description || '',
-            variants: Array.isArray(product.variants) ? product.variants : [],
-            images: Array.isArray(product.images) ? product.images : []
-          }))
-        : []);
-      setVariants(Array.isArray(variantsData) ? variantsData : []);
-      setFormats(Array.isArray(formatsData) ? formatsData : []);
-      setMovements(Array.isArray(movementsData) ? movementsData : []);
-      setCategories(mappedCategories);
-      setSuppliers(mappedSuppliers);
-      setPointsOfSale(Array.isArray(posData) ? posData : []);
+      setProducts(productsData);
+      setVariants(variantsData);
+      setFormats(formatsData);
+      setMovements(movementsData);
+      setCategories(categoriesData);
+      setSuppliers(suppliersData);
+      setPointsOfSale(posData);
 
     } catch (error: any) {
       setError(error.message || 'Erreur lors du chargement des données');
-      setProducts([]);
-      setVariants([]);
-      setFormats([]);
-      setMovements([]);
-      setCategories([]);
-      setSuppliers([]);
-      setPointsOfSale([]);
     } finally {
       setIsLoading(false);
     }
@@ -370,7 +272,7 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
 
   const filteredVariants = useMemo(() => {
     return variants.filter(variant => {
-      const nameMatch = variant.format.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const nameMatch = variant.format?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false;
       const barcodeMatch = variant.barcode?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false;
       const productMatch = products.find(p => p.id === variant.product_id)?.name.toLowerCase().includes(searchTerm.toLowerCase()) ?? false;
       return nameMatch || barcodeMatch || productMatch;
@@ -386,12 +288,11 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
   }, [formats, searchTerm]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, isVariant = false) => {
-    if (e.target.files) {
+    if (e.target.files && e.target.files[0]) {
       if (isVariant) {
         setNewVariant({...newVariant, image: e.target.files[0]});
       } else {
-        const files = Array.from(e.target.files);
-        setNewProduct({...newProduct, images: files});
+        setNewProduct({...newProduct, main_image: e.target.files[0]});
       }
     }
   };
@@ -401,48 +302,30 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
     try {
       setError(null);
       
-      // First create the product
-      const productResponse = await apiService.post('/products/', {
-        ...newProduct,
-        point_of_sale_id: newProduct.point_of_sale_id || pointsOfSale[0]?.id,
-        category_id: Number(newProduct.category_id),
-        supplier_id: Number(newProduct.supplier_id)
-      });
-      const createdProduct: Product = await productResponse.json();
+      const formData = new FormData();
+      formData.append('name', newProduct.name);
+      formData.append('category_id', String(newProduct.category_id));
+      formData.append('sku', newProduct.sku);
+      formData.append('supplier_id', String(newProduct.supplier_id));
+      formData.append('point_of_sale_id', newProduct.point_of_sale_id);
+      formData.append('description', newProduct.description);
+      formData.append('status', newProduct.status);
+      if (newProduct.main_image) {
+        formData.append('main_image', newProduct.main_image);
+      }
       
-      // Then upload images if any
-      if (newProduct.images && newProduct.images.length > 0) {
-        const formData = new FormData();
-        newProduct.images.forEach((file, index) => {
-          formData.append(`images`, file);
-          formData.append(`is_featured`, index === 0 ? 'true' : 'false');
-        });
-        
-        await apiService.post(`/products/${createdProduct.id}/images/`, formData, true);
-      }
-
-      if (newProduct.current_stock > 0) {
-        await apiService.post('/stock-movements/', {
-          product_id: createdProduct.id,
-          type: 'entree',
-          quantity: newProduct.current_stock,
-          reason: 'Stock initial'
-        });
-      }
+      const response = await apiService.post('/products/', formData, true);
+      const createdProduct = await response.json();
 
       setProducts(prev => [...prev, createdProduct]);
       setNewProduct({
         name: '',
         category_id: '',
         sku: '',
-        current_stock: 0,
-        min_stock: 0,
-        max_stock: 0,
-        price: 0,
         supplier_id: '',
         point_of_sale_id: '',
         description: '',
-        images: []
+        status: 'en_stock'
       });
       setShowAddModal(false);
       await fetchData();
@@ -456,31 +339,20 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
     try {
       setError(null);
       
-      // First create the variant
-      const variantResponse = await apiService.post('/product-variants/', {
-        ...newVariant,
-        product_id: newVariant.product_id,
-        format_id: Number(newVariant.format_id)
-      });
-      const createdVariant: ProductVariant = await variantResponse.json();
-      
-      // Then upload image if any
+      const formData = new FormData();
+      formData.append('product_id', newVariant.product_id);
+      formData.append('format_id', String(newVariant.format_id));
+      formData.append('current_stock', String(newVariant.current_stock));
+      formData.append('min_stock', String(newVariant.min_stock));
+      formData.append('max_stock', String(newVariant.max_stock));
+      formData.append('price', String(newVariant.price));
+      formData.append('barcode', newVariant.barcode);
       if (newVariant.image) {
-        const formData = new FormData();
         formData.append('image', newVariant.image);
-        
-        await apiService.post(`/product-variants/${createdVariant.id}/image/`, formData, true);
       }
       
-      if (newVariant.current_stock > 0) {
-        await apiService.post('/stock-movements/', {
-          product_id: newVariant.product_id,
-          product_variant_id: createdVariant.id,
-          type: 'entree',
-          quantity: newVariant.current_stock,
-          reason: 'Stock initial variante'
-        });
-      }
+      const response = await apiService.post('/product-variants/', formData, true);
+      const createdVariant = await response.json();
 
       setVariants(prev => [...prev, createdVariant]);
       setNewVariant({
@@ -503,8 +375,8 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
     e.preventDefault();
     try {
       setError(null);
-      const response = await apiService.post('/product-formats/', newFormat);
-      const createdFormat: ProductFormat = await response.json();
+      const response = await apiService.post('/products-formats/', newFormat);
+      const createdFormat = await response.json();
       
       setFormats(prev => [...prev, createdFormat]);
       setNewFormat({
@@ -525,6 +397,7 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
       await apiService.delete(`/products/${id}/`);
       setProducts(prev => prev.filter(p => p.id !== id));
       setMovements(prev => prev.filter(m => m.product.id !== id));
+      await fetchData();
     } catch (error: any) {
       setError(error.message || 'Erreur lors de la suppression du produit');
     }
@@ -536,6 +409,7 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
       setError(null);
       await apiService.delete(`/product-variants/${id}/`);
       setVariants(prev => prev.filter(v => v.id !== id));
+      await fetchData();
     } catch (error: any) {
       setError(error.message || 'Erreur lors de la suppression de la variante');
     }
@@ -545,8 +419,9 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
     if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce format ?')) return;
     try {
       setError(null);
-      await apiService.delete(`/product-formats/${id}/`);
+      await apiService.delete(`/products-formats/${id}/`);
       setFormats(prev => prev.filter(f => f.id !== id));
+      await fetchData();
     } catch (error: any) {
       setError(error.message || 'Erreur lors de la suppression du format');
     }
@@ -557,54 +432,62 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
     setShowEditModal(true);
   };
 
+  const handleEditVariant = (variant: ProductVariant) => {
+    setSelectedVariant(variant);
+    setShowEditVariantModal(true);
+  };
+
   const handleUpdateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct) return;
     try {
       setError(null);
-      const response = await apiService.put(`/products/${selectedProduct.id}/`, {
-        name: selectedProduct.name,
-        category_id: selectedProduct.category.id,
-        sku: selectedProduct.sku,
-        current_stock: selectedProduct.current_stock,
-        min_stock: selectedProduct.min_stock,
-        max_stock: selectedProduct.max_stock,
-        price: selectedProduct.price,
-        supplier_id: selectedProduct.supplier.id,
-        point_of_sale_id: selectedProduct.point_of_sale.id,
-        description: selectedProduct.description || ''
-      });
-      const updatedProduct: Product = await response.json();
+      
+      const formData = new FormData();
+      formData.append('name', selectedProduct.name);
+      formData.append('category_id', String(selectedProduct.category.id));
+      formData.append('sku', selectedProduct.sku);
+      formData.append('supplier_id', String(selectedProduct.supplier.id));
+      formData.append('point_of_sale_id', selectedProduct.point_of_sale.id);
+      formData.append('description', selectedProduct.description || '');
+      formData.append('status', selectedProduct.status);
+      
+      const response = await apiService.put(`/products/${selectedProduct.id}/`, formData, true);
+      const updatedProduct = await response.json();
+      
       setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
       setShowEditModal(false);
       setSelectedProduct(null);
+      await fetchData();
     } catch (error: any) {
       setError(error.message || 'Erreur lors de la mise à jour du produit');
     }
   };
 
-  const handleReplenish = async (product: Product) => {
-    const quantity = prompt('Entrez la quantité à réapprovisionner:', '50');
-    if (!quantity || isNaN(parseInt(quantity))) {
-      setError('Quantité invalide.');
-      return;
-    }
+  const handleUpdateVariant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedVariant) return;
     try {
       setError(null);
-      const response = await apiService.post('/stock-movements/', {
-        product_id: product.id,
-        type: 'entree',
-        quantity: parseInt(quantity),
-        reason: 'Réapprovisionnement'
-      });
-      const newMovement: StockMovement = await response.json();
-      setMovements(prev => [newMovement, ...prev]);
       
-      const productResponse = await apiService.get(`/products/${product.id}/`);
-      const updatedProduct: Product = await productResponse.json();
-      setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
+      const formData = new FormData();
+      formData.append('product_id', selectedVariant.product_id);
+      formData.append('format_id', String(selectedVariant.format.id));
+      formData.append('current_stock', String(selectedVariant.current_stock));
+      formData.append('min_stock', String(selectedVariant.min_stock));
+      formData.append('max_stock', String(selectedVariant.max_stock));
+      formData.append('price', String(selectedVariant.price));
+      formData.append('barcode', selectedVariant.barcode);
+      
+      const response = await apiService.put(`/product-variants/${selectedVariant.id}/`, formData, true);
+      const updatedVariant = await response.json();
+      
+      setVariants(prev => prev.map(v => v.id === updatedVariant.id ? updatedVariant : v));
+      setShowEditVariantModal(false);
+      setSelectedVariant(null);
+      await fetchData();
     } catch (error: any) {
-      setError(error.message || 'Erreur lors du réapprovisionnement');
+      setError(error.message || 'Erreur lors de la mise à jour de la variante');
     }
   };
 
@@ -613,12 +496,8 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
     try {
       setError(null);
       const response = await apiService.post('/stock-movements/', newMovement);
-      const createdMovement: StockMovement = await response.json();
+      const createdMovement = await response.json();
       setMovements(prev => [createdMovement, ...prev]);
-      
-      const productResponse = await apiService.get(`/products/${newMovement.product_id}/`);
-      const updatedProduct: Product = await productResponse.json();
-      setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
       
       setNewMovement({
         product_id: '',
@@ -627,6 +506,7 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
         reason: ''
       });
       setShowMovementModal(false);
+      await fetchData();
     } catch (error: any) {
       setError(error.message || 'Erreur lors de l\'ajout du mouvement');
     }
@@ -719,8 +599,8 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
           </div>
           <div className="space-y-4">
             {overviewData.critical_products.length > 0 ? (
-              overviewData.critical_products.map((product) => (
-                <div key={product.id} className="flex items-center justify-between p-4 border-l-4 border-red-400 bg-red-50 rounded-lg">
+              overviewData.critical_products.map((product, index) => (
+                <div key={`${product.id}-${index}`} className="flex items-center justify-between p-4 border-l-4 border-red-400 bg-red-50 rounded-lg">
                   <div className="flex items-center space-x-3">
                     <AlertTriangle className={product.status === 'rupture' ? 'text-red-500' : 'text-amber-500'} size={24} />
                     <div>
@@ -729,10 +609,9 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                     </div>
                   </div>
                   <button
-                    onClick={() => handleReplenish(product)}
                     className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors font-medium"
                   >
-                    Réapprovisionner
+                    Voir détails
                   </button>
                 </div>
               ))
@@ -857,8 +736,7 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Produit</th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Image</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Stock</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Prix</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Catégorie</th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Statut</th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Fournisseur</th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
@@ -870,14 +748,14 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                     <td className="px-6 py-4">
                       <div>
                         <div className="text-sm font-semibold text-gray-900">{product.name}</div>
-                        <div className="text-sm text-gray-500">{product.category?.name || 'Unknown'} • {product.sku}</div>
+                        <div className="text-sm text-gray-500">{product.sku}</div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      {product.images && product.images.length > 0 ? (
+                      {product.main_image ? (
                         <div className="w-12 h-12 rounded-lg overflow-hidden">
                           <img 
-                            src={product.images[0].url} 
+                            src={product.main_image} 
                             alt={product.name}
                             className="w-full h-full object-cover"
                           />
@@ -888,12 +766,8 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                         </div>
                       )}
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-semibold text-gray-900">{product.current_stock} unités</div>
-                      <div className="text-sm text-gray-500">Min: {product.min_stock} • Max: {product.max_stock}</div>
-                    </td>
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                      ₣ {product.price.toLocaleString()}
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      {product.category?.name || 'Unknown'}
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex px-3 py-1 text-xs font-bold rounded-full border ${getStatusColor(product.status)}`}>
@@ -924,7 +798,7 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                 ))}
                 {filteredProducts.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                    <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
                       {products.length === 0 ? 'Aucun produit disponible' : 'Aucun produit correspondant à votre recherche'}
                     </td>
                   </tr>
@@ -943,10 +817,9 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Produit</th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Format</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Image</th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Stock</th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Prix</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Code-barres</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Image</th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -955,16 +828,26 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                   <tr key={variant.id} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
                     <td className="px-6 py-4">
                       <div className="text-sm font-semibold text-gray-900">
-                        {products.find(p => p.id === variant.product_id)?.name || 'Unknown'}
+                        {variant.product?.name || 'Unknown'}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{variant.format.name}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{variant.format?.name || 'Unknown'}</td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm">
+                        <div>Actuel: {variant.current_stock}</div>
+                        <div>Min: {variant.min_stock}</div>
+                        <div>Max: {variant.max_stock}</div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">
+                      ₣ {variant.price.toLocaleString()}
+                    </td>
                     <td className="px-6 py-4">
                       {variant.image ? (
                         <div className="w-12 h-12 rounded-lg overflow-hidden">
                           <img 
                             src={variant.image} 
-                            alt={variant.format.name}
+                            alt={variant.format?.name || 'Variant'}
                             className="w-full h-full object-cover"
                           />
                         </div>
@@ -975,15 +858,13 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm font-semibold text-gray-900">{variant.current_stock} unités</div>
-                      <div className="text-sm text-gray-500">Min: {variant.min_stock} • Max: {variant.max_stock}</div>
-                    </td>
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                      ₣ {variant.price.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{variant.barcode || 'N/A'}</td>
-                    <td className="px-6 py-4">
                       <div className="flex items-center space-x-3">
+                        <button 
+                          onClick={() => handleEditVariant(variant)}
+                          className="text-green-600 hover:text-green-900 p-2 hover:bg-green-50 rounded-lg transition-colors"
+                        >
+                          <Edit size={16} />
+                        </button>
                         <button 
                           onClick={() => handleDeleteVariant(variant.id)}
                           className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded-lg transition-colors"
@@ -996,7 +877,7 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                 ))}
                 {filteredVariants.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                    <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
                       {variants.length === 0 ? 'Aucune variante disponible' : 'Aucune variante correspondant à votre recherche'}
                     </td>
                   </tr>
@@ -1200,51 +1081,6 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Prix (₣) *</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  step="0.01"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newProduct.price}
-                  onChange={(e) => setNewProduct({...newProduct, price: Number(e.target.value) || 0})}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Stock actuel *</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newProduct.current_stock}
-                  onChange={(e) => setNewProduct({...newProduct, current_stock: Number(e.target.value) || 0})}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Stock minimum *</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newProduct.min_stock}
-                  onChange={(e) => setNewProduct({...newProduct, min_stock: Number(e.target.value) || 0})}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Stock maximum *</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newProduct.max_stock}
-                  onChange={(e) => setNewProduct({...newProduct, max_stock: Number(e.target.value) || 0})}
-                />
-              </div>
-              <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Fournisseur *</label>
                 <select
                   required
@@ -1272,8 +1108,22 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Statut *</label>
+                <select
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={newProduct.status}
+                  onChange={(e) => setNewProduct({...newProduct, status: e.target.value as any})}
+                >
+                  <option value="en_stock">En stock</option>
+                  <option value="stock_faible">Stock faible</option>
+                  <option value="rupture">Rupture</option>
+                  <option value="surstockage">Surstockage</option>
+                </select>
+              </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Images du produit</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Image principale</label>
                 <div className="flex items-center space-x-4">
                   <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100">
                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
@@ -1283,34 +1133,25 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                     </div>
                     <input 
                       type="file" 
-                      multiple 
                       className="hidden" 
                       onChange={(e) => handleImageUpload(e)}
                       accept="image/*"
                     />
                   </label>
-                  {newProduct.images && newProduct.images.length > 0 && (
-                    <div className="flex space-x-2">
-                      {newProduct.images.map((file, index) => (
-                        <div key={index} className="relative w-16 h-16 rounded-lg overflow-hidden">
-                          <img
-                            src={URL.createObjectURL(file)}
-                            alt={`Preview ${index}`}
-                            className="w-full h-full object-cover"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newImages = [...newProduct.images || []];
-                              newImages.splice(index, 1);
-                              setNewProduct({...newProduct, images: newImages});
-                            }}
-                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      ))}
+                  {newProduct.main_image && (
+                    <div className="relative w-16 h-16 rounded-lg overflow-hidden">
+                      <img
+                        src={URL.createObjectURL(newProduct.main_image)}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setNewProduct({...newProduct, main_image: undefined})}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
+                      >
+                        <X size={12} />
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1376,27 +1217,6 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Code-barres</label>
-                <input
-                  type="text"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newVariant.barcode}
-                  onChange={(e) => setNewVariant({...newVariant, barcode: e.target.value})}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Prix (₣) *</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  step="0.01"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newVariant.price}
-                  onChange={(e) => setNewVariant({...newVariant, price: Number(e.target.value) || 0})}
-                />
-              </div>
-              <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Stock actuel *</label>
                 <input
                   type="number"
@@ -1427,6 +1247,27 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={newVariant.max_stock}
                   onChange={(e) => setNewVariant({...newVariant, max_stock: Number(e.target.value) || 0})}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Prix (₣) *</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="0.01"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={newVariant.price}
+                  onChange={(e) => setNewVariant({...newVariant, price: Number(e.target.value) || 0})}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Code-barres</label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={newVariant.barcode}
+                  onChange={(e) => setNewVariant({...newVariant, barcode: e.target.value})}
                 />
               </div>
               <div className="md:col-span-2">
@@ -1480,6 +1321,148 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
               </button>
             </div>
           </form>
+        </Modal>
+
+        {/* Edit Variant Modal */}
+        <Modal isOpen={showEditVariantModal} onClose={() => { setShowEditVariantModal(false); setSelectedVariant(null); }} title="Modifier la variante">
+          {selectedVariant && (
+            <form onSubmit={handleUpdateVariant} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Produit *</label>
+                  <select
+                    required
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={selectedVariant.product_id}
+                    onChange={(e) => setSelectedVariant({...selectedVariant, product_id: e.target.value})}
+                  >
+                    {products.map(product => (
+                      <option key={product.id} value={product.id}>{product.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Format *</label>
+                  <select
+                    required
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={selectedVariant.format.id}
+                    onChange={(e) => setSelectedVariant({
+                      ...selectedVariant,
+                      format: { ...selectedVariant.format, id: Number(e.target.value) }
+                    })}
+                  >
+                    {formats.map(format => (
+                      <option key={format.id} value={format.id}>{format.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Stock actuel *</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={selectedVariant.current_stock}
+                    onChange={(e) => setSelectedVariant({...selectedVariant, current_stock: Number(e.target.value) || 0})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Stock minimum *</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={selectedVariant.min_stock}
+                    onChange={(e) => setSelectedVariant({...selectedVariant, min_stock: Number(e.target.value) || 0})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Stock maximum *</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={selectedVariant.max_stock}
+                    onChange={(e) => setSelectedVariant({...selectedVariant, max_stock: Number(e.target.value) || 0})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Prix (₣) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={selectedVariant.price}
+                    onChange={(e) => setSelectedVariant({...selectedVariant, price: Number(e.target.value) || 0})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Code-barres</label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={selectedVariant.barcode}
+                    onChange={(e) => setSelectedVariant({...selectedVariant, barcode: e.target.value})}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Image de la variante</label>
+                  <div className="flex items-center space-x-4">
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100">
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <Upload className="w-8 h-8 mb-3 text-gray-400" />
+                        <p className="mb-2 text-sm text-gray-500">Cliquez pour télécharger</p>
+                        <p className="text-xs text-gray-500">PNG, JPG, JPEG (MAX. 5MB)</p>
+                      </div>
+                      <input 
+                        type="file" 
+                        className="hidden" 
+                        onChange={(e) => handleImageUpload(e, true)}
+                        accept="image/*"
+                      />
+                    </label>
+                    {selectedVariant.image && (
+                      <div className="relative w-16 h-16 rounded-lg overflow-hidden">
+                        <img
+                          src={selectedVariant.image}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setSelectedVariant({...selectedVariant, image: undefined})}
+                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => { setShowEditVariantModal(false); setSelectedVariant(null); }}
+                  className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                >
+                  Mettre à jour
+                </button>
+              </div>
+            </form>
+          )}
         </Modal>
 
         {/* Add Format Modal */}
@@ -1564,51 +1547,6 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Prix (₣) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={selectedProduct.price}
-                    onChange={(e) => setSelectedProduct({...selectedProduct, price: Number(e.target.value) || 0})}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Stock actuel *</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={selectedProduct.current_stock}
-                    onChange={(e) => setSelectedProduct({...selectedProduct, current_stock: Number(e.target.value) || 0})}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Stock minimum *</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={selectedProduct.min_stock}
-                    onChange={(e) => setSelectedProduct({...selectedProduct, min_stock: Number(e.target.value) || 0})}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Stock maximum *</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={selectedProduct.max_stock}
-                    onChange={(e) => setSelectedProduct({...selectedProduct, max_stock: Number(e.target.value) || 0})}
-                  />
-                </div>
-                <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Fournisseur *</label>
                   <select
                     required
@@ -1639,6 +1577,57 @@ const validatedCriticalProducts = Array.isArray(overviewData?.cumulative?.critic
                       <option key={pos.id} value={pos.id}>{pos.name}</option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Statut *</label>
+                  <select
+                    required
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={selectedProduct.status}
+                    onChange={(e) => setSelectedProduct({
+                      ...selectedProduct,
+                      status: e.target.value as any
+                    })}
+                  >
+                    <option value="en_stock">En stock</option>
+                    <option value="stock_faible">Stock faible</option>
+                    <option value="rupture">Rupture</option>
+                    <option value="surstockage">Surstockage</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Image principale</label>
+                  <div className="flex items-center space-x-4">
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100">
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <Upload className="w-8 h-8 mb-3 text-gray-400" />
+                        <p className="mb-2 text-sm text-gray-500">Cliquez pour télécharger</p>
+                        <p className="text-xs text-gray-500">PNG, JPG, JPEG (MAX. 5MB)</p>
+                      </div>
+                      <input 
+                        type="file" 
+                        className="hidden" 
+                        onChange={(e) => handleImageUpload(e)}
+                        accept="image/*"
+                      />
+                    </label>
+                    {selectedProduct.main_image && (
+                      <div className="relative w-16 h-16 rounded-lg overflow-hidden">
+                        <img
+                          src={selectedProduct.main_image}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setSelectedProduct({...selectedProduct, main_image: undefined})}
+                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               <div>
