@@ -23,9 +23,10 @@ interface Product {
   created_at: string;
 }
 
+// Dans l'interface ProductVariant, assurez-vous que product_id est correctement typé
 interface ProductVariant {
   id: string;
-  product_id: string;
+  product_id: string;  // Ce champ doit être présent
   product: { id: string; name: string };
   format: { id: number; name: string; description?: string };
   current_stock: number;
@@ -33,9 +34,8 @@ interface ProductVariant {
   max_stock: number;
   price: number;
   barcode: string;
-  image?: string;
+  image?: string | File; // Peut être soit une string (URL) soit un File
 }
-
 interface ProductFormat {
   id: number;
   name: string;
@@ -432,8 +432,12 @@ const StockManagement = () => {
     setShowEditModal(true);
   };
 
+  // Dans la fonction handleEditVariant, assurez-vous que product_id est bien passé
   const handleEditVariant = (variant: ProductVariant) => {
-    setSelectedVariant(variant);
+    setSelectedVariant({
+      ...variant,
+      product_id: variant.product_id || variant.product.id // Utilisez product_id s'il existe, sinon utilisez product.id
+    });
     setShowEditVariantModal(true);
   };
 
@@ -464,32 +468,37 @@ const StockManagement = () => {
     }
   };
 
+
   const handleUpdateVariant = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedVariant) return;
-    try {
-      setError(null);
-      
-      const formData = new FormData();
-      formData.append('product_id', selectedVariant.product_id);
-      formData.append('format_id', String(selectedVariant.format.id));
-      formData.append('current_stock', String(selectedVariant.current_stock));
-      formData.append('min_stock', String(selectedVariant.min_stock));
-      formData.append('max_stock', String(selectedVariant.max_stock));
-      formData.append('price', String(selectedVariant.price));
-      formData.append('barcode', selectedVariant.barcode);
-      
-      const response = await apiService.put(`/product-variants/${selectedVariant.id}/`, formData, true);
-      const updatedVariant = await response.json();
-      
-      setVariants(prev => prev.map(v => v.id === updatedVariant.id ? updatedVariant : v));
-      setShowEditVariantModal(false);
-      setSelectedVariant(null);
-      await fetchData();
-    } catch (error: any) {
-      setError(error.message || 'Erreur lors de la mise à jour de la variante');
+  e.preventDefault();
+  if (!selectedVariant) return;
+  try {
+    setError(null);
+    
+    const formData = new FormData();
+    formData.append('product_id', selectedVariant.product_id); // Assurez-vous que product_id est bien défini
+    formData.append('format_id', String(selectedVariant.format.id));
+    formData.append('current_stock', String(selectedVariant.current_stock));
+    formData.append('min_stock', String(selectedVariant.min_stock));
+    formData.append('max_stock', String(selectedVariant.max_stock));
+    formData.append('price', String(selectedVariant.price));
+    formData.append('barcode', selectedVariant.barcode);
+    
+    if (selectedVariant.image instanceof File) {
+      formData.append('image', selectedVariant.image);
     }
-  };
+    
+    const response = await apiService.put(`/product-variants/${selectedVariant.id}/`, formData, true);
+    const updatedVariant = await response.json();
+    
+    setVariants(prev => prev.map(v => v.id === updatedVariant.id ? updatedVariant : v));
+    setShowEditVariantModal(false);
+    setSelectedVariant(null);
+    await fetchData();
+  } catch (error: any) {
+    setError(error.message || 'Erreur lors de la mise à jour de la variante');
+  }
+};
 
   const handleAddMovement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1330,11 +1339,16 @@ const StockManagement = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Produit *</label>
+                  // Dans le formulaire de modification de variante, assurez-vous que product_id est correctement géré
                   <select
                     required
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={selectedVariant.product_id}
-                    onChange={(e) => setSelectedVariant({...selectedVariant, product_id: e.target.value})}
+                    value={selectedVariant?.product_id}
+                    onChange={(e) => setSelectedVariant({
+                      ...selectedVariant,
+                      product_id: e.target.value,
+                      product: { ...selectedVariant.product, id: e.target.value }
+                    })}
                   >
                     {products.map(product => (
                       <option key={product.id} value={product.id}>{product.name}</option>

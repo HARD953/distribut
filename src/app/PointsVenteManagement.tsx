@@ -5,12 +5,14 @@ import {
   Phone, Mail, User, Calendar, TrendingUp, AlertCircle,
   CheckCircle, Clock, Star, MoreVertical, Download,
   Navigation, Building2, Users, ChevronLeft, X,
-  Shield, ChevronDown, ChevronRight, Loader
+  Shield, ChevronDown, ChevronRight, Loader, Image as ImageIcon
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 // Chargement dynamique de la carte avec désactivation du SSR
-const MapWithNoSSR = dynamic(() => import('@/components/Map'), {
+const MapWithNoSSR = dynamic(() => import('@/components/Map').then(mod => {
+  return (props: any) => <mod.default {...props} showAvatars={props.showAvatars} />;
+}), {
   ssr: false,
   loading: () => (
     <div className="h-full flex items-center justify-center bg-gradient-to-br from-blue-100 to-purple-100 rounded-lg animate-pulse">
@@ -21,8 +23,6 @@ const MapWithNoSSR = dynamic(() => import('@/components/Map'), {
     </div>
   )
 });
-
-
 
 interface PointOfSale {
   id: string;
@@ -42,6 +42,7 @@ interface PointOfSale {
   turnover: string;
   monthly_orders: number;
   evaluation_score: number;
+  avatar: string;
 }
 
 const PointsVenteManagement = () => {
@@ -66,10 +67,14 @@ const PointsVenteManagement = () => {
     region: '',
     commune: '',
     latitude: 0,
-    longitude: 0
+    longitude: 0,
+    registration_date: new Date().toISOString().split('T')[0],
+    avatar: ''
   });
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [editingPoint, setEditingPoint] = useState<PointOfSale | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
 
   // Types de points de vente
   const pointTypes = [
@@ -129,6 +134,37 @@ const PointsVenteManagement = () => {
     );
   };
 
+  // Gestion du fichier avatar
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setAvatarFile(e.target.files[0]);
+      
+      // Prévisualisation pour l'ajout
+      if (showAddModal) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setNewPoint({
+            ...newPoint,
+            avatar: event.target?.result as string
+          });
+        };
+        reader.readAsDataURL(e.target.files[0]);
+      }
+      
+      // Prévisualisation pour l'édition
+      if (editingPoint) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setEditingPoint({
+            ...editingPoint,
+            avatar: event.target?.result as string
+          });
+        };
+        reader.readAsDataURL(e.target.files[0]);
+      }
+    }
+  };
+
   // Charger les points de vente
   useEffect(() => {
     const fetchPointsVente = async () => {
@@ -157,8 +193,10 @@ const PointsVenteManagement = () => {
         // Validation des coordonnées
         const validatedData = data.map((point: PointOfSale) => ({
           ...point,
+          avatar: point.avatar || '/default-avatar.png',
           latitude: isValidCoordinate(point.latitude) ? point.latitude : 5.3197,
-          longitude: isValidCoordinate(point.longitude) ? point.longitude : -4.0267
+          longitude: isValidCoordinate(point.longitude) ? point.longitude : -4.0267,
+          registration_date: point.registration_date || new Date().toISOString().split('T')[0]
         }));
         setPointsVente(validatedData);
       } catch (err: any) {
@@ -227,22 +265,31 @@ const PointsVenteManagement = () => {
 
     try {
       setLoading(true);
+      
+      // Création du FormData pour gérer le fichier
+      const formData = new FormData();
+      formData.append('name', newPoint.name);
+      formData.append('owner', newPoint.owner);
+      formData.append('phone', newPoint.phone);
+      formData.append('email', newPoint.email);
+      formData.append('address', newPoint.address);
+      formData.append('type', newPoint.type);
+      formData.append('district', newPoint.district);
+      formData.append('region', newPoint.region);
+      formData.append('commune', newPoint.commune);
+      formData.append('latitude', newPoint.latitude.toString());
+      formData.append('longitude', newPoint.longitude.toString());
+      formData.append('registration_date', newPoint.registration_date);
+      if (avatarFile) {
+        formData.append('avatar', avatarFile);
+      }
+
       const response = await fetch(`${API_BASE_URL}/points-vente/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          ...newPoint,
-          status: 'en_attente',
-          latitude: isValidCoordinate(newPoint.latitude) ? newPoint.latitude : 5.3197,
-          longitude: isValidCoordinate(newPoint.longitude) ? newPoint.longitude : -4.0267,
-          turnover: "0.00",
-          monthly_orders: 0,
-          evaluation_score: 0,
-          registration_date: new Date().toISOString().split('T')[0]
-        })
+        body: formData
       });
 
       if (!response.ok) {
@@ -263,8 +310,67 @@ const PointsVenteManagement = () => {
         region: '',
         commune: '',
         latitude: 0,
-        longitude: 0
+        longitude: 0,
+        registration_date: new Date().toISOString().split('T')[0],
+        avatar: ''
       });
+      setAvatarFile(null);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Mettre à jour un point de vente
+  const updatePoint = async () => {
+    if (!editingPoint) return;
+    
+    const token = localStorage.getItem('access');
+    if (!token) {
+      setError('Veuillez vous connecter.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Création du FormData pour gérer le fichier
+      const formData = new FormData();
+      formData.append('name', editingPoint.name);
+      formData.append('owner', editingPoint.owner);
+      formData.append('phone', editingPoint.phone);
+      formData.append('email', editingPoint.email);
+      formData.append('address', editingPoint.address);
+      formData.append('type', editingPoint.type);
+      formData.append('district', editingPoint.district);
+      formData.append('region', editingPoint.region);
+      formData.append('commune', editingPoint.commune);
+      formData.append('latitude', editingPoint.latitude.toString());
+      formData.append('longitude', editingPoint.longitude.toString());
+      formData.append('registration_date', editingPoint.registration_date);
+      if (avatarFile) {
+        formData.append('avatar', avatarFile);
+      }
+
+      const response = await fetch(`${API_BASE_URL}/points-vente/${editingPoint.id}/`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Erreur lors de la mise à jour du point de vente');
+      }
+
+      const updatedPoint = await response.json();
+      setPointsVente(pointsVente.map(point => 
+        point.id === updatedPoint.id ? updatedPoint : point
+      ));
+      setEditingPoint(null);
+      setAvatarFile(null);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -427,6 +533,7 @@ const PointsVenteManagement = () => {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Image</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Point de Vente</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Propriétaire</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Type</th>
@@ -438,6 +545,18 @@ const PointsVenteManagement = () => {
               <tbody className="divide-y divide-gray-200">
                 {filteredPoints.map((point) => (
                   <tr key={point.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div className="w-10 h-10 rounded-lg overflow-hidden">
+                        <img 
+                          src={point.avatar || '/default-avatar.png'} 
+                          alt={point.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/default-avatar.png';
+                          }}
+                        />
+                      </div>
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -476,7 +595,13 @@ const PointsVenteManagement = () => {
                         >
                           <Eye size={16} />
                         </button>
-                        <button className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                        <button 
+                          onClick={() => {
+                            setEditingPoint(point);
+                            setAvatarFile(null);
+                          }}
+                          className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"
+                        >
                           <Edit size={16} />
                         </button>
                         <button 
@@ -517,6 +642,7 @@ const PointsVenteManagement = () => {
           center={[5.3599517, -4.0082563]} // Coordonnées centrales d'Abidjan
           zoom={12} 
           onPointClick={setSelectedPoint}
+          showAvatars={true}
         />
       </div>
     </div>
@@ -553,6 +679,33 @@ const PointsVenteManagement = () => {
             </div>
             
             <div className="p-6 space-y-4">
+              <div className="flex flex-col items-center mb-4">
+                <div className="relative w-24 h-24 mb-3 rounded-full overflow-hidden border-2 border-gray-300">
+                  {newPoint.avatar ? (
+                    <img 
+                      src={newPoint.avatar} 
+                      alt="Avatar preview" 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                      <ImageIcon size={32} className="text-gray-400" />
+                    </div>
+                  )}
+                </div>
+                <label className="cursor-pointer">
+                  <span className={`px-4 py-2 rounded-lg ${colors.secondary}`}>
+                    Choisir une image
+                  </span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleAvatarChange}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -624,6 +777,19 @@ const PointsVenteManagement = () => {
                       <option key={type.value} value={type.value}>{type.label}</option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date d'inscription *
+                  </label>
+                  <input 
+                    type="date"
+                    value={newPoint.registration_date}
+                    onChange={(e) => setNewPoint({...newPoint, registration_date: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
                 </div>
 
                 <div>
@@ -733,9 +899,260 @@ const PointsVenteManagement = () => {
               <button 
                 onClick={handleAddPoint}
                 className={`px-4 py-2 rounded-lg ${colors.primary}`}
-                disabled={!newPoint.name || !newPoint.owner || !newPoint.phone || !newPoint.email || !newPoint.address || !newPoint.district || !newPoint.region || !newPoint.commune}
+                disabled={!newPoint.name || !newPoint.owner || !newPoint.phone || !newPoint.email || !newPoint.address || !newPoint.district || !newPoint.region || !newPoint.commune || !newPoint.registration_date}
               >
                 {loading ? <Loader className="animate-spin" size={16} /> : 'Ajouter'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal d'édition */}
+      {editingPoint && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-emerald-600 to-teal-600 rounded-t-xl">
+              <h3 className="text-xl font-semibold text-white">Modifier le Point de Vente</h3>
+              <button 
+                onClick={() => setEditingPoint(null)}
+                className="p-2 text-white/80 hover:text-white rounded-lg hover:bg-white/10"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="flex flex-col items-center mb-4">
+                <div className="relative w-24 h-24 mb-3 rounded-full overflow-hidden border-2 border-gray-300">
+                  {editingPoint.avatar ? (
+                    <img 
+                      src={editingPoint.avatar} 
+                      alt="Avatar preview" 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                      <ImageIcon size={32} className="text-gray-400" />
+                    </div>
+                  )}
+                </div>
+                <label className="cursor-pointer">
+                  <span className={`px-4 py-2 rounded-lg ${colors.secondary}`}>
+                    Changer l'image
+                  </span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleAvatarChange}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nom du Point de Vente *
+                  </label>
+                  <input 
+                    type="text"
+                    value={editingPoint.name}
+                    onChange={(e) => setEditingPoint({...editingPoint, name: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Propriétaire *
+                  </label>
+                  <input 
+                    type="text"
+                    value={editingPoint.owner}
+                    onChange={(e) => setEditingPoint({...editingPoint, owner: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Téléphone *
+                  </label>
+                  <input 
+                    type="tel"
+                    value={editingPoint.phone}
+                    onChange={(e) => setEditingPoint({...editingPoint, phone: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email *
+                  </label>
+                  <input 
+                    type="email"
+                    value={editingPoint.email}
+                    onChange={(e) => setEditingPoint({...editingPoint, email: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Type *
+                  </label>
+                  <select 
+                    value={editingPoint.type}
+                    onChange={(e) => setEditingPoint({...editingPoint, type: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    {pointTypes.map(type => (
+                      <option key={type.value} value={type.value}>{type.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date d'inscription *
+                  </label>
+                  <input 
+                    type="date"
+                    value={editingPoint.registration_date}
+                    onChange={(e) => setEditingPoint({...editingPoint, registration_date: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Statut *
+                  </label>
+                  <select 
+                    value={editingPoint.status}
+                    onChange={(e) => setEditingPoint({...editingPoint, status: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    {statusOptions.map(status => (
+                      <option key={status.value} value={status.value}>{status.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    District *
+                  </label>
+                  <input 
+                    type="text"
+                    value={editingPoint.district}
+                    onChange={(e) => setEditingPoint({...editingPoint, district: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Région *
+                  </label>
+                  <input 
+                    type="text"
+                    value={editingPoint.region}
+                    onChange={(e) => setEditingPoint({...editingPoint, region: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Commune *
+                  </label>
+                  <input 
+                    type="text"
+                    value={editingPoint.commune}
+                    onChange={(e) => setEditingPoint({...editingPoint, commune: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Coordonnées
+                  </label>
+                  <div className="flex gap-4 items-end">
+                    <div className="flex-1">
+                      <label className="block text-xs text-gray-600 mb-1">Latitude</label>
+                      <input 
+                        type="number"
+                        value={editingPoint.latitude || ''}
+                        onChange={(e) => setEditingPoint({...editingPoint, latitude: parseFloat(e.target.value) || 0})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-xs text-gray-600 mb-1">Longitude</label>
+                      <input 
+                        type="number"
+                        value={editingPoint.longitude || ''}
+                        onChange={(e) => setEditingPoint({...editingPoint, longitude: parseFloat(e.target.value) || 0})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        setEditingPoint({
+                          ...editingPoint,
+                          latitude: 5.3599517,
+                          longitude: -4.0082563
+                        });
+                      }}
+                      className={`px-4 py-2 rounded-lg ${colors.primary}`}
+                    >
+                      <span>Position par défaut</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Adresse Complète *
+                </label>
+                <textarea 
+                  value={editingPoint.address}
+                  onChange={(e) => setEditingPoint({...editingPoint, address: e.target.value})}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+              <button 
+                onClick={() => setEditingPoint(null)}
+                className={`px-4 py-2 rounded-lg ${colors.secondary}`}
+              >
+                Annuler
+              </button>
+              <button 
+                onClick={updatePoint}
+                className={`px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white`}
+                disabled={!editingPoint.name || !editingPoint.owner || !editingPoint.phone || !editingPoint.email || !editingPoint.address || !editingPoint.district || !editingPoint.region || !editingPoint.commune || !editingPoint.registration_date}
+              >
+                {loading ? <Loader className="animate-spin" size={16} /> : 'Enregistrer'}
               </button>
             </div>
           </div>
@@ -748,8 +1165,15 @@ const PointsVenteManagement = () => {
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-xl">
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${getStatusStyle(selectedPoint.status)}`}>
-                  <MapPin size={20} className="text-white" />
+                <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white">
+                  <img 
+                    src={selectedPoint.avatar || '/default-avatar.png'} 
+                    alt={selectedPoint.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/default-avatar.png';
+                    }}
+                  />
                 </div>
                 <h3 className="text-xl font-semibold text-white">{selectedPoint.name}</h3>
               </div>
@@ -805,6 +1229,15 @@ const PointsVenteManagement = () => {
                           </p>
                         </div>
                       </div>
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 bg-white rounded-lg shadow-sm">
+                          <Calendar size={16} className="text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-600">Date d'inscription</p>
+                          <p className="font-medium">{selectedPoint.registration_date}</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   
@@ -818,6 +1251,7 @@ const PointsVenteManagement = () => {
                         zoom={15} 
                         onPointClick={setSelectedPoint}
                         singleMarker
+                        showAvatars={true}
                       />
                     </div>
                     <div className="mt-3 text-sm text-gray-600">
@@ -904,7 +1338,13 @@ const PointsVenteManagement = () => {
               >
                 Fermer
               </button>
-              <button className={`px-4 py-2 rounded-lg ${colors.primary}`}>
+              <button 
+                onClick={() => {
+                  setEditingPoint(selectedPoint);
+                  setSelectedPoint(null);
+                }}
+                className={`px-4 py-2 rounded-lg ${colors.primary}`}
+              >
                 Modifier les informations
               </button>
             </div>

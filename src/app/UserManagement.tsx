@@ -432,15 +432,15 @@ const UserManagement: React.FC = () => {
         setFormError(null);
         const formDataToSend = new FormData();
         
-        // User data
+        // User data - structure imbriquée comme attendu par le serializer
         formDataToSend.append('user[username]', formData.user.username);
         formDataToSend.append('user[email]', formData.user.email);
         formDataToSend.append('user[first_name]', formData.user.first_name || '');
         formDataToSend.append('user[last_name]', formData.user.last_name || '');
-        if (modalType === 'add' && formData.user.password) {
-          formDataToSend.append('user[password]', formData.user.password);
+        if (modalType === 'add') {
+          formDataToSend.append('user[password]', formData.user.password || '');
         }
-        
+
         // Profile data
         formDataToSend.append('phone', formData.phone || '');
         formDataToSend.append('location', formData.location || '');
@@ -451,12 +451,15 @@ const UserManagement: React.FC = () => {
         formDataToSend.append('establishment_phone', formData.establishment_phone || '');
         formDataToSend.append('establishment_email', formData.establishment_email || '');
         formDataToSend.append('establishment_address', formData.establishment_address);
-        
+
         // Points of sale
-        formData.points_of_sale_ids?.forEach(id => {
-          formDataToSend.append('points_of_sale_ids[]', id.toString());
-        });
-        
+        if (formData.points_of_sale_ids) {
+          formData.points_of_sale_ids.forEach(id => {
+            formDataToSend.append('points_of_sale_ids', id);
+          });
+        }
+
+        // Avatar
         if (formData.avatar) {
           formDataToSend.append('avatar', formData.avatar);
         }
@@ -472,6 +475,7 @@ const UserManagement: React.FC = () => {
           const errorData = await res.json();
           throw new Error(errorData?.detail || errorData?.message || `Failed to ${modalType === 'add' ? 'create' : 'update'} user`);
         }
+        
         const updatedUser = await res.json();
         setUsers(prev => modalType === 'add' ? [...prev, updatedUser] : prev.map(u => u.id === updatedUser.id ? updatedUser : u));
         setShowModal(false);

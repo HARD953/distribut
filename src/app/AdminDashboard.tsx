@@ -13,6 +13,8 @@ import OrderManagement from './OrderManagement';
 import PointsVenteManagement from './PointsVenteManagement';
 import UserManagement from './UserManagement';
 import MobileVendorsManagement from './MobileVendorsManagement';
+import ParametresManagement from './ParametresManagement';
+import ReportPage from './ReportPage';
 
 export interface Notification {
   id: number;
@@ -229,7 +231,6 @@ useEffect(() => {
               : `Activité du point de vente: ${selectedPOS?.pos_name}`}
           </p>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {currentData.stats.map((stat, index) => {
             const IconComponent = iconComponents[stat.icon] || CheckCircle;
@@ -259,45 +260,44 @@ useEffect(() => {
               Voir plus <ChevronDown size={16} className="ml-1" />
             </button>
           </div>
-<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-  {[
-    { 
-      icon: Plus, 
-      label: 'Ajouter Point de Vente', 
-      color: 'from-green-500 to-green-600',
-      onClick: () => setActiveTab('points-vente')
-    },
-    { 
-      icon: Package, 
-      label: 'Gérer Stocks', 
-      color: 'from-orange-500 to-orange-600',
-      onClick: () => setActiveTab('stocks')
-    },
-    { 
-      icon: ShoppingCart, 
-      label: 'Nouvelle Commande', 
-      color: 'from-purple-500 to-purple-600',
-      onClick: () => setActiveTab('commandes')
-    },
-    { 
-      icon: BarChart3, 
-      label: 'Vue Rapports', 
-      color: 'from-blue-500 to-blue-600',
-      onClick: () => setActiveTab('rapports')
-    }
-  ].map((action, index) => (
-    <button 
-      key={index} 
-      onClick={action.onClick}
-      className={`bg-gradient-to-r ${action.color} text-white p-4 rounded-lg transition-all hover:shadow-lg flex flex-col items-center space-y-2`}
-    >
-      <action.icon size={24} />
-      <span className="text-sm font-medium text-center">{action.label}</span>
-    </button>
-  ))}
-</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { 
+                icon: Plus, 
+                label: 'Ajouter Point de Vente', 
+                color: 'from-green-500 to-green-600',
+                onClick: () => setActiveTab('points-vente')
+              },
+              { 
+                icon: Package, 
+                label: 'Gérer Stocks', 
+                color: 'from-orange-500 to-orange-600',
+                onClick: () => setActiveTab('stocks')
+              },
+              { 
+                icon: ShoppingCart, 
+                label: 'Nouvelle Commande', 
+                color: 'from-purple-500 to-purple-600',
+                onClick: () => setActiveTab('commandes')
+              },
+              { 
+                icon: BarChart3, 
+                label: 'Vue Rapports', 
+                color: 'from-blue-500 to-blue-600',
+                onClick: () => setActiveTab('rapports')
+              }
+            ].map((action, index) => (
+              <button 
+                key={index} 
+                onClick={action.onClick}
+                className={`bg-gradient-to-r ${action.color} text-white p-4 rounded-lg transition-all hover:shadow-lg flex flex-col items-center space-y-2`}
+              >
+                <action.icon size={24} />
+                <span className="text-sm font-medium text-center">{action.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
-
         <div className="grid lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex justify-between items-center mb-4">
@@ -381,8 +381,12 @@ useEffect(() => {
         return React.createElement(OrderManagement as any, { selectedPOS });
       case 'vendeurs-ambulants':
         return React.createElement(MobileVendorsManagement as any, { selectedPOS });
+      case 'rapports':
+        return React.createElement(ReportPage as any);
       case 'utilisateurs':
         return React.createElement(UserManagement as any);
+      case 'parametres':
+        return <ParametresManagement />;
       default:
         return (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">

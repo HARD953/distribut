@@ -4,7 +4,8 @@ import {
   Bike, Plus, AlertTriangle, UserRound, ChevronDown, 
   Search, MoreVertical, Star, MapPin, Phone, Mail, Clock,
   ChevronLeft, ChevronRight, Frown, Smile, Meh, Check,
-  Edit, Trash2, Save, Coins, Image as ImageIcon, Calendar
+  Edit, Trash2, Save, Coins, Image as ImageIcon, Calendar,
+  BarChart3, TrendingUp, TrendingDown, Filter
 } from 'lucide-react';
 import { apiService } from './ApiService';
 import { useAuth } from './AuthContext';
@@ -28,7 +29,8 @@ interface Vendor {
   performance: number;
   date_joined: string;
   last_activity?: string;
-  point_of_sale?: { id: number; name: string } | null;
+  point_of_sale?: number;
+  point_of_sale_name?: string;
 }
 
 interface FormVendor {
@@ -69,6 +71,43 @@ interface PointOfSale {
   commune: string;
 }
 
+interface PerformanceData {
+  vendor_id: number;
+  vendor_name: string;
+  period: {
+    start_date: string;
+    end_date: string;
+  };
+  monthly_performance: MonthlyPerformance[];
+  summary: {
+    period_start: string;
+    period_end: string;
+    total_customers: number;
+    total_revenue: number;
+    total_products_sold: number;
+    total_sales: number;
+    overall_performance: number;
+  };
+  performance_indicators: {
+    best_month: MonthlyPerformance;
+    worst_month: MonthlyPerformance;
+    growth_rate: number;
+  };
+}
+
+interface MonthlyPerformance {
+  month: string;
+  year: number;
+  month_number: number;
+  total_customers: number;
+  total_revenue: number;
+  total_products_sold: number;
+  total_sales: number;
+  performance_ratio: number;
+  average_basket: number;
+  revenue_per_customer: number;
+}
+
 interface Props {
   selectedPOS: POSData | null;
 }
@@ -92,6 +131,12 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [pointsOfSale, setPointsOfSale] = useState<PointOfSale[]>([]);
   const [loadingPOS, setLoadingPOS] = useState(false);
+  const [performanceData, setPerformanceData] = useState<PerformanceData | null>(null);
+  const [loadingPerformance, setLoadingPerformance] = useState(false);
+  const [dateFilter, setDateFilter] = useState({
+    startDate: '',
+    endDate: ''
+  });
   const { user } = useAuth();
 
   // Helper functions
@@ -115,9 +160,19 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
   }
 
   const getPerformanceColor = (performance: number) => {
-    if (performance >= 70) return 'text-green-600';
-    if (performance >= 50) return 'text-yellow-600';
-    return 'text-red-600';
+    if (performance >= 70) return 'bg-green-500 text-white';
+    if (performance >= 50) return 'bg-yellow-500 text-white';
+    return 'bg-red-500 text-white';
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'actif': return 'bg-green-100 text-green-800';
+      case 'inactif': return 'bg-gray-100 text-gray-800';
+      case 'en_conge': return 'bg-blue-100 text-blue-800';
+      case 'suspendu': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
   };
 
   const getStatusIcon = (status: string) => {
@@ -171,42 +226,93 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
     }
   };
 
-const viewVendorDetails = async (vendor: Vendor) => {
-  try {
-    const response = await apiService.get(`/mobile-vendors/${vendor.id}/`);
-    if (!response.ok) throw new Error('Failed to fetch vendor details');
-    const data: Vendor = await response.json();
-    
-    // Ensure point_of_sale has a consistent structure
-    const pointOfSale = data.point_of_sale && data.point_of_sale.id !== null 
-      ? { id: data.point_of_sale.id, name: data.point_of_sale.name }
-      : null;
-    
-    setSelectedVendor({
-      ...data,
-      point_of_sale: pointOfSale
+  const handleDateFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setDateFilter(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const applyDateFilter = () => {
+    if (selectedVendor) {
+      fetchVendorPerformance(selectedVendor.id);
+    }
+  };
+
+  const resetDateFilter = () => {
+    setDateFilter({
+      startDate: '',
+      endDate: ''
     });
-    
-    setEditForm({
-      ...data,
-      zones: data.zones.join(', '),
-      point_of_sale: pointOfSale?.id?.toString() || '',
-      photo: data.photo_url
-    });
-    
-    setPhotoPreview(data.photo_url || null);
-    setShowVendorDetails(true);
-    setActiveTab('activities');
-  } catch (err: any) {
-    setError(err.message);
-  }
-};
+    if (selectedVendor) {
+      fetchVendorPerformance(selectedVendor.id);
+    }
+  };
+
+  const viewVendorDetails = async (vendor: Vendor) => {
+    try {
+      // Réinitialiser les filtres de date
+      setDateFilter({
+        startDate: '',
+        endDate: ''
+      });
+      
+      const response = await apiService.get(`/mobile-vendors/${vendor.id}/`);
+      if (!response.ok) throw new Error('Failed to fetch vendor details');
+      const data: Vendor = await response.json();
+      
+      setSelectedVendor(data);
+      
+      setEditForm({
+        ...data,
+        zones: data.zones.join(', '),
+        point_of_sale: data.point_of_sale?.toString() || '',
+        photo: data.photo
+      });
+      
+      setPhotoPreview(data.photo || null);
+      setShowVendorDetails(true);
+      setActiveTab('activities');
+      
+      // Charger les données de performance
+      await fetchVendorPerformance(data.id);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const fetchVendorPerformance = async (vendorId: number) => {
+    try {
+      setLoadingPerformance(true);
+      
+      // Construction de l'URL avec les paramètres
+      let url = `/sales/performance/?vendor_id=${vendorId}`;
+      
+      // Ajout des filtres de date s'ils sont définis
+      if (dateFilter.startDate) {
+        url += `&start_date=${dateFilter.startDate}`;
+      }
+      if (dateFilter.endDate) {
+        url += `&end_date=${dateFilter.endDate}`;
+      }
+      
+      const response = await apiService.get(url);
+      if (!response.ok) throw new Error('Failed to fetch vendor performance');
+      const data: PerformanceData = await response.json();
+      setPerformanceData(data);
+    } catch (err: any) {
+      console.error('Error fetching performance data:', err);
+      setError('Impossible de charger les données de performance');
+    } finally {
+      setLoadingPerformance(false);
+    }
+  };
 
   const createVendor = async () => {
     try {
       const formData = new FormData();
       
-      // Append all fields
       Object.entries(newVendor as Record<keyof FormVendor, FormVendor[keyof FormVendor]>).forEach(([key, value]) => {
         if (key === 'zones' && typeof value === 'string') {
           formData.append(key, JSON.stringify(value.split(',').map((z: string) => z.trim()).filter((z: string) => z)));
@@ -477,7 +583,7 @@ const viewVendorDetails = async (vendor: Vendor) => {
           >
             <option value="moto">Moto</option>
             <option value="tricycle">Tricycle</option>
-            <option value="velo">Vélo</option>
+            
             <option value="pied">À pied</option>
             <option value="autre">Autre</option>
           </select>
@@ -581,47 +687,48 @@ const viewVendorDetails = async (vendor: Vendor) => {
   };
 
   const renderStatsCards = (isDetailView = false) => {
-    if (isDetailView && stats) {
+    if (isDetailView && performanceData) {
       return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Ventes Mensuelles</p>
-                <p className="text-3xl font-bold mt-1">
-                  {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(stats.total_sales)}
+                <p className="text-sm font-medium text-blue-800">Ventes Mensuelles</p>
+                <p className="text-3xl font-bold mt-1 text-blue-900">
+                  {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(performanceData.summary.total_revenue)}
                 </p>
               </div>
-              <div className="p-3 bg-blue-50 rounded-lg">
+              <div className="p-3 bg-blue-100 rounded-lg">
                 <Coins className="text-blue-600" size={24} />
               </div>
             </div>
           </div>
           
-          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+          <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-xl p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Jours Actifs</p>
-                <p className="text-3xl font-bold mt-1">{stats.active_days}</p>
+                <p className="text-sm font-medium text-green-800">Produits Vendus</p>
+                <p className="text-3xl font-bold mt-1 text-green-900">{performanceData.summary.total_products_sold}</p>
               </div>
-              <div className="p-3 bg-green-50 rounded-lg">
+              <div className="p-3 bg-green-100 rounded-lg">
                 <Check className="text-green-600" size={24} />
               </div>
             </div>
           </div>
           
-          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+          <div className="bg-gradient-to-br from-amber-50 to-amber-100 border border-amber-200 rounded-xl p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Performance</p>
-                <p className={`text-3xl font-bold mt-1 ${getPerformanceColor(stats.current_performance)}`}>
-                  {stats.current_performance}%
+                <p className="text-sm font-medium text-amber-800">Performance</p>
+                <p className={`text-3xl font-bold mt-1 ${getPerformanceColor(performanceData.summary.overall_performance)} px-2 rounded-full inline-block`}>
+                  {performanceData.summary.overall_performance.toFixed(2)}%
                 </p>
-                <p className="text-sm text-gray-500">
-                  {stats.last_month_performance && `Mois précédent: ${stats.last_month_performance}%`}
+                <p className="text-sm text-amber-700 mt-1">
+                  {performanceData.performance_indicators.growth_rate !== 0 && 
+                    `Taux croissance: ${performanceData.performance_indicators.growth_rate > 0 ? '+' : ''}${performanceData.performance_indicators.growth_rate.toFixed(2)}%`}
                 </p>
               </div>
-              <div className="p-3 bg-amber-50 rounded-lg">
+              <div className="p-3 bg-amber-100 rounded-lg">
                 <Star className="text-amber-600" size={24} />
               </div>
             </div>
@@ -632,44 +739,200 @@ const viewVendorDetails = async (vendor: Vendor) => {
 
     return (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total Vendeurs</p>
-              <p className="text-3xl font-bold mt-1">{vendors.length}</p>
+              <p className="text-sm font-medium text-blue-800">Total Vendeurs</p>
+              <p className="text-3xl font-bold mt-1 text-blue-900">{vendors.length}</p>
             </div>
-            <div className="p-3 bg-blue-50 rounded-lg">
+            <div className="p-3 bg-blue-100 rounded-lg">
               <UserRound className="text-blue-600" size={24} />
             </div>
           </div>
         </div>
         
-        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+        <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-xl p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Vendeurs Actifs</p>
-              <p className="text-3xl font-bold mt-1">
+              <p className="text-sm font-medium text-green-800">Vendeurs Actifs</p>
+              <p className="text-3xl font-bold mt-1 text-green-900">
                 {vendors.filter(v => v.status === 'actif').length}
               </p>
             </div>
-            <div className="p-3 bg-green-50 rounded-lg">
+            <div className="p-3 bg-green-100 rounded-lg">
               <Check className="text-green-600" size={24} />
             </div>
           </div>
         </div>
         
-        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+        <div className="bg-gradient-to-br from-amber-50 to-amber-100 border border-amber-200 rounded-xl p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Performance Moyenne</p>
-              <p className="text-3xl font-bold mt-1">
+              <p className="text-sm font-medium text-amber-800">Performance Moyenne</p>
+              <p className="text-3xl font-bold mt-1 text-amber-900">
                 {vendors.length > 0 
                   ? Math.round(vendors.reduce((acc, v) => acc + (v.performance || 0), 0) / vendors.length) 
                   : 0}%
               </p>
             </div>
-            <div className="p-3 bg-amber-50 rounded-lg">
+            <div className="p-3 bg-amber-100 rounded-lg">
               <Star className="text-amber-600" size={24} />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPerformanceChart = () => {
+    if (!performanceData || !performanceData.monthly_performance.length) {
+      return (
+        <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg">
+          <p className="text-gray-500">Aucune donnée de performance disponible</p>
+        </div>
+      );
+    }
+
+    const monthlyData = performanceData.monthly_performance;
+    
+    // Si nous n'avons qu'un seul mois, ajustons l'échelle pour qu'il soit visible
+    const maxRevenue = Math.max(...monthlyData.map(item => item.total_revenue), 100000);
+    const maxProducts = Math.max(...monthlyData.map(item => item.total_products_sold), 50);
+
+    return (
+      <div className="space-y-6">
+        {/* Graphique */}
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <h4 className="font-medium text-gray-800 mb-4">Performance mensuelle - Revenus et Produits vendus</h4>
+          <div className="h-80">
+            <div className="flex h-full space-x-4 items-end justify-center">
+              {monthlyData.map((item, index) => (
+                <div key={index} className="flex flex-col items-center" style={{ width: `${100 / Math.max(monthlyData.length, 3)}%` }}>
+                  <div className="flex flex-col items-center w-full h-full justify-end space-y-2">
+                    {/* Barre pour les revenus */}
+                    <div 
+                      className="w-3/4 bg-blue-500 rounded-t transition-all duration-300 hover:bg-blue-600"
+                      style={{ height: `${(item.total_revenue / maxRevenue) * 70}%` }}
+                      title={`${item.month}: ${new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(item.total_revenue)}`}
+                    >
+                      <div className="text-white text-xs font-bold text-center mt-1">
+                        {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF', notation: 'compact' }).format(item.total_revenue)}
+                      </div>
+                    </div>
+                    
+                    {/* Barre pour les produits vendus */}
+                    <div 
+                      className="w-3/4 bg-green-500 rounded-t transition-all duration-300 hover:bg-green-600"
+                      style={{ height: `${(item.total_products_sold / maxProducts) * 70}%` }}
+                      title={`${item.month}: ${item.total_products_sold} produits`}
+                    >
+                      <div className="text-white text-xs font-bold text-center mt-1">
+                        {item.total_products_sold}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-xs text-gray-500 mt-2 text-center">
+                    {item.month.split(' ')[0]}
+                  </div>
+                  <div className="text-xs text-gray-400 text-center">
+                    {item.year}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="flex justify-center mt-4 space-x-4">
+            <div className="flex items-center">
+              <div className="w-4 h-4 bg-blue-500 rounded mr-2"></div>
+              <span className="text-sm text-gray-600">Revenus (XOF)</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-4 h-4 bg-green-500 rounded mr-2"></div>
+              <span className="text-sm text-gray-600">Produits vendus</span>
+            </div>
+          </div>
+        </div>
+        
+        {/* Indicateurs de performance */}
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <h4 className="font-medium text-gray-800 mb-4">Indicateurs de performance</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <h5 className="font-medium text-blue-800 mb-2">Meilleur mois</h5>
+              {performanceData.performance_indicators.best_month ? (
+                <div>
+                  <p className="text-sm">{performanceData.performance_indicators.best_month.month}</p>
+                  <p className="text-xl font-bold">
+                    {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(performanceData.performance_indicators.best_month.total_revenue)}
+                  </p>
+                  <p className="text-sm">{performanceData.performance_indicators.best_month.total_products_sold} produits vendus</p>
+                  <p className="text-sm">{performanceData.performance_indicators.best_month.total_customers} clients</p>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">Aucune donnée</p>
+              )}
+            </div>
+            
+            <div className="bg-red-50 p-4 rounded-lg">
+              <h5 className="font-medium text-red-800 mb-2">Moins bon mois</h5>
+              {performanceData.performance_indicators.worst_month ? (
+                <div>
+                  <p className="text-sm">{performanceData.performance_indicators.worst_month.month}</p>
+                  <p className="text-xl font-bold">
+                    {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(performanceData.performance_indicators.worst_month.total_revenue)}
+                  </p>
+                  <p className="text-sm">{performanceData.performance_indicators.worst_month.total_products_sold} produits vendus</p>
+                  <p className="text-sm">{performanceData.performance_indicators.worst_month.total_customers} clients</p>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">Aucune donnée</p>
+              )}
+            </div>
+            
+            <div className="md:col-span-2 bg-gray-50 p-4 rounded-lg">
+              <h5 className="font-medium text-gray-800 mb-2">Résumé de la période</h5>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600">Revenu total</p>
+                  <p className="text-lg font-bold">
+                    {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(performanceData.summary.total_revenue)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Produits vendus</p>
+                  <p className="text-lg font-bold">{performanceData.summary.total_products_sold}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Clients</p>
+                  <p className="text-lg font-bold">{performanceData.summary.total_customers}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Ventes</p>
+                  <p className="text-lg font-bold">{performanceData.summary.total_sales}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="md:col-span-2 bg-green-50 p-4 rounded-lg">
+              <h5 className="font-medium text-green-800 mb-2">Taux de croissance</h5>
+              <div className="flex items-center">
+                {performanceData.performance_indicators.growth_rate > 0 ? (
+                  <TrendingUp className="text-green-500 mr-2" size={24} />
+                ) : performanceData.performance_indicators.growth_rate < 0 ? (
+                  <TrendingDown className="text-red-500 mr-2" size={24} />
+                ) : (
+                  <span className="mr-2">➡️</span>
+                )}
+                <span className={`text-xl font-bold ${performanceData.performance_indicators.growth_rate > 0 ? 'text-green-600' : performanceData.performance_indicators.growth_rate < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                  {performanceData.performance_indicators.growth_rate > 0 ? '+' : ''}
+                  {performanceData.performance_indicators.growth_rate.toFixed(2)}%
+                </span>
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Période: {new Date(performanceData.period.start_date).toLocaleDateString('fr-FR')} - {new Date(performanceData.period.end_date).toLocaleDateString('fr-FR')}
+              </p>
             </div>
           </div>
         </div>
@@ -682,6 +945,61 @@ const viewVendorDetails = async (vendor: Vendor) => {
 
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        
+            {/* Filtres de date - DÉPLACÉ ICI AU LIEU DE DANS PERFORMANCE */}
+            <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-medium text-gray-800">Filtres de période</h4>
+                <Filter size={18} className="text-gray-500" />
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date de début
+                  </label>
+                  <input
+                    type="date"
+                    name="startDate"
+                    value={dateFilter.startDate}
+                    onChange={handleDateFilterChange}
+                    className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date de fin
+                  </label>
+                  <input
+                    type="date"
+                    name="endDate"
+                    value={dateFilter.endDate}
+                    onChange={handleDateFilterChange}
+                    className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                
+                <div className="flex items-end space-x-2">
+                  <button
+                    onClick={applyDateFilter}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    Appliquer
+                  </button>
+                  <button
+                    onClick={resetDateFilter}
+                    className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors"
+                  >
+                    Réinitialiser
+                  </button>
+                </div>
+              </div>
+              
+              <div className="mt-3 text-sm text-gray-500">
+                Période actuelle: {new Date(performanceData?.period.start_date || '').toLocaleDateString('fr-FR')} - {new Date(performanceData?.period.end_date || '').toLocaleDateString('fr-FR')}
+              </div>
+            </div>
         <div className="flex justify-between items-start mb-6">
           <div>
             <div className="flex items-center">
@@ -702,7 +1020,7 @@ const viewVendorDetails = async (vendor: Vendor) => {
                 <div>
                   <h2 className="text-xl font-bold text-gray-800">{selectedVendor.first_name} {selectedVendor.last_name}</h2>
                   <p className="text-gray-600">
-                    Vendeur ambulant • {selectedVendor.point_of_sale?.name || 'Non assigné'} • {selectedVendor.vehicle_type}
+                    Vendeur ambulant • {selectedVendor.point_of_sale_name || 'Non assigné'} • {selectedVendor.vehicle_type}
                   </p>
                 </div>
               )}
@@ -754,25 +1072,23 @@ const viewVendorDetails = async (vendor: Vendor) => {
         ) : (
           <>
             <div className="flex items-center space-x-2 mb-6">
-              <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                selectedVendor.status === 'actif' ? 'bg-green-100 text-green-800' : 
-                selectedVendor.status === 'inactif' ? 'bg-gray-100 text-gray-800' : 
-                'bg-yellow-100 text-yellow-800'
-              }`}>
+              <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusColor(selectedVendor.status)}`}>
                 {selectedVendor.status}
               </span>
               {selectedVendor.is_approved && (
-                <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                <span className="px-3 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
                   Approuvé
                 </span>
               )}
-              <span className={`px-2 py-1 text-xs font-medium rounded-full ${getPerformanceColor(selectedVendor.performance)}`}>
+              <span className={`px-3 py-1 text-xs font-medium rounded-full ${getPerformanceColor(selectedVendor.performance)}`}>
                 Performance: {selectedVendor.performance}%
               </span>
             </div>
+
+            
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <div className="border border-gray-200 rounded-lg p-4">
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                 <h3 className="font-medium text-gray-800 mb-3">Informations Personnelles</h3>
                 <div className="space-y-2">
                   <div className="flex items-center">
@@ -799,7 +1115,7 @@ const viewVendorDetails = async (vendor: Vendor) => {
                 </div>
               </div>
               
-              <div className="border border-gray-200 rounded-lg p-4">
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                 <h3 className="font-medium text-gray-800 mb-3">Zone d'Activité</h3>
                 <div className="flex flex-wrap gap-2">
                   {selectedVendor.zones.map((zone, i) => (
@@ -811,7 +1127,7 @@ const viewVendorDetails = async (vendor: Vendor) => {
                 </div>
               </div>
               
-              <div className="border border-gray-200 rounded-lg p-4">
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                 <h3 className="font-medium text-gray-800 mb-3">Statistiques</h3>
                 <div className="space-y-2">
                   <div className="flex justify-between">
@@ -830,11 +1146,12 @@ const viewVendorDetails = async (vendor: Vendor) => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Point de vente:</span>
-                    <span className="text-sm font-medium">{selectedVendor.point_of_sale?.name || 'Non assigné'}</span>
+                    <span className="text-sm font-medium">{selectedVendor.point_of_sale_name || 'Non assigné'}</span>
                   </div>
                 </div>
               </div>
             </div>
+            
             
             <div className="border-b border-gray-200 mb-6">
               <nav className="-mb-px flex space-x-8">
@@ -879,7 +1196,7 @@ const viewVendorDetails = async (vendor: Vendor) => {
                   </div>
                 ) : activities.length > 0 ? (
                   activities.map((activity) => (
-                    <div key={activity.id} className="p-4 border border-gray-200 rounded-lg">
+                    <div key={activity.id} className="p-4 border border-gray-200 rounded-lg bg-white hover:bg-gray-50">
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="font-medium text-gray-800">{activity.activity_type}</p>
@@ -905,39 +1222,15 @@ const viewVendorDetails = async (vendor: Vendor) => {
               </div>
             )}
             
-            {activeTab === 'performance' && stats && (
+            {activeTab === 'performance' && (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-white border border-gray-200 rounded-lg p-4">
-                    <h4 className="font-medium text-gray-800 mb-3">Performance ce mois</h4>
-                    <div className="h-64">
-                      <div className="flex items-center justify-center h-full bg-gray-50 rounded-lg">
-                        <p className="text-gray-500">Graphique de performance</p>
-                      </div>
-                    </div>
+                {loadingPerformance ? (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
                   </div>
-                  <div className="bg-white border border-gray-200 rounded-lg p-4">
-                    <h4 className="font-medium text-gray-800 mb-3">Détails</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <p className="text-sm text-gray-600">Ventes totales</p>
-                        <p className="text-xl font-bold">
-                          {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(stats.total_sales)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Jours actifs</p>
-                        <p className="text-xl font-bold">{stats.active_days}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Bonus estimé</p>
-                        <p className="text-xl font-bold text-green-600">
-                          {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(stats.total_sales * 0.05)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                ) : (
+                  renderPerformanceChart()
+                )}
               </div>
             )}
             
@@ -959,7 +1252,9 @@ const viewVendorDetails = async (vendor: Vendor) => {
   };
 
   const renderVendorList = () => (
+    
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -979,10 +1274,14 @@ const viewVendorDetails = async (vendor: Vendor) => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10 rounded-full overflow-hidden bg-gray-100">
-                        {vendor.photo_url ? (
-                          <img src={vendor.photo_url} alt={`${vendor.first_name} ${vendor.last_name}`} className="h-full w-full object-cover" />
+                        {vendor.photo ? (
+                          <img 
+                            src={vendor.photo} 
+                            alt={`${vendor.first_name} ${vendor.last_name}`} 
+                            className="h-full w-full object-cover"
+                          />
                         ) : (
-                          <div className="h-full w-full flex items-center justify-center text-gray-600">
+                          <div className="h-full w-full flex items-center justify-center bg-blue-100 text-blue-600 font-medium">
                             {vendor.first_name.charAt(0)}{vendor.last_name.charAt(0)}
                           </div>
                         )}
