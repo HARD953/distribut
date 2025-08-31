@@ -78,8 +78,6 @@ interface OrderItem {
 
 interface Order {
   id: number;
-  customer?: number;
-  customer_details?: UserProfile;
   point_of_sale?: number;
   point_of_sale_details?: PointOfSale;
   status: OrderStatus;
@@ -94,7 +92,6 @@ interface Order {
 }
 
 interface NewOrder {
-  customer_id: number | null;
   point_of_sale_id: number | null;
   status: OrderStatus | null;
   total: string | null;
@@ -116,9 +113,7 @@ const OrderManagement = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [productVariants, setProductVariants] = useState<ProductVariant[]>([]);
-  const [customers, setCustomers] = useState<UserProfile[]>([]);
   const [pointsOfSale, setPointsOfSale] = useState<PointOfSale[]>([]);
-  const [selectedCustomerPointsOfSale, setSelectedCustomerPointsOfSale] = useState<PointOfSale[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState('all');
@@ -132,7 +127,6 @@ const OrderManagement = () => {
   const [ordersPerPage] = useState(10);
   const [error, setError] = useState<string | null>(null);
   const [newOrder, setNewOrder] = useState<NewOrder>({
-    customer_id: null,
     point_of_sale_id: null,
     status: null,
     total: null,
@@ -218,12 +212,6 @@ const OrderManagement = () => {
         const variantsData = await variantsRes.json();
         setProductVariants(variantsData);
 
-        // Fetch Customers (UserProfiles)
-        const customersRes = await fetch('https://backendsupply.onrender.com/api/users/', { headers });
-        if (!customersRes.ok) throw new Error('Échec de la récupération des clients');
-        const customersData = await customersRes.json();
-        setCustomers(customersData);
-
         // Fetch Points of Sale
         const pointsOfSaleRes = await fetch('https://backendsupply.onrender.com/api/points-vente/', { headers });
         if (!pointsOfSaleRes.ok) throw new Error('Échec de la récupération des points de vente');
@@ -236,34 +224,15 @@ const OrderManagement = () => {
     fetchData();
   }, []);
 
-  // Mettre à jour les points de vente disponibles quand le client change
-  useEffect(() => {
-    if (newOrder.customer_id) {
-      const customer = customers.find(c => c.id === newOrder.customer_id);
-      if (customer && customer.points_of_sale && customer.points_of_sale.length > 0) {
-        setSelectedCustomerPointsOfSale(customer.points_of_sale);
-      } else {
-        // Si le client n'a pas de points de vente spécifiques, afficher tous les points de vente
-        setSelectedCustomerPointsOfSale(pointsOfSale);
-      }
-    } else {
-      setSelectedCustomerPointsOfSale([]);
-    }
-  }, [newOrder.customer_id, customers, pointsOfSale]);
-
   // Filter and sort orders
   useEffect(() => {
     let filtered = orders.filter(order => {
-      const customerName = order.customer_details?.user 
-        ? `${order.customer_details.user.first_name || ''} ${order.customer_details.user.last_name || ''}`.toLowerCase()
-        : '';
-      const customerEmail = order.customer_details?.user?.email?.toLowerCase() || '';
-      const establishmentName = order.customer_details?.establishment_name?.toLowerCase() || '';
+      const pointOfSaleName = order.point_of_sale_details?.name?.toLowerCase() || '';
+      const pointOfSaleAddress = order.point_of_sale_details?.address?.toLowerCase() || '';
       
-      const matchesSearch = customerName.includes(searchTerm.toLowerCase()) ||
-                           order.id.toString().includes(searchTerm.toLowerCase()) ||
-                           customerEmail.includes(searchTerm.toLowerCase()) ||
-                           establishmentName.includes(searchTerm.toLowerCase());
+      const matchesSearch = order.id.toString().includes(searchTerm.toLowerCase()) ||
+                           pointOfSaleName.includes(searchTerm.toLowerCase()) ||
+                           pointOfSaleAddress.includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
       const matchesDate = dateFilter === 'all' || 
                          (dateFilter === 'today' && order.date && isToday(order.date)) ||
@@ -283,13 +252,9 @@ const OrderManagement = () => {
           aValue = parseFloat(a.total) || 0;
           bValue = parseFloat(b.total) || 0;
           break;
-        case 'customer':
-          aValue = a.customer_details?.user 
-            ? `${a.customer_details.user.first_name || ''} ${a.customer_details.user.last_name || ''}`.toLowerCase()
-            : a.customer_details?.establishment_name?.toLowerCase() || '';
-          bValue = b.customer_details?.user 
-            ? `${b.customer_details.user.first_name || ''} ${b.customer_details.user.last_name || ''}`.toLowerCase()
-            : b.customer_details?.establishment_name?.toLowerCase() || '';
+        case 'point_of_sale':
+          aValue = a.point_of_sale_details?.name?.toLowerCase() || '';
+          bValue = b.point_of_sale_details?.name?.toLowerCase() || '';
           break;
         default:
           aValue = a[sortBy as keyof Order] ?? '';
@@ -475,10 +440,6 @@ const OrderManagement = () => {
         throw new Error("Veuillez ajouter au moins un article");
       }
 
-      if (!newOrder.customer_id) {
-        throw new Error("Veuillez sélectionner un client");
-      }
-
       if (!newOrder.point_of_sale_id) {
         throw new Error("Veuillez sélectionner un point de vente");
       }
@@ -501,7 +462,6 @@ const OrderManagement = () => {
 
       // Construction de la commande
       const orderData = {
-        customer: newOrder.customer_id,
         point_of_sale: newOrder.point_of_sale_id,
         date: newOrder.date,
         delivery_date: newOrder.delivery_date,
@@ -539,7 +499,6 @@ const OrderManagement = () => {
 
   const resetOrderForm = () => {
     setNewOrder({
-      customer_id: null,
       point_of_sale_id: null,
       status: null,
       total: null,
@@ -549,7 +508,6 @@ const OrderManagement = () => {
       notes: '',
       items: []
     });
-    setSelectedCustomerPointsOfSale([]);
   };
 
   // Pagination
@@ -578,9 +536,7 @@ const OrderManagement = () => {
   const OrderDetailsModal = () => {
     if (!selectedOrder) return null;
     const statusInfo = orderStatuses[selectedOrder.status];
-    const customerName = selectedOrder.customer_details?.user 
-      ? `${selectedOrder.customer_details.user.first_name || ''} ${selectedOrder.customer_details.user.last_name || ''}`
-      : selectedOrder.customer_details?.establishment_name || 'Client inconnu';
+    const pointOfSaleName = selectedOrder.point_of_sale_details?.name || 'Point de vente inconnu';
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -601,15 +557,15 @@ const OrderManagement = () => {
             <div className="grid md:grid-cols-2 gap-6">
               <div className={`p-4 rounded-lg border ${statusInfo.borderColor} ${statusInfo.bgColor}`}>
                 <h4 className="font-semibold text-gray-800 mb-3 flex items-center">
-                  <User className="mr-2" size={16} />
-                  Informations Client
+                  <MapPin className="mr-2" size={16} />
+                  Informations Point de Vente
                 </h4>
                 <div className="space-y-2 text-sm">
-                  <p><strong>Nom:</strong> {customerName}</p>
-                  <p><strong>Établissement:</strong> {selectedOrder.customer_details?.establishment_name || 'Non spécifié'}</p>
-                  <p><strong>Email:</strong> {selectedOrder.customer_details?.user?.email || selectedOrder.customer_details?.establishment_email || 'Non spécifié'}</p>
-                  <p><strong>Téléphone:</strong> {selectedOrder.customer_details?.establishment_phone || selectedOrder.customer_details?.phone || 'Non spécifié'}</p>
-                  <p><strong>Adresse:</strong> {selectedOrder.customer_details?.establishment_address || selectedOrder.customer_details?.location || 'Non spécifié'}</p>
+                  <p><strong>Nom:</strong> {pointOfSaleName}</p>
+                  <p><strong>Propriétaire:</strong> {selectedOrder.point_of_sale_details?.owner || 'Non spécifié'}</p>
+                  <p><strong>Email:</strong> {selectedOrder.point_of_sale_details?.email || 'Non spécifié'}</p>
+                  <p><strong>Téléphone:</strong> {selectedOrder.point_of_sale_details?.phone || 'Non spécifié'}</p>
+                  <p><strong>Adresse:</strong> {selectedOrder.point_of_sale_details?.address || 'Non spécifié'}</p>
                 </div>
               </div>
               <div className={`p-4 rounded-lg border ${statusInfo.borderColor} ${statusInfo.bgColor}`}>
@@ -618,7 +574,6 @@ const OrderManagement = () => {
                   Informations Commande
                 </h4>
                 <div className="space-y-2 text-sm">
-                  <p><strong>Point de vente:</strong> {selectedOrder.point_of_sale_details?.name || 'Non spécifié'}</p>
                   <p><strong>Date:</strong> {selectedOrder.date ? new Date(selectedOrder.date).toLocaleDateString('fr-FR') : 'Non spécifiée'}</p>
                   <p><strong>Livraison prévue:</strong> {selectedOrder.delivery_date ? new Date(selectedOrder.delivery_date).toLocaleDateString('fr-FR') : 'Non spécifiée'}</p>
                   <p><strong>Statut:</strong> 
@@ -819,8 +774,8 @@ const OrderManagement = () => {
                 <option value="date-asc">Date (Plus ancienne)</option>
                 <option value="total-desc">Total (Plus élevé)</option>
                 <option value="total-asc">Total (Plus bas)</option>
-                <option value="customer-asc">Client (A-Z)</option>
-                <option value="customer-desc">Client (Z-A)</option>
+                <option value="point_of_sale-asc">Point de vente (A-Z)</option>
+                <option value="point_of_sale-desc">Point de vente (Z-A)</option>
               </select>
             </div>
             <div className="flex gap-2">
@@ -881,7 +836,7 @@ const OrderManagement = () => {
                       />
                     </th>
                     <th className="px-6 py-4 text-left text-sm font-medium font-semibold">Commande</th>
-                    <th className="px-6 py-4 text-left text-sm font-medium">Client</th>
+                    <th className="px-6 py-4 text-left text-sm font-medium">Point de Vente</th>
                     <th className="px-6 py-4 text-center text-sm font-medium">Date</th>
                     <th className="px-6 py-4 text-center text-sm font-medium">Statut</th>
                     <th className="px-6 py-4 text-center text-sm font-medium">Priority</th>
@@ -893,9 +848,7 @@ const OrderManagement = () => {
                   {currentOrders.length > 0 ? (
                     currentOrders.map((order) => {
                       const statusInfo = orderStatuses[order.status];
-                      const customerName = order.customer_details?.user 
-                        ? `${order.customer_details.user.first_name || ''} ${order.customer_details.user.last_name || ''}`
-                        : order.customer_details?.establishment_name || 'Client inconnu';
+                      const pointOfSaleName = order.point_of_sale_details?.name || 'Point de vente inconnu';
                       
                       return (
                         <tr 
@@ -917,8 +870,8 @@ const OrderManagement = () => {
                           </td>
                           <td className="px-6 py-4">
                             <div>
-                              <div className="font-semibold text-gray-800">{customerName}</div>
-                              <div className="text-sm text-gray-500">{order.customer_details?.establishment_name || ''}</div>
+                              <div className="font-semibold text-gray-800">{pointOfSaleName}</div>
+                              <div className="text-sm text-gray-500">{order.point_of_sale_details?.address || ''}</div>
                             </div>
                           </td>
                           <td className="px-6 py-4">
@@ -1145,52 +1098,23 @@ const OrderManagement = () => {
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="col-span-full">
                     <label className="block text-sm font-semibold text-gray-600 mb-2">
-                      <User className="inline w-4 h-4 mr-2" />
-                      Client *
+                      <MapPin className="inline w-4 h-4 mr-2" />
+                      Point de vente *
                     </label>
                     <select
                       required
-                      value={newOrder.customer_id || ''}
-                      onChange={(e) => {
-                        const customerId = e.target.value ? parseInt(e.target.value) : null;
-                        setNewOrder({
-                          ...newOrder, 
-                          customer_id: customerId,
-                          point_of_sale_id: null // Réinitialiser le point de vente
-                        });
-                      }}
+                      value={newOrder.point_of_sale_id || ''}
+                      onChange={(e) => setNewOrder({...newOrder, point_of_sale_id: parseInt(e.target.value) || null})}
                       className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
-                      <option value="">Sélectionner un client</option>
-                      {customers.map(customer => (
-                        <option key={customer.id} value={customer.id}>
-                          {customer.establishment_name || 'Établissement inconnu'} ({customer.user?.first_name || ''} {customer.user?.last_name || ''})
+                      <option value="">Sélectionner un point de vente</option>
+                      {pointsOfSale.map(pos => (
+                        <option key={pos.id} value={pos.id}>
+                          {pos.name} - {pos.address || 'Adresse non spécifiée'}
                         </option>
                       ))}
                     </select>
                   </div>
-
-                  {newOrder.customer_id && (
-                    <div className="col-span-full">
-                      <label className="block text-sm font-semibold text-gray-600 mb-2">
-                        <MapPin className="inline w-4 h-4 mr-2" />
-                        Point de vente *
-                      </label>
-                      <select
-                        required
-                        value={newOrder.point_of_sale_id || ''}
-                        onChange={(e) => setNewOrder({...newOrder, point_of_sale_id: parseInt(e.target.value) || null})}
-                        className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      >
-                        <option value="">Sélectionner un point de vente</option>
-                        {selectedCustomerPointsOfSale.map(pos => (
-                          <option key={pos.id} value={pos.id}>
-                            {pos.name} - {pos.address || 'Adresse non spécifiée'}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
             
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">

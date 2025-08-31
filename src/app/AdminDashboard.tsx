@@ -14,6 +14,7 @@ import PointsVenteManagement from './PointsVenteManagement';
 import UserManagement from './UserManagement';
 import MobileVendorsManagement from './MobileVendorsManagement';
 import ParametresManagement from './ParametresManagement';
+import MapComponent from './MapComponent';
 import ReportPage from './ReportPage';
 
 export interface Notification {
@@ -387,6 +388,8 @@ useEffect(() => {
         return React.createElement(UserManagement as any);
       case 'parametres':
         return <ParametresManagement />;
+      case 'cartes':
+        return <MapComponent />;
       default:
         return (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
