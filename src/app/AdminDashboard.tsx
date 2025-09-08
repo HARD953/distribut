@@ -103,10 +103,10 @@ const AdminDashboard = () => {
 // Remplacez les lignes 74 et 108 par :
 
 useEffect(() => {
+  // Vérifier si on est côté client
+  if (typeof window === 'undefined') return;
+  
   const checkAuth = async () => {
-    // Vérifier si on est côté client
-    if (typeof window === 'undefined') return;
-    
     const token = localStorage.getItem('access');
     if (!token) {
       console.warn('No access token found, redirecting to login');
@@ -135,10 +135,10 @@ useEffect(() => {
 }, [router, logout]);
 
 useEffect(() => {
+  // Vérifier si on est côté client
+  if (typeof window === 'undefined') return;
+  
   const fetchNotifications = async () => {
-    // Vérifier si on est côté client
-    if (typeof window === 'undefined') return;
-    
     const token = localStorage.getItem('access');
     if (!token) return;
     
@@ -389,7 +389,15 @@ useEffect(() => {
       case 'parametres':
         return <ParametresManagement />;
       case 'cartes':
-        return <MapComponent />;
+        return <MapComponent />
+        //   filters={{
+        //     start_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        //     end_date: new Date().toISOString().split('T')[0],
+        //     zone: '',
+        //     pushcard_type: ''
+        //   }} 
+        //   viewType="both" 
+        // />;
       default:
         return (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
@@ -417,13 +425,13 @@ useEffect(() => {
 
   const menuItems = [
     { id: 'dashboard', icon: Home, label: 'Dashboard', color: 'text-blue-600' },
-    { id: 'points-vente', icon: MapPin, label: 'Points de Vente', color: 'text-green-600' },
-    { id: 'vendeurs-ambulants', icon: Bike, label: 'Vendeurs Ambulants', color: 'text-amber-600' },
+    { id: 'points-vente', icon: MapPin, label: 'Distributeurs', color: 'text-green-600' },
+    { id: 'vendeurs-ambulants', icon: Bike, label: 'Bikers', color: 'text-amber-600' },
     { id: 'stocks', icon: Package, label: 'Gestion Stocks', color: 'text-orange-600' },
     { id: 'commandes', icon: ShoppingCart, label: 'Commandes', color: 'text-purple-600' },
     { id: 'utilisateurs', icon: Users, label: 'Utilisateurs', color: 'text-indigo-600' },
-    { id: 'jetons', icon: Coins, label: 'Système Jetons', color: 'text-yellow-600' },
-    { id: 'contentieux', icon: Scale, label: 'Contentieux', color: 'text-red-600' },
+    // { id: 'jetons', icon: Coins, label: 'Système Jetons', color: 'text-yellow-600' },
+    // { id: 'contentieux', icon: Scale, label: 'Contentieux', color: 'text-red-600' },
     { id: 'rapports', icon: BarChart3, label: 'Rapports', color: 'text-teal-600' },
     { id: 'cartes', icon: Map, label: 'Cartes', color: 'text-cyan-600' },
     { id: 'parametres', icon: Settings, label: 'Paramètres', color: 'text-gray-600' }

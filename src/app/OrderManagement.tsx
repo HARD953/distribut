@@ -3,7 +3,8 @@ import {
   Package, Search, Filter, Eye, Edit, Trash2, Plus, 
   Calendar, MapPin, User, Phone, Mail, CheckCircle, 
   Clock, AlertCircle, XCircle, Truck, DollarSign,
-  Download, RefreshCw, ChevronDown, ChevronUp, Star, List, ShoppingCart
+  Download, RefreshCw, ChevronDown, ChevronUp, Star, List, ShoppingCart,
+  Users, Target
 } from 'lucide-react';
 
 type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
@@ -108,12 +109,34 @@ interface NewOrderItem {
   price: string;
 }
 
+interface MobileVendor {
+  id: number;
+  full_name: string;
+  phone?: string;
+  email?: string;
+  status?: string;
+  avatar?: string;
+}
+
+interface VendorActivity {
+  id?: number;
+  vendor: number | null;
+  activity_type: string | null;
+  timestamp: string | null;
+  location: { lat: number, lng: number } | null;
+  notes: string;
+  related_order: number | null;
+  quantity_assignes: number | null;
+  quantity_sales: number | null;
+}
+
 const OrderManagement = () => {
   const [activeTab, setActiveTab] = useState<'received' | 'created'>('received');
   const [orders, setOrders] = useState<Order[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [productVariants, setProductVariants] = useState<ProductVariant[]>([]);
   const [pointsOfSale, setPointsOfSale] = useState<PointOfSale[]>([]);
+  const [mobileVendors, setMobileVendors] = useState<MobileVendor[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState('all');
@@ -122,7 +145,9 @@ const OrderManagement = () => {
   const [selectedOrders, setSelectedOrders] = useState<number[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedItem, setSelectedItem] = useState<OrderItem | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [ordersPerPage] = useState(10);
   const [error, setError] = useState<string | null>(null);
@@ -135,6 +160,16 @@ const OrderManagement = () => {
     priority: 'medium',
     notes: '',
     items: []
+  });
+  const [vendorActivity, setVendorActivity] = useState<VendorActivity>({
+    vendor: null,
+    activity_type: 'sale',
+    timestamp: new Date().toISOString(),
+    location: null,
+    notes: '',
+    related_order: null,
+    quantity_assignes: null,
+    quantity_sales: null
   });
 
   const theme = {
@@ -217,6 +252,13 @@ const OrderManagement = () => {
         if (!pointsOfSaleRes.ok) throw new Error('Échec de la récupération des points de vente');
         const pointsOfSaleData = await pointsOfSaleRes.json();
         setPointsOfSale(pointsOfSaleData);
+
+        // Fetch Mobile Vendors
+        const vendorsRes = await fetch('https://backendsupply.onrender.com/api/mobile-vendors/', { headers });
+        if (vendorsRes.ok) {
+          const vendorsData = await vendorsRes.json();
+          setMobileVendors(vendorsData);
+        }
       } catch (error: any) {
         setError(error.message);
       }
@@ -391,6 +433,72 @@ const OrderManagement = () => {
       setSelectedOrders([]);
     } catch (error: any) {
       setError(error.message);
+    }
+  };
+
+  // Vendor assignment functions
+  const handleAssignProduct = (order: Order, item: OrderItem) => {
+    setSelectedOrder(order);
+    setSelectedItem(item);
+    setVendorActivity({
+      vendor: null,
+      activity_type: 'sale',
+      timestamp: new Date().toISOString(),
+      location: null,
+      notes: '',
+      related_order: order.id,
+      quantity_assignes: item.quantity,
+      quantity_sales: 0
+    });
+    setShowAssignModal(true);
+  };
+
+  const handleVendorAssignment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const token = localStorage.getItem('access');
+    if (!token) {
+      setError('Veuillez vous connecter.');
+      return;
+    }
+
+    try {
+      setError(null);
+      
+      if (!vendorActivity.vendor) {
+        throw new Error("Veuillez sélectionner un vendeur");
+      }
+
+      if (!vendorActivity.quantity_assignes || vendorActivity.quantity_assignes <= 0) {
+        throw new Error("Veuillez spécifier une quantité valide");
+      }
+
+      if (selectedItem && vendorActivity.quantity_assignes > selectedItem.quantity) {
+        throw new Error("La quantité affectée ne peut pas dépasser la quantité commandée");
+      }
+
+      const response = await fetch('https://backendsupply.onrender.com/api/vendor-activities/', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(vendorActivity)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || JSON.stringify(errorData));
+      }
+
+      // Succès
+      setShowAssignModal(false);
+      setSelectedItem(null);
+      setSelectedOrder(null);
+      alert('Produit affecté avec succès au vendeur!');
+
+    } catch (error: any) {
+      setError(error.message);
+      console.error("Erreur affectation produit:", error);
     }
   };
 
@@ -603,6 +711,7 @@ const OrderManagement = () => {
                       <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Quantité</th>
                       <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Prix Unitaire</th>
                       <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Total</th>
+                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -613,6 +722,15 @@ const OrderManagement = () => {
                         <td className="px-4 py-3 text-sm text-gray-600 text-center">{item.quantity}</td>
                         <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(item.price)}</td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-800 text-right">{formatCurrency(item.total)}</td>
+                        <td className="px-4 py-3 text-sm text-center">
+                          <button
+                            onClick={() => handleAssignProduct(selectedOrder, item)}
+                            className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors flex items-center justify-center gap-1 text-xs"
+                          >
+                            <Target size={12} />
+                            Affecter
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -620,6 +738,7 @@ const OrderManagement = () => {
                     <tr>
                       <td colSpan={4} className="px-4 py-3 text-sm font-bold text-gray-800 text-right">Total Commande:</td>
                       <td className="px-4 py-3 text-sm font-bold text-gray-800 text-right">{formatCurrency(selectedOrder.total)}</td>
+                      <td></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -655,6 +774,124 @@ const OrderManagement = () => {
                 Supprimer
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const AssignVendorModal = () => {
+    if (!selectedItem || !selectedOrder) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+          <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-bold text-gray-800">Affecter un produit à un vendeur</h3>
+              <p className="text-gray-600">Commande #{selectedOrder.id} - {selectedItem.product_name || selectedItem.product_variant?.product?.name || 'Produit inconnu'}</p>
+            </div>
+            <button 
+              onClick={() => setShowAssignModal(false)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <XCircle size={24} />
+            </button>
+          </div>
+          <div className="p-6">
+            <form onSubmit={handleVendorAssignment} className="space-y-4">
+              {error && (
+                <div className="text-red-600 bg-red-100 p-3 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <Users className="inline w-4 h-4 mr-2" />
+                  Vendeur ambulant *
+                </label>
+                <select
+                  required
+                  value={vendorActivity.vendor || ''}
+                  onChange={(e) => setVendorActivity({...vendorActivity, vendor: parseInt(e.target.value) || null})}
+                  className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">Sélectionner un vendeur</option>
+                  {mobileVendors.map(vendor => (
+                    <option key={vendor.id} value={vendor.id}>
+                      {vendor.full_name} - {vendor.phone || 'Téléphone non spécifié'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Type d'activité *
+                </label>
+                <select
+                  required
+                  value={vendorActivity.activity_type || ''}
+                  onChange={(e) => setVendorActivity({...vendorActivity, activity_type: e.target.value})}
+                  className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="sale">Vente</option>
+                  <option value="stock_replenishment">Réapprovisionnement</option>
+                  <option value="check_in">Check-in</option>
+                  <option value="check_out">Check-out</option>
+                  <option value="incident">Incident</option>
+                  <option value="other">Autre</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Quantité à affecter *
+                </label>
+                <input 
+                  type="number"
+                  required
+                  min="1"
+                  max={selectedItem.quantity}
+                  value={vendorActivity.quantity_assignes || ''}
+                  onChange={(e) => setVendorActivity({...vendorActivity, quantity_assignes: parseInt(e.target.value) || null})}
+                  className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Quantité maximale disponible: {selectedItem.quantity}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Notes
+                </label>
+                <textarea 
+                  value={vendorActivity.notes}
+                  onChange={(e) => setVendorActivity({...vendorActivity, notes: e.target.value})}
+                  className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  rows={3}
+                  placeholder="Notes supplémentaires..."
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setShowAssignModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button 
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Affecter
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       </div>
@@ -1262,6 +1499,7 @@ const OrderManagement = () => {
         </div>
       )}
       {showDetailsModal && <OrderDetailsModal />}
+      {showAssignModal && <AssignVendorModal />}
     </div>
   );
 };

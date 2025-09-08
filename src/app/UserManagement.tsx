@@ -6,9 +6,11 @@ import {
   UserCheck, UserX, Settings, Download, Upload, CheckCircle,
   AlertCircle, XCircle, Loader, ChevronDown, ChevronRight,
   MapPin, Bike, ShoppingCart, Store, Truck, User as UserIcon,
-  Package, Factory
+  Package, Factory, X
+  
 } from 'lucide-react';
 import { apiService } from './ApiService';
+
 
 interface Role {
   id: string;
@@ -331,161 +333,249 @@ const UserManagement: React.FC = () => {
     }
   };
 
-  const UserModal: React.FC = () => {
-    const [formData, setFormData] = useState<NewUser>({
+const UserModal: React.FC = () => {
+  const [formData, setFormData] = useState<NewUser>({
+    user: {
+      username: '',
+      email: '',
+      first_name: '',
+      last_name: '',
+      password: '',
+    },
+    phone: '',
+    location: '',
+    role: '',
+    status: 'active',
+    avatar: null,
+    establishment_name: '',
+    establishment_type: 'Boutique',
+    establishment_phone: '',
+    establishment_email: '',
+    establishment_address: '',
+    points_of_sale_ids: []
+  });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+
+  // Debug: Tracer les changements de formData
+  useEffect(() => {
+    console.log('FormData state updated:', formData);
+  }, [formData]);
+
+  useEffect(() => {
+    if (modalType === 'edit' && selectedUser) {
+      const newFormData = {
+        user: {
+          username: selectedUser.username,
+          email: selectedUser.email,
+          first_name: selectedUser.first_name || '',
+          last_name: selectedUser.last_name || '',
+          password: '',
+        },
+        phone: selectedUser.phone || '',
+        location: selectedUser.location || '',
+        role: selectedUser.role || '',
+        status: safeGetStatus(selectedUser.status),
+        avatar: null,
+        establishment_name: selectedUser.establishment_name || '',
+        establishment_type: selectedUser.establishment_type || 'Boutique',
+        establishment_phone: selectedUser.establishment_phone || '',
+        establishment_email: selectedUser.establishment_email || '',
+        establishment_address: selectedUser.establishment_address || '',
+        points_of_sale_ids: selectedUser.points_of_sale?.map(pos => pos.id) || []
+      };
+      console.log('Setting form data for edit:', newFormData);
+      setFormData(newFormData);
+      setAvatarPreview(selectedUser.avatar || null);
+    } else if (modalType === 'add') {
+      const newFormData = {
+        user: {
+          username: '',
+          email: '',
+          first_name: '',
+          last_name: '',
+          password: '',
+        },
+        phone: '',
+        location: '',
+        role: '',
+        status: 'active' as const,
+        avatar: null,
+        establishment_name: '',
+        establishment_type: 'Boutique',
+        establishment_phone: '',
+        establishment_email: '',
+        establishment_address: '',
+        points_of_sale_ids: []
+      };
+      console.log('Setting form data for add:', newFormData);
+      setFormData(newFormData);
+      setAvatarPreview(null);
+    }
+  }, [modalType, selectedUser]);
+
+  // Handlers séparés pour une meilleure traçabilité
+  const handleUserFieldChange = (field: keyof NewUser['user'], value: string) => {
+    console.log(`User field '${field}' changed to:`, value);
+    setFormData(prev => ({
+      ...prev,
       user: {
-        username: '',
-        email: '',
-        first_name: '',
-        last_name: '',
-        password: '',
+        ...prev.user,
+        [field]: value
+      }
+    }));
+  };
+
+  const handleDirectFieldChange = (field: keyof Omit<NewUser, 'user' | 'avatar'>, value: string) => {
+    console.log(`Field '${field}' changed to:`, value);
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleStatusChange = (value: 'active' | 'inactive' | 'suspended') => {
+    console.log('Status changed to:', value);
+    setFormData(prev => ({
+      ...prev,
+      status: value
+    }));
+  };
+
+  const validateForm = () => {
+    console.log('Validating form with data:', formData);
+    
+    if (!formData.user.username?.trim()) {
+      console.log('Validation failed: username empty');
+      return 'Le nom d\'utilisateur est requis.';
+    }
+    if (!formData.user.email?.trim()) {
+      console.log('Validation failed: email empty');
+      return 'L\'email est requis.';
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.user.email)) {
+      console.log('Validation failed: invalid email format');
+      return 'Format d\'email invalide.';
+    }
+    if (modalType === 'add' && !formData.user.password?.trim()) {
+      console.log('Validation failed: password empty for new user');
+      return 'Le mot de passe est requis pour un nouvel utilisateur.';
+    }
+    if (!formData.role?.trim()) {
+      console.log('Validation failed: role empty');
+      return 'Le rôle est requis.';
+    }
+    if (!formData.establishment_name?.trim()) {
+      console.log('Validation failed: establishment_name empty');
+      return 'Le nom de l\'établissement est requis.';
+    }
+    if (!formData.establishment_type?.trim()) {
+      console.log('Validation failed: establishment_type empty');
+      return 'Le type d\'établissement est requis.';
+    }
+    if (!formData.establishment_address?.trim()) {
+      console.log('Validation failed: establishment_address empty');
+      return 'L\'adresse de l\'établissement est requise.';
+    }
+    
+    console.log('Validation passed');
+    return null;
+  };
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      console.log('Avatar file selected:', file.name, file.type, file.size);
+      setFormData(prev => ({ ...prev, avatar: file }));
+      setAvatarPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handlePointsOfSaleChange = (posId: string, isChecked: boolean) => {
+    console.log(`Point of sale ${posId} ${isChecked ? 'checked' : 'unchecked'}`);
+    setFormData(prev => ({
+      ...prev,
+      points_of_sale_ids: isChecked
+        ? [...(prev.points_of_sale_ids || []), posId]
+        : (prev.points_of_sale_ids || []).filter(id => id !== posId)
+    }));
+  };
+
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  
+  const validationError = validateForm();
+  if (validationError) {
+    setFormError(validationError);
+    return;
+  }
+
+  try {
+    setFormError(null);
+    
+    // Préparer les données dans le format attendu par le backend Django
+    const dataToSend = {
+      // Données utilisateur dans un objet user
+      user: {
+        username: formData.user.username,
+        email: formData.user.email,
+        password: formData.user.password || '',
+        first_name: formData.user.first_name || '',
+        last_name: formData.user.last_name || '',
       },
-      phone: '',
-      location: '',
-      role: '',
-      status: 'active',
-      avatar: null,
-      establishment_name: '',
-      establishment_type: 'Boutique',
-      establishment_phone: '',
-      establishment_email: '',
-      establishment_address: '',
-      points_of_sale_ids: []
-    });
-    const [formError, setFormError] = useState<string | null>(null);
-    const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-
-    useEffect(() => {
-      if (modalType === 'edit' && selectedUser) {
-        setFormData({
-          user: {
-            username: selectedUser.username,
-            email: selectedUser.email,
-            first_name: selectedUser.first_name || '',
-            last_name: selectedUser.last_name || '',
-          },
-          phone: selectedUser.phone || '',
-          location: selectedUser.location || '',
-          role: selectedUser.role || '',
-          status: safeGetStatus(selectedUser.status),
-          avatar: null,
-          establishment_name: selectedUser.establishment_name || '',
-          establishment_type: selectedUser.establishment_type || 'Boutique',
-          establishment_phone: selectedUser.establishment_phone || '',
-          establishment_email: selectedUser.establishment_email || '',
-          establishment_address: selectedUser.establishment_address || '',
-          points_of_sale_ids: selectedUser.points_of_sale?.map(pos => pos.id) || []
-        });
-        setAvatarPreview(selectedUser.avatar || null);
-      } else if (modalType === 'add') {
-        setFormData({
-          user: {
-            username: '',
-            email: '',
-            first_name: '',
-            last_name: '',
-            password: '',
-          },
-          phone: '',
-          location: '',
-          role: '',
-          status: 'active',
-          avatar: null,
-          establishment_name: '',
-          establishment_type: 'Boutique',
-          establishment_phone: '',
-          establishment_email: '',
-          establishment_address: '',
-          points_of_sale_ids: []
-        });
-        setAvatarPreview(null);
-      }
-    }, [modalType, selectedUser]);
-
-    const validateForm = () => {
-      if (!formData.user.username.trim()) return 'Le nom d\'utilisateur est requis.';
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.user.email)) return 'Email invalide.';
-      if (modalType === 'add' && !formData.user.password) return 'Le mot de passe est requis.';
-      if (!formData.role) return 'Le rôle est requis.';
-      if (!formData.establishment_name.trim()) return 'Le nom de l\'établissement est requis.';
-      if (!formData.establishment_type) return 'Le type d\'établissement est requis.';
-      if (!formData.establishment_address.trim()) return 'L\'adresse de l\'établissement est requise.';
-      return null;
+      
+      // Données profil
+      phone: formData.phone || '',
+      location: formData.location || '',
+      status: formData.status,
+      role: formData.role || '',
+      
+      // Données établissement
+      establishment_name: formData.establishment_name,
+      establishment_type: formData.establishment_type,
+      establishment_address: formData.establishment_address,
+      establishment_phone: formData.establishment_phone || '',
+      establishment_email: formData.establishment_email || '',
+      
+      // Points de vente
+      points_of_sale: formData.points_of_sale_ids || [],
     };
 
-    const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-        setFormData(prev => ({ ...prev, avatar: file }));
-        setAvatarPreview(URL.createObjectURL(file));
-      }
-    };
+    console.log('Données envoyées (format user object):', dataToSend);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      const validationError = validateForm();
-      if (validationError) {
-        setFormError(validationError);
-        return;
-      }
-      try {
-        setFormError(null);
-        const formDataToSend = new FormData();
-        
-        // User data - structure imbriquée comme attendu par le serializer
-        formDataToSend.append('user[username]', formData.user.username);
-        formDataToSend.append('user[email]', formData.user.email);
-        formDataToSend.append('user[first_name]', formData.user.first_name || '');
-        formDataToSend.append('user[last_name]', formData.user.last_name || '');
-        if (modalType === 'add') {
-          formDataToSend.append('user[password]', formData.user.password || '');
-        }
+    let res;
+    if (modalType === 'edit' && selectedUser) {
+      res = await apiService.updateResource('users', selectedUser.id, dataToSend, false);
+    } else {
+      res = await apiService.createUser(dataToSend);
+    }
 
-        // Profile data
-        formDataToSend.append('phone', formData.phone || '');
-        formDataToSend.append('location', formData.location || '');
-        formDataToSend.append('role', formData.role || '');
-        formDataToSend.append('status', formData.status);
-        formDataToSend.append('establishment_name', formData.establishment_name);
-        formDataToSend.append('establishment_type', formData.establishment_type);
-        formDataToSend.append('establishment_phone', formData.establishment_phone || '');
-        formDataToSend.append('establishment_email', formData.establishment_email || '');
-        formDataToSend.append('establishment_address', formData.establishment_address);
+    if (!res.ok) {
+      const errorData = await res.json();
+      console.error('Erreur backend:', errorData);
+      throw new Error(errorData?.detail || errorData?.message || `Échec de ${modalType === 'edit' ? 'modification' : 'création'}`);
+    }
 
-        // Points of sale
-        if (formData.points_of_sale_ids) {
-          formData.points_of_sale_ids.forEach(id => {
-            formDataToSend.append('points_of_sale_ids', id);
-          });
-        }
+    const updatedUser = await res.json();
+    console.log('Utilisateur créé avec succès:', updatedUser);
+    
+    if (modalType === 'edit') {
+      setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+    } else {
+      setUsers(prev => [...prev, updatedUser]);
+    }
+    
+    setShowModal(false);
+    
+  } catch (err: any) {
+    console.error('Erreur détaillée:', err);
+    if (err.message !== 'Session expired') {
+      setFormError(err.message || 'Une erreur est survenue');
+    }
+  }
+};
 
-        // Avatar
-        if (formData.avatar) {
-          formDataToSend.append('avatar', formData.avatar);
-        }
-
-        let res;
-        if (modalType === 'add') {
-          res = await apiService.createUser(formDataToSend);
-        } else {
-          res = await apiService.updateResource('users', selectedUser?.id || 0, formDataToSend);
-        }
-
-        if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData?.detail || errorData?.message || `Failed to ${modalType === 'add' ? 'create' : 'update'} user`);
-        }
-        
-        const updatedUser = await res.json();
-        setUsers(prev => modalType === 'add' ? [...prev, updatedUser] : prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-        setShowModal(false);
-      } catch (err: any) {
-        if (err.message !== 'Session expired') {
-          setFormError(err.message || 'An error occurred');
-        }
-      }
-    };
-
+// Fonction de validation améliorée
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
@@ -497,7 +587,7 @@ const UserManagement: React.FC = () => {
                  'Détails de l\'utilisateur'}
               </h3>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                <XCircle size={24} />
+                <X size={24} />
               </button>
             </div>
           </div>
@@ -592,270 +682,235 @@ const UserManagement: React.FC = () => {
               </div>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
-              {formError && (
-                <div className="p-3 bg-red-100 text-red-600 rounded-lg">{formError}</div>
+          <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            {formError && (
+              <div className="p-3 bg-red-100 text-red-600 rounded-lg">{formError}</div>
+            )}
+            
+            {/* Panel de debug temporaire - à retirer en production */}
+            <div className="bg-gray-50 p-4 rounded-lg border">
+              <h4 className="font-bold mb-2 text-sm">DEBUG - État du formulaire:</h4>
+              <div className="text-xs">
+                <p>Username: "{formData.user.username}"</p>
+                <p>Email: "{formData.user.email}"</p>
+                <p>Role: "{formData.role}"</p>
+                <p>Establishment: "{formData.establishment_name}"</p>
+                <p>Address: "{formData.establishment_address}"</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Nom d'utilisateur *</label>
+                <input
+                  type="text"
+                  value={formData.user.username}
+                  onChange={(e) => handleUserFieldChange('username', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                <input
+                  type="email"
+                  value={formData.user.email}
+                  onChange={(e) => handleUserFieldChange('email', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Prénom</label>
+                <input
+                  type="text"
+                  value={formData.user.first_name || ''}
+                  onChange={(e) => handleUserFieldChange('first_name', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Nom</label>
+                <input
+                  type="text"
+                  value={formData.user.last_name || ''}
+                  onChange={(e) => handleUserFieldChange('last_name', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              {modalType === 'add' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Mot de passe *</label>
+                  <input
+                    type="password"
+                    value={formData.user.password || ''}
+                    onChange={(e) => handleUserFieldChange('password', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
               )}
-              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Téléphone personnel</label>
+                <input
+                  type="tel"
+                  value={formData.phone || ''}
+                  onChange={(e) => handleDirectFieldChange('phone', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Localisation personnelle</label>
+                <input
+                  type="text"
+                  value={formData.location || ''}
+                  onChange={(e) => handleDirectFieldChange('location', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Rôle *</label>
+                <select
+                  value={formData.role || ''}
+                  onChange={(e) => handleDirectFieldChange('role', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Sélectionner un rôle</option>
+                  {roles.map(role => (
+                    <option key={role.id} value={role.id}>{role.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Statut *</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => handleStatusChange(e.target.value as 'active' | 'inactive' | 'suspended')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="active">Actif</option>
+                  <option value="inactive">Inactif</option>
+                  <option value="suspended">Suspendu</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="pt-4 border-t border-gray-200">
+              <h4 className="text-lg font-semibold text-gray-800 mb-4">Informations de l'établissement</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Nom d'utilisateur *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Nom de l'établissement *</label>
                   <input
                     type="text"
-                    value={formData.user.username}
-                    onChange={(e) => setFormData({
-                      ...formData, 
-                      user: {...formData.user, username: e.target.value}
-                    })}
+                    value={formData.establishment_name}
+                    onChange={(e) => handleDirectFieldChange('establishment_name', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
-                  <input
-                    type="email"
-                    value={formData.user.email}
-                    onChange={(e) => setFormData({
-                      ...formData, 
-                      user: {...formData.user, email: e.target.value}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Prénom</label>
-                  <input
-                    type="text"
-                    value={formData.user.first_name || ''}
-                    onChange={(e) => setFormData({
-                      ...formData, 
-                      user: {...formData.user, first_name: e.target.value}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Nom</label>
-                  <input
-                    type="text"
-                    value={formData.user.last_name || ''}
-                    onChange={(e) => setFormData({
-                      ...formData, 
-                      user: {...formData.user, last_name: e.target.value}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                {modalType === 'add' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Mot de passe *</label>
-                    <input
-                      type="password"
-                      value={formData.user.password || ''}
-                      onChange={(e) => setFormData({
-                        ...formData, 
-                        user: {...formData.user, password: e.target.value}
-                      })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-                )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Téléphone personnel</label>
-                  <input
-                    type="tel"
-                    value={formData.phone || ''}
-                    onChange={(e) => setFormData({
-                      ...formData, 
-                      phone: e.target.value
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Localisation personnelle</label>
-                  <input
-                    type="text"
-                    value={formData.location || ''}
-                    onChange={(e) => setFormData({
-                      ...formData, 
-                      location: e.target.value
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Rôle *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Type d'établissement *</label>
                   <select
-                    value={formData.role || ''}
-                    onChange={(e) => setFormData({
-                      ...formData, 
-                      role: e.target.value
-                    })}
+                    value={formData.establishment_type}
+                    onChange={(e) => handleDirectFieldChange('establishment_type', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   >
-                    <option value="">Sélectionner un rôle</option>
-                    {roles.map(role => (
-                      <option key={role.id} value={role.id}>{role.name}</option>
+                    {establishmentTypes.map(type => (
+                      <option key={type.value} value={type.value}>{type.label}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Statut *</label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({
-                      ...formData, 
-                      status: e.target.value as 'active' | 'inactive' | 'suspended'
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="active">Actif</option>
-                    <option value="inactive">Inactif</option>
-                    <option value="suspended">Suspendu</option>
-                  </select>
-                </div>
-              </div>
-              
-              <div className="pt-4 border-t border-gray-200">
-                <h4 className="text-lg font-semibold text-gray-800 mb-4">Informations de l'établissement</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Nom de l'établissement *</label>
-                    <input
-                      type="text"
-                      value={formData.establishment_name}
-                      onChange={(e) => setFormData({
-                        ...formData, 
-                        establishment_name: e.target.value
-                      })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Type d'établissement *</label>
-                    <select
-                      value={formData.establishment_type}
-                      onChange={(e) => setFormData({
-                        ...formData, 
-                        establishment_type: e.target.value
-                      })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
-                    >
-                      {establishmentTypes.map(type => (
-                        <option key={type.value} value={type.value}>{type.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Téléphone établissement</label>
-                    <input
-                      type="tel"
-                      value={formData.establishment_phone || ''}
-                      onChange={(e) => setFormData({
-                        ...formData, 
-                        establishment_phone: e.target.value
-                      })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Email établissement</label>
-                    <input
-                      type="email"
-                      value={formData.establishment_email || ''}
-                      onChange={(e) => setFormData({
-                        ...formData, 
-                        establishment_email: e.target.value
-                      })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Adresse établissement *</label>
-                    <textarea
-                      value={formData.establishment_address}
-                      onChange={(e) => setFormData({
-                        ...formData, 
-                        establishment_address: e.target.value
-                      })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      rows={3}
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              <div className="pt-4 border-t border-gray-200">
-                <h4 className="text-lg font-semibold text-gray-800 mb-4">Points de vente associés</h4>
-                <div className="space-y-2">
-                  {pointsOfSale.map(pos => (
-                    <label key={pos.id} className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        checked={formData.points_of_sale_ids?.includes(pos.id) || false}
-                        onChange={(e) => {
-                          const isChecked = e.target.checked;
-                          setFormData(prev => ({
-                            ...prev,
-                            points_of_sale_ids: isChecked
-                              ? [...(prev.points_of_sale_ids || []), pos.id]
-                              : (prev.points_of_sale_ids || []).filter(id => id !== pos.id)
-                          }));
-                        }}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span>{pos.name} ({pos.type || 'Non spécifié'})</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="pt-4 border-t border-gray-200">
-                <h4 className="text-lg font-semibold text-gray-800 mb-4">Photo de profil</h4>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Avatar</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Téléphone établissement</label>
                   <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleAvatarChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    type="tel"
+                    value={formData.establishment_phone || ''}
+                    onChange={(e) => handleDirectFieldChange('establishment_phone', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  {avatarPreview && (
-                    <img src={avatarPreview} alt="Avatar Preview" className="mt-2 w-20 h-20 rounded-full object-cover" />
-                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email établissement</label>
+                  <input
+                    type="email"
+                    value={formData.establishment_email || ''}
+                    onChange={(e) => handleDirectFieldChange('establishment_email', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Adresse établissement *</label>
+                  <textarea
+                    value={formData.establishment_address}
+                    onChange={(e) => handleDirectFieldChange('establishment_address', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={3}
+                    required
+                  />
                 </div>
               </div>
-
-              <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  {modalType === 'add' ? 'Ajouter' : 'Modifier'}
-                </button>
+            </div>
+            
+            <div className="pt-4 border-t border-gray-200">
+              <h4 className="text-lg font-semibold text-gray-800 mb-4">Points de vente associés</h4>
+              <div className="space-y-2">
+                {pointsOfSale.map((pos, index) => (
+                  <label 
+                    key={pos.id || `pos-${index}`} 
+                    className="flex items-center space-x-2"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formData.points_of_sale_ids?.includes(pos.id) || false}
+                      onChange={(e) => handlePointsOfSaleChange(pos.id, e.target.checked)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>{pos.name} ({pos.type || 'Non spécifié'})</span>
+                  </label>
+                ))}
               </div>
-            </form>
-          )}
-        </div>
+            </div>
+            
+            <div className="pt-4 border-t border-gray-200">
+              <h4 className="text-lg font-semibold text-gray-800 mb-4">Photo de profil</h4>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Avatar</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+                {avatarPreview && (
+                  <img src={avatarPreview} alt="Avatar Preview" className="mt-2 w-20 h-20 rounded-full object-cover" />
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                {modalType === 'add' ? 'Ajouter' : 'Modifier'}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   const SupplierModal: React.FC = () => {
     const [formData, setFormData] = useState<NewSupplier>({
@@ -961,7 +1016,7 @@ const UserManagement: React.FC = () => {
                 {selectedSupplier ? 'Modifier le fournisseur' : 'Ajouter un fournisseur'}
               </h3>
               <button onClick={() => setShowSupplierModal(false)} className="text-gray-400 hover:text-gray-600">
-                <XCircle size={24} />
+                <X size={24} />
               </button>
             </div>
           </div>
@@ -1165,7 +1220,7 @@ const UserManagement: React.FC = () => {
                 }}
                 className="text-gray-400 hover:text-gray-600"
               >
-                <XCircle size={24} />
+                <X size={24} />
               </button>
             </div>
           </div>
@@ -1321,41 +1376,44 @@ const UserManagement: React.FC = () => {
             <span>Nouveau Rôle</span>
           </button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {roles.map(role => (
-            <div key={role.id} className={`border rounded-lg p-4 ${role.color ? `bg-[${role.color}20]` : 'bg-gray-100'}`}>
-              <div className="flex justify-between items-start mb-2">
-                <h4 className="font-semibold">{role.name}</h4>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => {
-                      setSelectedRoleForEdit(role);
-                      setShowRoleModal(true);
-                    }}
-                    className="text-gray-600 hover:text-gray-800"
-                  >
-                    <Edit size={16} />
-                  </button>
-                  <button
-                    onClick={() => deleteRole(role.id)}
-                    className="text-red-600 hover:text-red-800"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {roles.map((role, index) => (
+              <div 
+                key={role.id ? role.id : `role-${index}`} 
+                className={`border rounded-lg p-4 ${role.color ? `bg-[${role.color}20]` : 'bg-gray-100'}`}
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <h4 className="font-semibold">{role.name}</h4>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => {
+                        setSelectedRoleForEdit(role);
+                        setShowRoleModal(true);
+                      }}
+                      className="text-gray-600 hover:text-gray-800"
+                    >
+                      <Edit size={16} />
+                    </button>
+                    <button
+                      onClick={() => deleteRole(role.id)}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm opacity-80 mb-3">{role.description || 'Aucune description'}</p>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">
+                    {role.users} utilisateurs
+                  </span>
+                  <span className="text-xs bg-white bg-opacity-30 px-2 py-1 rounded-full">
+                    {role.permissions.length} permissions
+                  </span>
                 </div>
               </div>
-              <p className="text-sm opacity-80 mb-3">{role.description || 'Aucune description'}</p>
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">
-                  {role.users} utilisateurs
-                </span>
-                <span className="text-xs bg-white bg-opacity-30 px-2 py-1 rounded-full">
-                  {role.permissions.length} permissions
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -1638,8 +1696,8 @@ const UserManagement: React.FC = () => {
                   }}
                   className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  <Plus size={16} />
-                  <span>Nouveau fournisseur</span>
+                    <Plus size={16} />
+                    <span>Nouveau fournisseur</span>
                 </button>
               </div>
             </div>
@@ -1738,5 +1796,4 @@ const UserManagement: React.FC = () => {
     </div>
   );
 };
-
 export default UserManagement;

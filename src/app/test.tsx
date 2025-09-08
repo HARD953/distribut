@@ -1,10 +1,11 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import dynamic from 'next/dynamic';
-import { Loader2, Filter, Download, User, Store, AlertCircle, ShoppingBag, Users, MapPin } from 'lucide-react';
-import { apiService } from './ApiService';
-// Import Leaflet CSS at the top level
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { Icon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { MapPin, Loader2, Filter, Download, User, Store, AlertCircle, ShoppingBag, Users } from 'lucide-react';
+import { apiService } from './ApiService';
+import dynamic from 'next/dynamic';
 
 // Types pour les données de la carte
 export interface MapCustomer {
@@ -70,26 +71,20 @@ interface MapFilters {
   pushcard_type: string;
 }
 
-// Charger le composant de carte dynamiquement sans SSR
-const MapContainer = dynamic(
-  () => import('react-leaflet').then((mod) => mod.MapContainer),
-  { ssr: false }
-);
+// Icônes personnalisées
+const customerIcon = new Icon({
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34]
+});
 
-const TileLayer = dynamic(
-  () => import('react-leaflet').then((mod) => mod.TileLayer),
-  { ssr: false }
-);
-
-const Marker = dynamic(
-  () => import('react-leaflet').then((mod) => mod.Marker),
-  { ssr: false }
-);
-
-const Popup = dynamic(
-  () => import('react-leaflet').then((mod) => mod.Popup),
-  { ssr: false }
-);
+const posIcon = new Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34]
+});
 
 // Types de vue disponibles
 type ViewType = 'customers' | 'points-of-sale' | 'both';
@@ -99,51 +94,17 @@ const MapComponent = () => {
   const [pointsOfSale, setPointsOfSale] = useState<PointOfSale[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<MapFilters>({
     start_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     end_date: new Date().toISOString().split('T')[0],
     zone: '',
     pushcard_type: ''
   });
   const [viewType, setViewType] = useState<ViewType>('both');
-  const [isMounted, setIsMounted] = useState(false);
-
-  // Charger le CSS Leaflet uniquement côté client
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   // Coordonnées par défaut (Abidjan)
   const defaultCenter: [number, number] = [5.3599517, -4.0082563];
   const defaultZoom = 12;
-
-  // Icônes personnalisées - maintenant créées seulement côté client
-  const getIcons = () => {
-    if (typeof window === 'undefined') return { customerIcon: null, posIcon: null };
-    
-    const L = require('leaflet');
-    delete L.Icon.Default.prototype._getIconUrl;
-    L.Icon.Default.mergeOptions({
-      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-    });
-    
-    return {
-      customerIcon: new L.Icon({
-        iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34]
-      }),
-      posIcon: new L.Icon({
-        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34]
-      })
-    };
-  };
 
   useEffect(() => {
     fetchMapData();
@@ -435,140 +396,138 @@ const MapComponent = () => {
 
             {/* Carte Leaflet */}
             <div className="h-96 rounded-lg mb-6 overflow-hidden border border-gray-300">
-              {isMounted && (
-                <MapContainer
-                  center={defaultCenter}
-                  zoom={defaultZoom}
-                  style={{ height: '100%', width: '100%' }}
-                >
-                  <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  />
-                  
-                  {/* Marqueurs pour les clients avec coordonnées valides */}
-                  {(viewType === 'customers' || viewType === 'both') && validCustomers.map((customer) => (
-                    <Marker
-                      key={`customer-${customer.id}`}
-                      position={[customer.latitude as number, customer.longitude as number]}
-                      icon={getIcons().customerIcon}
-                    >
-                      <Popup>
-                        <div className="p-2 max-w-xs">
-                          <div className="flex items-center mb-2">
-                            {customer.photo_url ? (
-                              <img 
-                                src={customer.photo_url} 
-                                alt={customer.full_name}
-                                className="w-10 h-10 rounded-full object-cover mr-2"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.display = 'none';
-                                  const placeholder = target.nextElementSibling as HTMLElement;
-                                  if (placeholder) placeholder.classList.remove('hidden');
-                                }}
-                              />
-                            ) : null}
-                            <div className={`w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-2 ${customer.photo_url ? 'hidden' : ''}`}>
-                              <User size={20} className="text-blue-600" />
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-blue-600">{customer.full_name}</h3>
-                              <p className="text-sm text-gray-500">{customer.phone}</p>
-                            </div>
+              <MapContainer
+                center={defaultCenter}
+                zoom={defaultZoom}
+                style={{ height: '100%', width: '100%' }}
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                
+                {/* Marqueurs pour les clients avec coordonnées valides */}
+                {(viewType === 'customers' || viewType === 'both') && validCustomers.map((customer) => (
+                  <Marker
+                    key={`customer-${customer.id}`}
+                    position={[customer.latitude as number, customer.longitude as number]}
+                    icon={customerIcon}
+                  >
+                    <Popup>
+                      <div className="p-2 max-w-xs">
+                        <div className="flex items-center mb-2">
+                          {customer.photo_url ? (
+                            <img 
+                              src={customer.photo_url} 
+                              alt={customer.full_name}
+                              className="w-10 h-10 rounded-full object-cover mr-2"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                const placeholder = target.nextElementSibling as HTMLElement;
+                                if (placeholder) placeholder.classList.remove('hidden');
+                              }}
+                            />
+                          ) : null}
+                          <div className={`w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-2 ${customer.photo_url ? 'hidden' : ''}`}>
+                            <User size={20} className="text-blue-600" />
                           </div>
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div>
-                              <span className="font-medium">Zone:</span> {customer.zone}
-                            </div>
-                            <div>
-                              <span className="font-medium">Base:</span> {customer.base}
-                            </div>
-                            <div>
-                              <span className="font-medium">Type carte:</span> {customer.pushcard_type}
-                            </div>
-                            <div>
-                              <span className="font-medium">Achat:</span> {new Date(customer.purchase_date).toLocaleDateString()}
-                            </div>
-                          </div>
-                          <div className="mt-2 p-2 bg-blue-50 rounded-lg">
-                            <p className="font-semibold text-blue-800">
-                              Dépense: {customer.total_sales_amount.toLocaleString()} FCFA
-                            </p>
-                            <p className="text-xs text-blue-600">
-                              {customer.total_quantity} article(s) • {customer.sales_count} achat(s)
-                            </p>
+                          <div>
+                            <h3 className="font-bold text-blue-600">{customer.full_name}</h3>
+                            <p className="text-sm text-gray-500">{customer.phone}</p>
                           </div>
                         </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-                  
-                  {/* Marqueurs pour les points de vente avec coordonnées valides */}
-                  {(viewType === 'points-of-sale' || viewType === 'both') && validPointsOfSale.map((pos) => (
-                    <Marker
-                      key={`pos-${pos.id}`}
-                      position={[pos.latitude as number, pos.longitude as number]}
-                      icon={getIcons().posIcon}
-                    >
-                      <Popup>
-                        <div className="p-2 max-w-xs">
-                          <div className="flex items-center mb-2">
-                            {pos.avatar_url ? (
-                              <img 
-                                src={pos.avatar_url} 
-                                alt={pos.name}
-                                className="w-10 h-10 rounded-full object-cover mr-2"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.display = 'none';
-                                  const placeholder = target.nextElementSibling as HTMLElement;
-                                  if (placeholder) placeholder.classList.remove('hidden');
-                                }}
-                              />
-                            ) : null}
-                            <div className={`w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-2 ${pos.avatar_url ? 'hidden' : ''}`}>
-                              <Store size={20} className="text-green-600" />
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-green-600">{pos.name}</h3>
-                              <p className="text-sm text-gray-500">Propriétaire: {pos.owner}</p>
-                            </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <span className="font-medium">Zone:</span> {customer.zone}
                           </div>
-                          <div className="grid grid-cols-2 gap-2 text-sm mb-2">
-                            <div>
-                              <span className="font-medium">Type:</span> {pos.type_display}
-                            </div>
-                            <div>
-                              <span className="font-medium">Statut:</span> {pos.status_display}
-                            </div>
-                            <div>
-                              <span className="font-medium">Tél:</span> {pos.phone}
-                            </div>
-                            <div>
-                              <span className="font-medium">Inscription:</span> {new Date(pos.registration_date).toLocaleDateString()}
-                            </div>
+                          <div>
+                            <span className="font-medium">Base:</span> {customer.base}
                           </div>
-                          <div className="text-sm">
-                            <span className="font-medium">Adresse:</span> {pos.address}
+                          <div>
+                            <span className="font-medium">Type carte:</span> {customer.pushcard_type}
                           </div>
-                          <div className="mt-2 p-2 bg-green-50 rounded-lg">
-                            <p className="font-semibold text-green-800">
-                              CA: {pos.turnover.toLocaleString()} FCFA
-                            </p>
-                            <p className="text-xs text-green-600">
-                              {pos.monthly_orders} commande(s) mensuelle(s) • Score: {pos.evaluation_score}/5
-                            </p>
-                            <p className="text-xs text-green-600">
-                              {pos.orders_summary.total_orders} commande(s) • {pos.orders_summary.total_items} article(s)
-                            </p>
+                          <div>
+                            <span className="font-medium">Achat:</span> {new Date(customer.purchase_date).toLocaleDateString()}
                           </div>
                         </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-                </MapContainer>
-              )}
+                        <div className="mt-2 p-2 bg-blue-50 rounded-lg">
+                          <p className="font-semibold text-blue-800">
+                            Dépense: {customer.total_sales_amount.toLocaleString()} FCFA
+                          </p>
+                          <p className="text-xs text-blue-600">
+                            {customer.total_quantity} article(s) • {customer.sales_count} achat(s)
+                          </p>
+                        </div>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+                
+                {/* Marqueurs pour les points de vente avec coordonnées valides */}
+                {(viewType === 'points-of-sale' || viewType === 'both') && validPointsOfSale.map((pos) => (
+                  <Marker
+                    key={`pos-${pos.id}`}
+                    position={[pos.latitude as number, pos.longitude as number]}
+                    icon={posIcon}
+                  >
+                    <Popup>
+                      <div className="p-2 max-w-xs">
+                        <div className="flex items-center mb-2">
+                          {pos.avatar_url ? (
+                            <img 
+                              src={pos.avatar_url} 
+                              alt={pos.name}
+                              className="w-10 h-10 rounded-full object-cover mr-2"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                const placeholder = target.nextElementSibling as HTMLElement;
+                                if (placeholder) placeholder.classList.remove('hidden');
+                              }}
+                            />
+                          ) : null}
+                          <div className={`w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-2 ${pos.avatar_url ? 'hidden' : ''}`}>
+                            <Store size={20} className="text-green-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-green-600">{pos.name}</h3>
+                            <p className="text-sm text-gray-500">Propriétaire: {pos.owner}</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm mb-2">
+                          <div>
+                            <span className="font-medium">Type:</span> {pos.type_display}
+                          </div>
+                          <div>
+                            <span className="font-medium">Statut:</span> {pos.status_display}
+                          </div>
+                          <div>
+                            <span className="font-medium">Tél:</span> {pos.phone}
+                          </div>
+                          <div>
+                            <span className="font-medium">Inscription:</span> {new Date(pos.registration_date).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className="text-sm">
+                          <span className="font-medium">Adresse:</span> {pos.address}
+                        </div>
+                        <div className="mt-2 p-2 bg-green-50 rounded-lg">
+                          <p className="font-semibold text-green-800">
+                            CA: {pos.turnover.toLocaleString()} FCFA
+                          </p>
+                          <p className="text-xs text-green-600">
+                            {pos.monthly_orders} commande(s) mensuelle(s) • Score: {pos.evaluation_score}/5
+                          </p>
+                          <p className="text-xs text-green-600">
+                            {pos.orders_summary.total_orders} commande(s) • {pos.orders_summary.total_items} article(s)
+                          </p>
+                        </div>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+              </MapContainer>
             </div>
 
             {/* Résumé des données */}
