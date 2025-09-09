@@ -1,12 +1,23 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Loader2, Filter, Download, User, Store, AlertCircle, ShoppingBag, Users, MapPin } from 'lucide-react';
+import { Loader2, Filter, Download, User, Store, AlertCircle, ShoppingBag, Users, MapPin, Calendar, CreditCard, DollarSign } from 'lucide-react';
 import { apiService } from './ApiService';
 // Import Leaflet CSS at the top level
 import 'leaflet/dist/leaflet.css';
 
 // Types pour les données de la carte
+export interface SaleDetail {
+  product: string;
+  variant_id: number;
+  variant_name: string;
+  format: string;
+  price: number;
+  quantity: number;
+  amount: number;
+  date: string;
+}
+
 export interface MapCustomer {
   id: number;
   full_name: string;
@@ -21,6 +32,27 @@ export interface MapCustomer {
   total_sales_amount: number;
   total_quantity: number;
   sales_count: number;
+  sales_details: SaleDetail[];
+}
+
+export interface VendorInfo {
+  id: number;
+  full_name: string;
+  point_of_sale: string;
+}
+
+export interface PeriodInfo {
+  start_date: string;
+  end_date: string;
+}
+
+export interface MapResponse {
+  period: PeriodInfo;
+  vendor: VendorInfo;
+  customers: MapCustomer[];
+  total_customers: number;
+  grand_total_sales: number;
+  grand_total_quantity: number;
 }
 
 export interface PointOfSale {
@@ -51,10 +83,6 @@ export interface PointOfSale {
   };
 }
 
-export interface CustomersResponse {
-  customers: MapCustomer[];
-}
-
 export interface PointsOfSaleResponse {
   period: {
     start_date: string;
@@ -69,6 +97,9 @@ interface MapFilters {
   zone: string;
   pushcard_type: string;
 }
+
+// Types de vue disponibles
+type ViewType = 'customers' | 'points-of-sale' | 'both';
 
 // Charger le composant de carte dynamiquement sans SSR
 const MapContainer = dynamic(
@@ -91,11 +122,8 @@ const Popup = dynamic(
   { ssr: false }
 );
 
-// Types de vue disponibles
-type ViewType = 'customers' | 'points-of-sale' | 'both';
-
 const MapComponent = () => {
-  const [customers, setCustomers] = useState<MapCustomer[]>([]);
+  const [mapData, setMapData] = useState<MapResponse | null>(null);
   const [pointsOfSale, setPointsOfSale] = useState<PointOfSale[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -154,27 +182,27 @@ const MapComponent = () => {
     setError(null);
     
     try {
-      // Appel API pour les clients
-      const customerParams = new URLSearchParams();
-      if (filters.start_date) customerParams.append('start_date', filters.start_date);
-      if (filters.end_date) customerParams.append('end_date', filters.end_date);
+      // Appel API pour les données de carte (clients)
+      const params = new URLSearchParams();
+      if (filters.start_date) params.append('start_date', filters.start_date);
+      if (filters.end_date) params.append('end_date', filters.end_date);
       
-      if (filters.zone) customerParams.append('zone', filters.zone);
-      if (filters.pushcard_type) customerParams.append('pushcard_type', filters.pushcard_type);
+      if (filters.zone) params.append('zone', filters.zone);
+      if (filters.pushcard_type) params.append('pushcard_type', filters.pushcard_type);
       
-      console.log('Params clients:', customerParams.toString());
-      console.log('URL clients:', `/carte/?${customerParams.toString()}`);
+      console.log('Params carte:', params.toString());
+      console.log('URL carte:', `/carte/?${params.toString()}`);
       
-      const customerResponse = await apiService.get(`/carte/?${customerParams.toString()}`);
+      const response = await apiService.get(`/carte/?${params.toString()}`);
       
-      if (!customerResponse.ok) {
-        console.error('Erreur réponse clients:', customerResponse.status, customerResponse.statusText);
-        throw new Error(`Erreur lors du chargement des clients: ${customerResponse.status}`);
+      if (!response.ok) {
+        console.error('Erreur réponse carte:', response.status, response.statusText);
+        throw new Error(`Erreur lors du chargement des données: ${response.status}`);
       }
       
-      const customerData: CustomersResponse = await customerResponse.json();
-      console.log('Données clients reçues:', customerData);
-      setCustomers(customerData.customers || []);
+      const data: MapResponse = await response.json();
+      console.log('Données carte reçues:', data);
+      setMapData(data);
       
       // Appel API pour les points de vente
       const posParams = new URLSearchParams();
@@ -212,7 +240,7 @@ const MapComponent = () => {
   };
 
   const exportData = () => {
-    if (viewType === 'customers' && customers.length === 0) return;
+    if (viewType === 'customers' && (!mapData || mapData.customers.length === 0)) return;
     if (viewType === 'points-of-sale' && pointsOfSale.length === 0) return;
     
     let headers = "";
@@ -220,9 +248,9 @@ const MapComponent = () => {
     
     if (viewType === 'customers' || viewType === 'both') {
       headers = "Nom, Téléphone, Zone, Base, Type de carte, Montant total, Quantité totale, Nombre de ventes\n";
-      csvContent = customers.reduce((acc, customer) => {
+      csvContent = mapData?.customers.reduce((acc, customer) => {
         return acc + `"${customer.full_name}", "${customer.phone}", "${customer.zone}", "${customer.base}", "${customer.pushcard_type}", ${customer.total_sales_amount}, ${customer.total_quantity}, ${customer.sales_count}\n`;
-      }, headers);
+      }, headers) || headers;
     }
     
     if (viewType === 'points-of-sale' || viewType === 'both') {
@@ -255,9 +283,9 @@ const MapComponent = () => {
   };
 
   // Filtrer les clients avec des coordonnées valides
-  const validCustomers = customers.filter(customer => 
+  const validCustomers = mapData?.customers.filter(customer => 
     isValidCoordinate(customer.latitude, customer.longitude)
-  );
+  ) || [];
 
   // Filtrer les points de vente avec des coordonnées valides
   const validPointsOfSale = pointsOfSale.filter(pos => 
@@ -265,7 +293,7 @@ const MapComponent = () => {
   );
 
   // Calculer les totaux
-  const totalCustomerSales = customers.reduce((sum, customer) => sum + customer.total_sales_amount, 0);
+  const totalCustomerSales = mapData?.grand_total_sales || 0;
   const totalPosRevenue = pointsOfSale.reduce((sum, pos) => sum + pos.turnover, 0);
   const totalOrders = pointsOfSale.reduce((sum, pos) => sum + pos.orders_summary.total_orders, 0);
 
@@ -316,9 +344,9 @@ const MapComponent = () => {
             <button 
               onClick={exportData}
               disabled={
-                (viewType === 'customers' && customers.length === 0) ||
+                (viewType === 'customers' && (!mapData || mapData.customers.length === 0)) ||
                 (viewType === 'points-of-sale' && pointsOfSale.length === 0) ||
-                (viewType === 'both' && customers.length === 0 && pointsOfSale.length === 0)
+                (viewType === 'both' && (!mapData || mapData.customers.length === 0) && pointsOfSale.length === 0)
               }
               className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
@@ -327,6 +355,37 @@ const MapComponent = () => {
             </button>
           </div>
         </div>
+
+        {/* Informations sur la période et le vendeur */}
+        {mapData && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-blue-50 rounded-lg">
+            <div className="flex items-center">
+              <Calendar size={18} className="text-blue-600 mr-2" />
+              <div>
+                <p className="text-sm text-blue-800 font-medium">Période</p>
+                <p className="text-sm text-blue-700">
+                  {new Date(mapData.period.start_date).toLocaleDateString()} - {new Date(mapData.period.end_date).toLocaleDateString()}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center">
+              <User size={18} className="text-blue-600 mr-2" />
+              <div>
+                <p className="text-sm text-blue-800 font-medium">Vendeur</p>
+                <p className="text-sm text-blue-700">{mapData.vendor.full_name}</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center">
+              <Store size={18} className="text-blue-600 mr-2" />
+              <div>
+                <p className="text-sm text-blue-800 font-medium">Point de vente</p>
+                <p className="text-sm text-blue-700">{mapData.vendor.point_of_sale}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Filtres */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
@@ -366,9 +425,8 @@ const MapComponent = () => {
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">Tous les types</option>
-              <option value="TopTop">TopTop</option>
-              <option value="Classic">Classic</option>
-              <option value="Premium">Premium</option>
+              <option value="pushcard">Pushcard</option>
+              <option value="autre">Autre</option>
             </select>
           </div>
           <div className="md:col-span-4 flex justify-end">
@@ -402,15 +460,15 @@ const MapComponent = () => {
         ) : (
           <>
             {/* Avertissement sur les données invalides */}
-            {((viewType === 'customers' || viewType === 'both') && customers.length > validCustomers.length) ||
+            {((viewType === 'customers' || viewType === 'both') && mapData && mapData.customers.length > validCustomers.length) ||
              ((viewType === 'points-of-sale' || viewType === 'both') && pointsOfSale.length > validPointsOfSale.length) && (
               <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start">
                 <AlertCircle className="text-yellow-600 mr-2 mt-0.5" size={16} />
                 <div>
                   <p className="text-yellow-800 text-sm font-medium">Données incomplètes</p>
                     <p className="text-yellow-700 text-sm">
-                    {viewType !== 'points-of-sale' && `${customers.length - validCustomers.length} client(s) sans coordonnées valides`}
-                    {viewType === 'both' && customers.length > validCustomers.length && pointsOfSale.length > validPointsOfSale.length && ' et '}
+                    {viewType !== 'points-of-sale' && mapData && `${mapData.customers.length - validCustomers.length} client(s) sans coordonnées valides`}
+                    {viewType === 'both' && mapData && mapData.customers.length > validCustomers.length && pointsOfSale.length > validPointsOfSale.length && ' et '}
                     {(viewType === 'points-of-sale' || viewType === 'both') && `${pointsOfSale.length - validPointsOfSale.length} point(s) de vente sans coordonnées valides`}
                     </p>
                 </div>
@@ -491,9 +549,31 @@ const MapComponent = () => {
                               <span className="font-medium">Achat:</span> {new Date(customer.purchase_date).toLocaleDateString()}
                             </div>
                           </div>
+                          
+                          {/* Détails des ventes */}
+                          {customer.sales_details && customer.sales_details.length > 0 && (
+                            <div className="mt-2">
+                              <p className="font-medium text-sm mb-1">Détails des ventes:</p>
+                              <div className="space-y-1 max-h-32 overflow-y-auto">
+                                {customer.sales_details.map((sale, index) => (
+                                  <div key={index} className="text-xs p-1 bg-gray-100 rounded">
+                                    <div className="flex justify-between">
+                                      <span className="font-medium">{sale.product}</span>
+                                      <span>{sale.quantity}x</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span>{sale.format}</span>
+                                      <span className="font-medium">{sale.amount.toLocaleString()} FCFA</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
                           <div className="mt-2 p-2 bg-blue-50 rounded-lg">
                             <p className="font-semibold text-blue-800">
-                              Dépense: {customer.total_sales_amount.toLocaleString()} FCFA
+                              Total: {customer.total_sales_amount.toLocaleString()} FCFA
                             </p>
                             <p className="text-xs text-blue-600">
                               {customer.total_quantity} article(s) • {customer.sales_count} achat(s)
@@ -573,13 +653,13 @@ const MapComponent = () => {
 
             {/* Résumé des données */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {(viewType === 'customers' || viewType === 'both') && (
+              {(viewType === 'customers' || viewType === 'both') && mapData && (
                 <div className="bg-blue-50 p-4 rounded-lg">
                   <h3 className="font-semibold text-blue-800 flex items-center">
                     <Users size={18} className="mr-2" />
                     Clients
                   </h3>
-                  <p className="text-2xl font-bold">{customers.length}</p>
+                  <p className="text-2xl font-bold">{mapData.total_customers}</p>
                   <p className="text-sm text-blue-600">
                     {validCustomers.length} avec coordonnées valides
                   </p>
@@ -626,7 +706,7 @@ const MapComponent = () => {
             </div>
 
             {/* Liste des données (optionnel) */}
-            {((viewType === 'customers' || viewType === 'both') && customers.length > 0) && (
+            {((viewType === 'customers' || viewType === 'both') && mapData && mapData.customers.length > 0) && (
               <div className="mt-6">
                 <h3 className="text-lg font-semibold mb-4 flex items-center">
                   <Users size={20} className="mr-2" />
@@ -645,7 +725,7 @@ const MapComponent = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {customers.slice(0, 5).map((customer) => {
+                      {mapData.customers.slice(0, 5).map((customer) => {
                         const hasValidCoords = isValidCoordinate(customer.latitude, customer.longitude);
                         return (
                           <tr key={customer.id}>
@@ -760,9 +840,9 @@ const MapComponent = () => {
               </div>
             )}
 
-            {((viewType === 'customers' && customers.length === 0) ||
+            {((viewType === 'customers' && (!mapData || mapData.customers.length === 0)) ||
               (viewType === 'points-of-sale' && pointsOfSale.length === 0) ||
-              (viewType === 'both' && customers.length === 0 && pointsOfSale.length === 0)) && (
+              (viewType === 'both' && (!mapData || mapData.customers.length === 0) && pointsOfSale.length === 0)) && (
               <div className="text-center py-8">
                 <MapPin size={48} className="mx-auto text-gray-400 mb-4" />
                 <h3 className="text-lg font-medium text-gray-600">Aucune donnée disponible</h3>
