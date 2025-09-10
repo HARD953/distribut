@@ -5,7 +5,7 @@ import {
   Search, MoreVertical, Star, MapPin, Phone, Mail, Clock,
   ChevronLeft, ChevronRight, Frown, Smile, Meh, Check,
   Edit, Trash2, Save, Coins, Image as ImageIcon, Calendar,
-  BarChart3, TrendingUp, TrendingDown, Filter
+  BarChart3, TrendingUp, TrendingDown, Filter, Key, User
 } from 'lucide-react';
 import { apiService } from './ApiService';
 import { useAuth } from './AuthContext';
@@ -48,6 +48,8 @@ interface FormVendor {
   notes: string;
   average_daily_sales: number;
   performance: number;
+  username: string;
+  password: string;
 }
 
 interface Stats {
@@ -155,7 +157,9 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
       is_approved: false,
       notes: '',
       average_daily_sales: 0,
-      performance: 0
+      performance: 0,
+      username: '',
+      password: ''
     };
   }
 
@@ -268,7 +272,9 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
         ...data,
         zones: data.zones.join(', '),
         point_of_sale: data.point_of_sale?.toString() || '',
-        photo: data.photo
+        photo: data.photo,
+        username: '',
+        password: ''
       });
       
       setPhotoPreview(data.photo || null);
@@ -511,6 +517,43 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
           </div>
         </div>
 
+        {/* Nouveaux champs username et password */}
+        {!isEditMode && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Nom d'utilisateur *</label>
+              <div className="mt-1 relative">
+                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                <input
+                  type="text"
+                  name="username"
+                  value={formData.username || ''}
+                  onChange={handleChange}
+                  className="pl-10 mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  required
+                  placeholder="Choisir un nom d'utilisateur"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Mot de passe *</label>
+              <div className="mt-1 relative">
+                <Key className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                <input
+                  type="password"
+                  name="password"
+                  value={formData.password || ''}
+                  onChange={handleChange}
+                  className="pl-10 mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  required
+                  placeholder="Choisir un mot de passe"
+                />
+              </div>
+            </div>
+          </>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-gray-700">Prénom *</label>
           <input
@@ -583,7 +626,7 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
           >
             <option value="moto">Moto</option>
             <option value="tricycle">Tricycle</option>
-            
+            <option value="velo">Vélo</option>
             <option value="pied">À pied</option>
             <option value="autre">Autre</option>
           </select>

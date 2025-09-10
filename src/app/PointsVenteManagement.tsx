@@ -75,6 +75,10 @@ const PointsVenteManagement = () => {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [editingPoint, setEditingPoint] = useState<PointOfSale | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  
+  // États pour la pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Types de points de vente
   const pointTypes = [
@@ -226,6 +230,69 @@ const PointsVenteManagement = () => {
     
     return matchesSearch && matchesStatus && matchesType;
   });
+
+  // Pagination
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredPoints.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredPoints.length / itemsPerPage);
+
+  const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
+
+  // Fonction pour télécharger les données
+  const downloadData = () => {
+    // Créer un CSV des données
+    const headers = [
+      'Nom',
+      'Propriétaire',
+      'Téléphone',
+      'Email',
+      'Adresse',
+      'Type',
+      'Statut',
+      'District',
+      'Région',
+      'Commune',
+      'Date d\'inscription',
+      'Chiffre d\'affaires',
+      'Commandes mensuelles',
+      'Score d\'évaluation'
+    ];
+
+    const csvData = filteredPoints.map(point => [
+      point.name,
+      point.owner,
+      point.phone,
+      point.email,
+      point.address,
+      pointTypes.find(t => t.value === point.type)?.label || point.type,
+      statusOptions.find(s => s.value === point.status)?.label || point.status,
+      point.district,
+      point.region,
+      point.commune,
+      point.registration_date,
+      point.turnover,
+      point.monthly_orders,
+      point.evaluation_score
+    ]);
+
+    // Créer le contenu CSV
+    let csvContent = headers.join(',') + '\n';
+    csvData.forEach(row => {
+      csvContent += row.map(field => `"${field}"`).join(',') + '\n';
+    });
+
+    // Créer un blob et un lien de téléchargement
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'points_de_vente.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Obtenir le style du statut
   const getStatusStyle = (status: string) => {
@@ -514,6 +581,13 @@ const PointsVenteManagement = () => {
               <Plus size={16} />
               <span>Ajouter</span>
             </button>
+            <button 
+              onClick={downloadData}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${colors.success}`}
+            >
+              <Download size={16} />
+              <span>Exporter</span>
+            </button>
           </div>
         </div>
       </div>
@@ -543,7 +617,7 @@ const PointsVenteManagement = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredPoints.map((point) => (
+                {currentItems.map((point) => (
                   <tr key={point.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div className="w-10 h-10 rounded-lg overflow-hidden">
@@ -617,6 +691,67 @@ const PointsVenteManagement = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          {filteredPoints.length > 0 && (
+            <div className="px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-sm text-gray-700">
+                Affichage de <span className="font-medium">{indexOfFirstItem + 1}</span> à{' '}
+                <span className="font-medium">
+                  {indexOfLastItem > filteredPoints.length ? filteredPoints.length : indexOfLastItem}
+                </span>{' '}
+                sur <span className="font-medium">{filteredPoints.length}</span> résultats
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2 py-1 border border-gray-300 rounded-md text-sm"
+                >
+                  <option value="5">5 par page</option>
+                  <option value="10">10 par page</option>
+                  <option value="25">25 par page</option>
+                  <option value="50">50 par page</option>
+                </select>
+                
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => paginate(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className={`px-3 py-1 rounded-md border ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                    <button
+                      key={page}
+                      onClick={() => paginate(page)}
+                      className={`px-3 py-1 rounded-md border ${
+                        currentPage === page 
+                          ? 'bg-blue-600 text-white border-blue-600' 
+                          : 'bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  
+                  <button
+                    onClick={() => paginate(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className={`px-3 py-1 rounded-md border ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -627,13 +762,22 @@ const PointsVenteManagement = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-800">Carte des Points de Vente</h3>
-        <button 
-          onClick={() => setActiveView('liste')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg ${colors.secondary}`}
-        >
-          <ChevronLeft size={16} />
-          <span>Retour à la liste</span>
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={downloadData}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg ${colors.success}`}
+          >
+            <Download size={16} />
+            <span>Exporter</span>
+          </button>
+          <button 
+            onClick={() => setActiveView('liste')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg ${colors.secondary}`}
+          >
+            <ChevronLeft size={16} />
+            <span>Retour à la liste</span>
+          </button>
+        </div>
       </div>
       
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden h-[600px]">
@@ -653,7 +797,11 @@ const PointsVenteManagement = () => {
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">Gestion des Points de Vente</h1>
         <div className="flex items-center gap-2">
-          <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">
+          <button 
+            onClick={downloadData}
+            className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+            title="Télécharger les données"
+          >
             <Download size={20} />
           </button>
           <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">
