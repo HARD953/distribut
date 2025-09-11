@@ -5,7 +5,8 @@ import {
   Search, MoreVertical, Star, MapPin, Phone, Mail, Clock,
   ChevronLeft, ChevronRight, Frown, Smile, Meh, Check,
   Edit, Trash2, Save, Coins, Image as ImageIcon, Calendar,
-  BarChart3, TrendingUp, TrendingDown, Filter, Key, User
+  BarChart3, TrendingUp, TrendingDown, Filter, Key, User,
+  ShoppingBag
 } from 'lucide-react';
 import { apiService } from './ApiService';
 import { useAuth } from './AuthContext';
@@ -31,6 +32,26 @@ interface Vendor {
   last_activity?: string;
   point_of_sale?: number;
   point_of_sale_name?: string;
+  purchases?: Purchase[]; // Nouvelle propriété ajoutée
+}
+
+interface Purchase {
+  id: number;
+  sales_total: string;
+  first_name: string;
+  last_name: string;
+  zone: string;
+  amount: string;
+  photo: string;
+  purchase_date: string;
+  created_at: string;
+  updated_at: string;
+  base: string;
+  pushcard_type: string;
+  latitude: number;
+  longitude: number;
+  phone: string;
+  vendor: number;
 }
 
 interface FormVendor {
@@ -127,7 +148,7 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
   const [editForm, setEditForm] = useState<Partial<FormVendor>>({});
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newVendor, setNewVendor] = useState<FormVendor>(getDefaultVendorForm(selectedPOS));
-  const [activeTab, setActiveTab] = useState<'activities' | 'performance' | 'notes'>('activities');
+  const [activeTab, setActiveTab] = useState<'activities' | 'performance' | 'notes' | 'purchases'>('activities');
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -983,6 +1004,69 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
     );
   };
 
+  const renderPurchasesList = () => {
+    if (!selectedVendor?.purchases || selectedVendor.purchases.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg">
+          <p className="text-gray-500">Aucun achat enregistré pour ce vendeur</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {selectedVendor.purchases.map((purchase) => (
+          <div key={purchase.id} className="p-4 border border-gray-200 rounded-lg bg-white hover:bg-gray-50">
+            <div className="flex justify-between items-start">
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-medium text-gray-800">
+                    {purchase.first_name} {purchase.last_name}
+                  </h3>
+                  <span className="text-sm text-gray-500">
+                    {new Date(purchase.purchase_date).toLocaleDateString('fr-FR')}
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-600">Zone: {purchase.zone}</p>
+                    <p className="text-gray-600">Base: {purchase.base}</p>
+                    <p className="text-gray-600">Type: {purchase.pushcard_type}</p>
+                  </div>
+                  
+                  <div>
+                    <p className="text-gray-600">Téléphone: {purchase.phone}</p>
+                    <p className="font-medium text-green-600">
+                      Montant: {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(parseFloat(purchase.amount))}
+                    </p>
+                    {purchase.sales_total && (
+                      <p className="font-medium text-blue-600">
+                        Ventes: {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(parseFloat(purchase.sales_total))}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {purchase.photo && (
+                <div className="ml-4 flex-shrink-0">
+                  <div className="h-16 w-16 rounded-md overflow-hidden bg-gray-100">
+                    <img 
+                      src={purchase.photo.startsWith('http') ? purchase.photo : `http://127.0.0.1:8000${purchase.photo}`} 
+                      alt={`Achat ${purchase.id}`}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const renderVendorDetails = () => {
     if (!selectedVendor) return null;
 
@@ -1219,6 +1303,16 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
                   Performance
                 </button>
                 <button
+                  onClick={() => setActiveTab('purchases')}
+                  className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'purchases'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Achats ({selectedVendor.purchases?.length || 0})
+                </button>
+                <button
                   onClick={() => setActiveTab('notes')}
                   className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
                     activeTab === 'notes'
@@ -1274,6 +1368,12 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
                 ) : (
                   renderPerformanceChart()
                 )}
+              </div>
+            )}
+            
+            {activeTab === 'purchases' && (
+              <div className="space-y-4">
+                {renderPurchasesList()}
               </div>
             )}
             
