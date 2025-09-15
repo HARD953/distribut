@@ -45,6 +45,7 @@ interface PointOfSale {
   avatar: string;
 }
 
+
 const PointsVenteManagement = () => {
   const API_BASE_URL = 'https://backendsupply.onrender.com/api';
   const [pointsVente, setPointsVente] = useState<PointOfSale[]>([]);

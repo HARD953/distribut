@@ -75,6 +75,7 @@ interface OrderItem {
   quantity: number;
   price: string;
   total: string;
+  quantity_affecte:string;
 }
 
 interface Order {
@@ -711,6 +712,7 @@ const OrderManagement = () => {
                       <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Quantité</th>
                       <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Prix Unitaire</th>
                       <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Total</th>
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Quantité Affèctée</th>
                       <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Actions</th>
                     </tr>
                   </thead>
@@ -722,6 +724,7 @@ const OrderManagement = () => {
                         <td className="px-4 py-3 text-sm text-gray-600 text-center">{item.quantity}</td>
                         <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(item.price)}</td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-800 text-right">{formatCurrency(item.total)}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-800 text-right">{formatCurrency(item.quantity_affecte)}</td>
                         <td className="px-4 py-3 text-sm text-center">
                           <button
                             onClick={() => handleAssignProduct(selectedOrder, item)}

@@ -16,6 +16,7 @@ import MobileVendorsManagement from './MobileVendorsManagement';
 import ParametresManagement from './ParametresManagement';
 import MapComponent from './MapComponent';
 import ReportPage from './ReportPage';
+import PushcartManagement from './PushcartManagement'
 
 export interface Notification {
   id: number;
@@ -390,6 +391,8 @@ useEffect(() => {
         return <ParametresManagement />;
       case 'cartes':
         return <MapComponent />
+      case 'Pushcart':
+        return <PushcartManagement />
         //   filters={{
         //     start_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         //     end_date: new Date().toISOString().split('T')[0],
@@ -427,6 +430,7 @@ useEffect(() => {
     { id: 'dashboard', icon: Home, label: 'Dashboard', color: 'text-blue-600' },
     { id: 'points-vente', icon: MapPin, label: 'Distributeurs', color: 'text-green-600' },
     { id: 'vendeurs-ambulants', icon: Bike, label: 'Bikers', color: 'text-amber-600' },
+    { id: 'Pushcart', icon: Bike, label: 'Pushcart', color: 'text-yellow-600' },
     { id: 'stocks', icon: Package, label: 'Gestion Stocks', color: 'text-orange-600' },
     { id: 'commandes', icon: ShoppingCart, label: 'Commandes', color: 'text-purple-600' },
     { id: 'utilisateurs', icon: Users, label: 'Utilisateurs', color: 'text-indigo-600' },
