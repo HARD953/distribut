@@ -723,30 +723,31 @@ const PushcartManagement = () => {
                 </div>
                 
                 {/* Résumé */}
-                <div className="mt-8 p-5 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl text-white">
-                  <h3 className="font-medium mb-4 flex items-center">
-                    <BarChart3 size={18} className="mr-2" />
-                    Résumé de la vente
-                  </h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-white bg-opacity-20 p-3 rounded-lg">
-                      <p className="text-sm opacity-90">Montant total</p>
-                      <p className="font-bold text-lg">{formatCurrency(purchaseDetails.statistics.grand_total_amount)}</p>
+
+                    <div className="mt-8 p-5 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl text-white">
+                    <h3 className="font-medium mb-4 flex items-center">
+                        <BarChart3 size={18} className="mr-2" />
+                        Résumé de la vente
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white/20 p-3 rounded-lg">
+                        <p className="text-sm opacity-90">Montant total</p>
+                        <p className="font-bold text-lg">{formatCurrency(purchaseDetails.statistics.grand_total_amount)}</p>
+                        </div>
+                        <div className="bg-white/20 p-3 rounded-lg">
+                        <p className="text-sm opacity-90">Quantité totale</p>
+                        <p className="font-bold text-lg">{purchaseDetails.statistics.grand_total_quantity}</p>
+                        </div>
+                        <div className="bg-white/20 p-3 rounded-lg">
+                        <p className="text-sm opacity-90">Produits différents</p>
+                        <p className="font-bold text-lg">{purchaseDetails.statistics.total_products}</p>
+                        </div>
+                        <div className="bg-white/20 p-3 rounded-lg">
+                        <p className="text-sm opacity-90">Variantes différentes</p>
+                        <p className="font-bold text-lg">{purchaseDetails.statistics.total_variants}</p>
+                        </div>
                     </div>
-                    <div className="bg-white bg-opacity-20 p-3 rounded-lg">
-                      <p className="text-sm opacity-90">Quantité totale</p>
-                      <p className="font-bold text-lg">{purchaseDetails.statistics.grand_total_quantity}</p>
                     </div>
-                    <div className="bg-white bg-opacity-20 p-3 rounded-lg">
-                      <p className="text-sm opacity-90">Produits différents</p>
-                      <p className="font-bold text-lg">{purchaseDetails.statistics.total_products}</p>
-                    </div>
-                    <div className="bg-white bg-opacity-20 p-3 rounded-lg">
-                      <p className="text-sm opacity-90">Variantes différentes</p>
-                      <p className="font-bold text-lg">{purchaseDetails.statistics.total_variants}</p>
-                    </div>
-                  </div>
-                </div>
               </div>
             )}
             
