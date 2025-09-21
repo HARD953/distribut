@@ -121,7 +121,6 @@ class ApiService {
   async delete(endpoint: string): Promise<Response> {
     return this.request(endpoint, { method: 'DELETE' });
   }
-
   // Specific API endpoints
   async login(username: string, password: string): Promise<Response> {
     return this.post('/token/', { username, password });
@@ -151,9 +150,10 @@ class ApiService {
     return this.get('/suppliers/');
   }
 
-  async createSupplier(data: any): Promise<Response> {
-    return this.post('/suppliers/', data);
-  }
+// Dans votre ApiService
+async createSupplier(data: any, isFormData: boolean = false): Promise<Response> {
+  return this.post('/suppliers/', data, isFormData);
+}
 
   async getPointsVente(): Promise<Response> {
     return this.get('/points-vente/');

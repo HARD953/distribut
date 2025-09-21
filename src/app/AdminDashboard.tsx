@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation';
 import { 
   Home, MapPin, Package, ShoppingCart, Users, Coins, 
   Scale, BarChart3, Map, Settings, Menu, Bell, Search,
-  ChevronDown, LogOut, Plus, AlertTriangle, Clock, CheckCircle, Loader2, ChevronsUpDown, UserRound, Bike
+  ChevronDown, LogOut, Plus, AlertTriangle, Clock, CheckCircle, Loader2, ChevronsUpDown, UserRound, Bike,
+  X
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { apiService } from './ApiService';
@@ -16,7 +17,7 @@ import MobileVendorsManagement from './MobileVendorsManagement';
 import ParametresManagement from './ParametresManagement';
 import MapComponent from './MapComponent';
 import ReportPage from './ReportPage';
-import PushcartManagement from './PushcartManagement'
+import PushcartManagement from './PushcartManagement';
 
 export interface Notification {
   id: number;
@@ -100,75 +101,72 @@ const AdminDashboard = () => {
   const router = useRouter();
   const [selectedPOS, setSelectedPOS] = useState<POSData | null>(null);
   const [posDropdownOpen, setPosDropdownOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-// Remplacez les lignes 74 et 108 par :
-
-useEffect(() => {
-  // Vérifier si on est côté client
-  if (typeof window === 'undefined') return;
-  
-  const checkAuth = async () => {
-    const token = localStorage.getItem('access');
-    if (!token) {
-      console.warn('No access token found, redirecting to login');
-      router.push('/login');
-      return;
-    }
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     
-    try {
-      const response = await apiService.get('/dashboard/');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch dashboard data: ${response.status}`);
+    const checkAuth = async () => {
+      const token = localStorage.getItem('access');
+      if (!token) {
+        console.warn('No access token found, redirecting to login');
+        router.push('/login');
+        return;
       }
-      const data: DashboardData = await response.json();
-      setDashboardData(data);
-      setSelectedPOS(data.cumulative);
-      setIsLoading(false);
-    } catch (err) {
-      console.error('Error fetching dashboard data:', err);
-      setError('Session invalide ou erreur serveur. Veuillez vous reconnecter.');
-      logout();
-      router.push('/login');
-    }
-  };
-  
-  checkAuth();
-}, [router, logout]);
-
-useEffect(() => {
-  // Vérifier si on est côté client
-  if (typeof window === 'undefined') return;
-  
-  const fetchNotifications = async () => {
-    const token = localStorage.getItem('access');
-    if (!token) return;
-    
-    try {
-      const response = await apiService.get('/notifications/');
-      if (!response.ok) {
-        if (response.status === 401) {
-          console.warn('Unauthorized, logging out');
-          logout();
-          router.push('/login');
-          return;
+      
+      try {
+        const response = await apiService.get('/dashboard/');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch dashboard data: ${response.status}`);
         }
-        throw new Error(`Failed to fetch notifications: ${response.status}`);
+        const data: DashboardData = await response.json();
+        setDashboardData(data);
+        setSelectedPOS(data.cumulative);
+        setIsLoading(false);
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
+        setError('Session invalide ou erreur serveur. Veuillez vous reconnecter.');
+        logout();
+        router.push('/login');
       }
-      const data: Notification[] = await response.json();
-      setNotifications(data.map((n: Notification) => ({
-        id: n.id,
-        type: n.type.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
-        message: n.message,
-        created_at: n.created_at,
-        is_read: n.is_read
-      })));
-    } catch (err) {
-      console.error('Error fetching notifications:', err);
-      setError('Erreur lors du chargement des notifications');
-    }
-  };
-  fetchNotifications();
-}, [router, logout]);
+    };
+    
+    checkAuth();
+  }, [router, logout]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const fetchNotifications = async () => {
+      const token = localStorage.getItem('access');
+      if (!token) return;
+      
+      try {
+        const response = await apiService.get('/notifications/');
+        if (!response.ok) {
+          if (response.status === 401) {
+            console.warn('Unauthorized, logging out');
+            logout();
+            router.push('/login');
+            return;
+          }
+          throw new Error(`Failed to fetch notifications: ${response.status}`);
+        }
+        const data: Notification[] = await response.json();
+        setNotifications(data.map((n: Notification) => ({
+          id: n.id,
+          type: n.type.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+          message: n.message,
+          created_at: n.created_at,
+          is_read: n.is_read
+        })));
+      } catch (err) {
+        console.error('Error fetching notifications:', err);
+        setError('Erreur lors du chargement des notifications');
+      }
+    };
+    fetchNotifications();
+  }, [router, logout]);
 
   const unreadNotifications = notifications.filter(n => !n.is_read).length;
 
@@ -225,7 +223,7 @@ useEffect(() => {
           </div>
         )}
 
-        <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white">
+        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-6 text-white shadow-lg">
           <h1 className="text-2xl font-bold mb-2">Bonjour, {'Admin'} 👋</h1>
           <p className="opacity-90">
             {selectedPOS?.pos_name === "Total Général" 
@@ -233,13 +231,14 @@ useEffect(() => {
               : `Activité du point de vente: ${selectedPOS?.pos_name}`}
           </p>
         </div>
+        
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {currentData.stats.map((stat, index) => {
             const IconComponent = iconComponents[stat.icon] || CheckCircle;
             return (
-              <div key={index} className={`p-6 rounded-xl border ${stat.color} transition-all hover:shadow-md flex items-center`}>
-                <div className="mr-4 p-3 rounded-full bg-white bg-opacity-30">
-                  <IconComponent className={`${stat.color.replace('bg-', 'text-').replace('-100', '-600')}`} size={24} />
+              <div key={index} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm transition-all hover:shadow-md flex items-center">
+                <div className="mr-4 p-3 rounded-full bg-indigo-100 text-indigo-600">
+                  <IconComponent size={24} />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-600">{stat.title}</p>
@@ -258,7 +257,7 @@ useEffect(() => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold text-gray-800">Actions Rapides</h3>
-            <button className="text-blue-600 text-sm font-medium flex items-center">
+            <button className="text-indigo-600 text-sm font-medium flex items-center">
               Voir plus <ChevronDown size={16} className="ml-1" />
             </button>
           </div>
@@ -285,7 +284,7 @@ useEffect(() => {
               { 
                 icon: BarChart3, 
                 label: 'Vue Rapports', 
-                color: 'from-blue-500 to-blue-600',
+                color: 'from-indigo-500 to-indigo-600',
                 onClick: () => setActiveTab('rapports')
               }
             ].map((action, index) => (
@@ -300,11 +299,12 @@ useEffect(() => {
             ))}
           </div>
         </div>
+        
         <div className="grid lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-gray-800">Activités Récentes</h3>
-              <button className="text-blue-600 text-sm font-medium">Voir tout</button>
+              <button className="text-indigo-600 text-sm font-medium">Voir tout</button>
             </div>
             <div className="space-y-4">
               {currentData.recent_activities.length > 0 ? (
@@ -312,7 +312,7 @@ useEffect(() => {
                   const IconComponent = iconComponents[activity.icon] || CheckCircle;
                   return (
                     <div key={index} className="flex items-start p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className={`p-2 rounded-full mr-3 ${activity.color}`}>
+                      <div className="p-2 rounded-full mr-3 bg-indigo-100 text-indigo-600">
                         <IconComponent size={18} />
                       </div>
                       <div className="flex-1">
@@ -335,7 +335,7 @@ useEffect(() => {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-gray-800">Alertes Importantes</h3>
-              <button className="text-blue-600 text-sm font-medium">Tout marquer comme lu</button>
+              <button className="text-indigo-600 text-sm font-medium">Tout marquer comme lu</button>
             </div>
             <div className="space-y-4">
               {currentData.alerts.length > 0 ? (
@@ -393,14 +393,6 @@ useEffect(() => {
         return <MapComponent />
       case 'Pushcart':
         return <PushcartManagement />
-        //   filters={{
-        //     start_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        //     end_date: new Date().toISOString().split('T')[0],
-        //     zone: '',
-        //     pushcard_type: ''
-        //   }} 
-        //   viewType="both" 
-        // />;
       default:
         return (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
@@ -417,7 +409,7 @@ useEffect(() => {
             </p>
             <button 
               onClick={() => setActiveTab('dashboard')}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
             >
               Retour au tableau de bord
             </button>
@@ -427,15 +419,13 @@ useEffect(() => {
   };
 
   const menuItems = [
-    { id: 'dashboard', icon: Home, label: 'Dashboard', color: 'text-blue-600' },
+    { id: 'dashboard', icon: Home, label: 'Dashboard', color: 'text-indigo-600' },
     { id: 'points-vente', icon: MapPin, label: 'Distributeurs', color: 'text-green-600' },
     { id: 'vendeurs-ambulants', icon: Bike, label: 'Bikers', color: 'text-amber-600' },
     { id: 'Pushcart', icon: Bike, label: 'Pushcart', color: 'text-yellow-600' },
     { id: 'stocks', icon: Package, label: 'Gestion Stocks', color: 'text-orange-600' },
     { id: 'commandes', icon: ShoppingCart, label: 'Commandes', color: 'text-purple-600' },
     { id: 'utilisateurs', icon: Users, label: 'Utilisateurs', color: 'text-indigo-600' },
-    // { id: 'jetons', icon: Coins, label: 'Système Jetons', color: 'text-yellow-600' },
-    // { id: 'contentieux', icon: Scale, label: 'Contentieux', color: 'text-red-600' },
     { id: 'rapports', icon: BarChart3, label: 'Rapports', color: 'text-teal-600' },
     { id: 'cartes', icon: Map, label: 'Cartes', color: 'text-cyan-600' },
     { id: 'parametres', icon: Settings, label: 'Paramètres', color: 'text-gray-600' }
@@ -444,9 +434,9 @@ useEffect(() => {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="flex items-center space-x-2">
-          <Loader2 className="animate-spin text-blue-600" size={24} />
-          <span className="text-gray-600">Chargement...</span>
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+          <span className="text-gray-600">Chargement du tableau de bord...</span>
         </div>
       </div>
     );
@@ -454,14 +444,112 @@ useEffect(() => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className={`fixed inset-y-0 left-0 z-50 bg-white shadow-lg transition-all duration-300 ease-in-out ${
+      {/* Mobile Header */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white shadow-md p-4 flex items-center justify-between">
+        <div className="flex items-center">
+          <button onClick={() => setMobileMenuOpen(true)} className="mr-3 p-1">
+            <Menu size={24} className="text-gray-700" />
+          </button>
+          <div className="flex items-center">
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mr-2">
+              <span className="text-white font-bold">LT</span>
+            </div>
+            <h1 className="text-lg font-bold text-gray-800">LanfiaTech</h1>
+          </div>
+        </div>
+        
+        <div className="flex items-center space-x-3">
+          <button 
+            onClick={() => setNotificationsOpen(!notificationsOpen)}
+            className="p-2 text-gray-600 hover:text-gray-800 rounded-lg transition-colors relative"
+          >
+            <Bell size={20} />
+            {unreadNotifications > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                {unreadNotifications}
+              </span>
+            )}
+          </button>
+          
+          <div className="w-8 h-8 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
+            {getUserInitials()}
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50">
+          <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-lg">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <div className="flex items-center">
+                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mr-2">
+                  <span className="text-white font-bold">LT</span>
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-gray-800">LanfiaTech</h1>
+                  <p className="text-xs text-gray-500">Admin Panel</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <nav className="flex-1 p-4 space-y-1 overflow-y-auto h-[calc(100%-120px)]">
+              {menuItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center space-x-3 p-3 rounded-lg transition-all ${
+                    activeTab === item.id ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <item.icon size={20} className={`flex-shrink-0 ${activeTab === item.id ? item.color : 'text-gray-500'}`} />
+                  <span className={`${activeTab === item.id ? 'font-medium' : 'font-normal'}`}>
+                    {item.label}
+                  </span>
+                </button>
+              ))}
+            </nav>
+
+            <div className="p-4 border-t border-gray-200">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-medium">
+                  {getUserInitials()}
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-800">{getUserDisplayName()}</p>
+                  <p className="text-xs text-gray-500">{user?.email || 'admin@lanfiatech.com'}</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  title="Déconnexion"
+                >
+                  <LogOut size={20} className="text-gray-600" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Sidebar */}
+      <div className={`hidden lg:block fixed inset-y-0 left-0 z-40 bg-white shadow-lg transition-all duration-300 ease-in-out ${
         sidebarOpen ? 'w-64' : 'w-20'
       }`}>
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between p-4 border-b border-gray-200">
             {sidebarOpen ? (
               <div className="flex items-center">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mr-2">
+                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mr-2">
                   <span className="text-white font-bold">LT</span>
                 </div>
                 <div>
@@ -470,7 +558,7 @@ useEffect(() => {
                 </div>
               </div>
             ) : (
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mx-auto">
+              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mx-auto">
                 <span className="text-white font-bold">LT</span>
               </div>
             )}
@@ -488,7 +576,7 @@ useEffect(() => {
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
                 className={`w-full flex items-center space-x-3 p-3 rounded-lg transition-all ${
-                  activeTab === item.id ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+                  activeTab === item.id ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-100'
                 } ${sidebarOpen ? 'justify-start' : 'justify-center'}`}
               >
                 <item.icon size={20} className={`flex-shrink-0 ${activeTab === item.id ? item.color : 'text-gray-500'}`} />
@@ -503,7 +591,7 @@ useEffect(() => {
 
           <div className="p-4 border-t border-gray-200">
             <div className={`flex items-center ${sidebarOpen ? 'space-x-3' : 'justify-center'}`}>
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-medium">
+              <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-medium">
                 {getUserInitials()}
               </div>
               {sidebarOpen && (
@@ -526,8 +614,8 @@ useEffect(() => {
         </div>
       </div>
 
-      <div className={`transition-all duration-300 ease-in-out ${sidebarOpen ? 'ml-64' : 'ml-20'}`}>
-        <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
+      <div className={`transition-all duration-300 ease-in-out ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'} lg:pt-0 pt-16`}>
+        <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10 hidden lg:block">
           <div className="flex items-center justify-between p-4">
             <div>
               <h2 className="text-xl font-bold text-gray-800">
@@ -559,7 +647,7 @@ useEffect(() => {
                           setPosDropdownOpen(false);
                         }}
                         className={`w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md ${
-                          selectedPOS?.pos_id === null ? 'bg-blue-50 text-blue-600' : ''
+                          selectedPOS?.pos_id === null ? 'bg-indigo-50 text-indigo-600' : ''
                         }`}
                       >
                         Total Général
@@ -572,7 +660,7 @@ useEffect(() => {
                             setPosDropdownOpen(false);
                           }}
                           className={`w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md ${
-                            selectedPOS?.pos_id === pos.pos_id ? 'bg-blue-50 text-blue-600' : ''
+                            selectedPOS?.pos_id === pos.pos_id ? 'bg-indigo-50 text-indigo-600' : ''
                           }`}
                         >
                           {pos.pos_name}
@@ -588,7 +676,7 @@ useEffect(() => {
                 <input 
                   type="text" 
                   placeholder="Rechercher..." 
-                  className="pl-10 pr-4 py-2 w-64 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="pl-10 pr-4 py-2 w-64 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                 />
               </div>
               
@@ -609,12 +697,12 @@ useEffect(() => {
                   <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-20">
                     <div className="p-3 border-b border-gray-200 flex justify-between items-center">
                       <h3 className="font-medium">Notifications</h3>
-                      <button className="text-blue-600 text-sm">Marquer tout comme lu</button>
+                      <button className="text-indigo-600 text-sm">Marquer tout comme lu</button>
                     </div>
                     <div className="max-h-96 overflow-y-auto">
                       {notifications.length > 0 ? (
                         notifications.map(notification => (
-                          <div key={notification.id} className={`p-3 border-b border-gray-100 hover:bg-gray-50 ${!notification.is_read ? 'bg-blue-50' : ''}`}>
+                          <div key={notification.id} className={`p-3 border-b border-gray-100 hover:bg-gray-50 ${!notification.is_read ? 'bg-indigo-50' : ''}`}>
                             <div className="flex justify-between">
                               <p className="font-medium text-sm">{notification.type}</p>
                               <p className="text-xs text-gray-500 flex items-center">
@@ -630,14 +718,14 @@ useEffect(() => {
                       )}
                     </div>
                     <div className="p-3 text-center border-t border-gray-200">
-                      <button className="text-blue-600 text-sm font-medium">Voir toutes les notifications</button>
+                      <button className="text-indigo-600 text-sm font-medium">Voir toutes les notifications</button>
                     </div>
                   </div>
                 )}
               </div>
               
               <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                <div className="w-8 h-8 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
                   {getUserInitials()}
                 </div>
                 <button 
@@ -652,10 +740,45 @@ useEffect(() => {
           </div>
         </header>
 
-        <main className="p-6">
+        <main className="p-4 lg:p-6">
           {renderActiveContent()}
         </main>
       </div>
+
+      {/* Mobile Notifications Panel */}
+      {notificationsOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50" onClick={() => setNotificationsOpen(false)}>
+          <div className="absolute right-0 top-0 h-full w-80 bg-white" onClick={e => e.stopPropagation()}>
+            <div className="p-3 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="font-medium">Notifications</h3>
+              <button 
+                className="p-1 rounded-full hover:bg-gray-100"
+                onClick={() => setNotificationsOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="h-full overflow-y-auto">
+              {notifications.length > 0 ? (
+                notifications.map(notification => (
+                  <div key={notification.id} className={`p-3 border-b border-gray-100 hover:bg-gray-50 ${!notification.is_read ? 'bg-indigo-50' : ''}`}>
+                    <div className="flex justify-between">
+                      <p className="font-medium text-sm">{notification.type}</p>
+                      <p className="text-xs text-gray-500 flex items-center">
+                        <Clock size={12} className="mr-1" />
+                        {formatTimeAgo(new Date(notification.created_at))}
+                      </p>
+                    </div>
+                    <p className="text-sm text-gray-600">{notification.message}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="p-3 text-sm text-gray-600">Aucune notification</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

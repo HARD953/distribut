@@ -712,7 +712,7 @@ const OrderManagement = () => {
                       <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Quantité</th>
                       <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Prix Unitaire</th>
                       <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Total</th>
-                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Quantité Affèctée</th>
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Quantité Affècte</th>
                       <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Actions</th>
                     </tr>
                   </thead>

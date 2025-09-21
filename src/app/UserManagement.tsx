@@ -986,9 +986,11 @@ const handleSubmit = async (e: React.FormEvent) => {
 
         let res;
         if (selectedSupplier) {
-          res = await apiService.updateResource('suppliers', selectedSupplier.id, formDataToSend);
+          // Utilisez updateResource avec isFormData: true
+          res = await apiService.updateResource('/suppliers', selectedSupplier.id, formDataToSend, true);
         } else {
-          res = await apiService.createSupplier(formDataToSend);
+          // Utilisez createResource avec isFormData: true au lieu de createSupplier
+          res = await apiService.createResource('/suppliers', formDataToSend, true);
         }
 
         if (!res.ok) {
@@ -1006,7 +1008,6 @@ const handleSubmit = async (e: React.FormEvent) => {
         }
       }
     };
-
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">

@@ -5,7 +5,8 @@ import {
   AlertTriangle, TrendingUp, TrendingDown, 
   Eye, Download, Upload, RefreshCw, Settings,
   BarChart3, ShoppingCart, Truck, Clock, X,
-  Save, User, MapPin, Calendar, DollarSign, Image as ImageIcon
+  Save, User, MapPin, Calendar, DollarSign, Image as ImageIcon,
+  List
 } from 'lucide-react';
 import { apiService } from './ApiService';
 
@@ -23,10 +24,9 @@ interface Product {
   created_at: string;
 }
 
-// Dans l'interface ProductVariant, assurez-vous que product_id est correctement typé
 interface ProductVariant {
   id: string;
-  product_id: string;  // Ce champ doit être présent
+  product_id: string;
   product: { id: string; name: string };
   format: { id: number; name: string; description?: string };
   current_stock: number;
@@ -34,12 +34,22 @@ interface ProductVariant {
   max_stock: number;
   price: number;
   barcode: string;
-  image?: string | File; // Peut être soit une string (URL) soit un File
+  image?: string | File;
 }
+
 interface ProductFormat {
   id: number;
   name: string;
   description?: string;
+}
+
+interface Category {
+  id: number;
+  name: string;
+  description: string;
+  image: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface StockMovement {
@@ -81,16 +91,10 @@ interface NewFormat {
 }
 
 interface NewMovement {
-  product_id: string;
-  product_variant_id?: string;
+  product_variant_id: string | '';
   type: 'entree' | 'sortie' | 'ajustement' | '';
   quantity: number;
   reason: string;
-}
-
-interface Category {
-  id: number;
-  name: string;
 }
 
 interface Supplier {
@@ -124,7 +128,7 @@ interface ApiOverviewResponse {
 
 const StockManagement = () => {
   const [activeView, setActiveView] = useState<'overview' | 'products' | 'movements' | 'analytics'>('overview');
-  const [activeProductTab, setActiveProductTab] = useState<'list' | 'variants' | 'formats'>('list');
+  const [activeProductTab, setActiveProductTab] = useState<'list' | 'variants' | 'formats' | 'categories'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -133,13 +137,14 @@ const StockManagement = () => {
   const [showAddVariantModal, setShowAddVariantModal] = useState(false);
   const [showEditVariantModal, setShowEditVariantModal] = useState(false);
   const [showAddFormatModal, setShowAddFormatModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [variants, setVariants] = useState<ProductVariant[]>([]);
   const [formats, setFormats] = useState<ProductFormat[]>([]);
-  const [movements, setMovements] = useState<StockMovement[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [movements, setMovements] = useState<StockMovement[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [pointsOfSale, setPointsOfSale] = useState<PointOfSale[]>([]);
   const [overviewData, setOverviewData] = useState<OverviewData>({
@@ -171,8 +176,13 @@ const StockManagement = () => {
     name: '',
     description: ''
   });
+  const [newCategory, setNewCategory] = useState({
+    name: '',
+    description: '',
+    image: null as File | null
+  });
   const [newMovement, setNewMovement] = useState<NewMovement>({
-    product_id: '',
+    product_variant_id: '',
     type: '',
     quantity: 0,
     reason: ''
@@ -214,7 +224,6 @@ const StockManagement = () => {
       const suppliersData = await suppliersResponse.json();
       const posData = await posResponse.json();
 
-      // Correction ici pour utiliser les données cumulative
       setOverviewData({
         total_products: overviewData.cumulative?.total_products || 0,
         stock_value: overviewData.cumulative?.stock_value || 0,
@@ -286,6 +295,14 @@ const StockManagement = () => {
       return nameMatch || descriptionMatch;
     });
   }, [formats, searchTerm]);
+
+  const filteredCategories = useMemo(() => {
+    return categories.filter(category => {
+      const nameMatch = category.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const descriptionMatch = category.description?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false;
+      return nameMatch || descriptionMatch;
+    });
+  }, [categories, searchTerm]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, isVariant = false) => {
     if (e.target.files && e.target.files[0]) {
@@ -390,6 +407,33 @@ const StockManagement = () => {
     }
   };
 
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setError(null);
+      
+      const formData = new FormData();
+      formData.append('name', newCategory.name);
+      formData.append('description', newCategory.description);
+      if (newCategory.image) {
+        formData.append('image', newCategory.image);
+      }
+      
+      const response = await apiService.post('/categories/', formData, true);
+      const createdCategory = await response.json();
+      
+      setCategories(prev => [...prev, createdCategory]);
+      setNewCategory({
+        name: '',
+        description: '',
+        image: null
+      });
+      setShowCategoryModal(false);
+    } catch (error: any) {
+      setError(error.message || 'Erreur lors de l\'ajout de la catégorie');
+    }
+  };
+
   const handleDeleteProduct = async (id: string) => {
     if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce produit ?')) return;
     try {
@@ -427,16 +471,26 @@ const StockManagement = () => {
     }
   };
 
+  const handleDeleteCategory = async (id: number) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette catégorie ?')) return;
+    try {
+      setError(null);
+      await apiService.delete(`/categories/${id}/`);
+      setCategories(prev => prev.filter(c => c.id !== id));
+    } catch (error: any) {
+      setError(error.message || 'Erreur lors de la suppression de la catégorie');
+    }
+  };
+
   const handleEditProduct = (product: Product) => {
     setSelectedProduct(product);
     setShowEditModal(true);
   };
 
-  // Dans la fonction handleEditVariant, assurez-vous que product_id est bien passé
   const handleEditVariant = (variant: ProductVariant) => {
     setSelectedVariant({
       ...variant,
-      product_id: variant.product_id || variant.product.id // Utilisez product_id s'il existe, sinon utilisez product.id
+      product_id: variant.product_id || variant.product.id
     });
     setShowEditVariantModal(true);
   };
@@ -468,48 +522,67 @@ const StockManagement = () => {
     }
   };
 
-
   const handleUpdateVariant = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!selectedVariant) return;
-  try {
-    setError(null);
-    
-    const formData = new FormData();
-    formData.append('product_id', selectedVariant.product_id); // Assurez-vous que product_id est bien défini
-    formData.append('format_id', String(selectedVariant.format.id));
-    formData.append('current_stock', String(selectedVariant.current_stock));
-    formData.append('min_stock', String(selectedVariant.min_stock));
-    formData.append('max_stock', String(selectedVariant.max_stock));
-    formData.append('price', String(selectedVariant.price));
-    formData.append('barcode', selectedVariant.barcode);
-    
-    if (selectedVariant.image instanceof File) {
-      formData.append('image', selectedVariant.image);
+    e.preventDefault();
+    if (!selectedVariant) return;
+    try {
+      setError(null);
+      
+      const formData = new FormData();
+      formData.append('product_id', selectedVariant.product_id);
+      formData.append('format_id', String(selectedVariant.format.id));
+      formData.append('current_stock', String(selectedVariant.current_stock));
+      formData.append('min_stock', String(selectedVariant.min_stock));
+      formData.append('max_stock', String(selectedVariant.max_stock));
+      formData.append('price', String(selectedVariant.price));
+      formData.append('barcode', selectedVariant.barcode);
+      
+      if (selectedVariant.image instanceof File) {
+        formData.append('image', selectedVariant.image);
+      }
+      
+      const response = await apiService.put(`/product-variants/${selectedVariant.id}/`, formData, true);
+      const updatedVariant = await response.json();
+      
+      setVariants(prev => prev.map(v => v.id === updatedVariant.id ? updatedVariant : v));
+      setShowEditVariantModal(false);
+      setSelectedVariant(null);
+      await fetchData();
+    } catch (error: any) {
+      setError(error.message || 'Erreur lors de la mise à jour de la variante');
     }
-    
-    const response = await apiService.put(`/product-variants/${selectedVariant.id}/`, formData, true);
-    const updatedVariant = await response.json();
-    
-    setVariants(prev => prev.map(v => v.id === updatedVariant.id ? updatedVariant : v));
-    setShowEditVariantModal(false);
-    setSelectedVariant(null);
-    await fetchData();
-  } catch (error: any) {
-    setError(error.message || 'Erreur lors de la mise à jour de la variante');
-  }
-};
+  };
 
   const handleAddMovement = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setError(null);
+      
+      if (!newMovement.product_variant_id) {
+        throw new Error('Veuillez sélectionner une variante de produit');
+      }
+      if (!newMovement.type) {
+        throw new Error('Veuillez sélectionner un type de mouvement');
+      }
+      if (newMovement.quantity <= 0) {
+        throw new Error('La quantité doit être supérieure à 0');
+      }
+      if (!newMovement.reason.trim()) {
+        throw new Error('Veuillez spécifier une raison');
+      }
+
       const response = await apiService.post('/stock-movements/', newMovement);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Erreur lors de l\'ajout du mouvement');
+      }
+      
       const createdMovement = await response.json();
       setMovements(prev => [createdMovement, ...prev]);
       
       setNewMovement({
-        product_id: '',
+        product_variant_id: '',
         type: '',
         quantity: 0,
         reason: ''
@@ -676,7 +749,8 @@ const StockManagement = () => {
           {[
             { id: 'list', label: 'Liste des Produits', icon: Package },
             { id: 'variants', label: 'Variantes', icon: Package },
-            { id: 'formats', label: 'Formats', icon: Package }
+            { id: 'formats', label: 'Formats', icon: Package },
+            { id: 'categories', label: 'Catégories', icon: List }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -724,13 +798,15 @@ const StockManagement = () => {
                 if (activeProductTab === 'list') setShowAddModal(true);
                 if (activeProductTab === 'variants') setShowAddVariantModal(true);
                 if (activeProductTab === 'formats') setShowAddFormatModal(true);
+                if (activeProductTab === 'categories') setShowCategoryModal(true);
               }}
               className="flex items-center space-x-2 px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-medium shadow-lg"
             >
               <Plus size={18} />
               <span>
                 {activeProductTab === 'list' ? 'Nouveau Produit' : 
-                 activeProductTab === 'variants' ? 'Nouvelle Variante' : 'Nouveau Format'}
+                 activeProductTab === 'variants' ? 'Nouvelle Variante' : 
+                 activeProductTab === 'formats' ? 'Nouveau Format' : 'Nouvelle Catégorie'}
               </span>
             </button>
           </div>
@@ -929,6 +1005,73 @@ const StockManagement = () => {
                   <tr>
                     <td colSpan={3} className="px-6 py-4 text-center text-gray-500">
                       {formats.length === 0 ? 'Aucun format disponible' : 'Aucun format correspondant à votre recherche'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeProductTab === 'categories' && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
+          <div className="p-6 flex justify-between items-center">
+            <h3 className="text-xl font-bold text-gray-800">Gestion des Catégories</h3>
+            <button 
+              onClick={() => setShowCategoryModal(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              <Plus size={16} />
+              <span>Nouvelle Catégorie</span>
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Nom</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Description</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Image</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredCategories.map((category, index) => (
+                  <tr key={category.id} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">{category.name}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{category.description || 'N/A'}</td>
+                    <td className="px-6 py-4">
+                      {category.image ? (
+                        <div className="w-12 h-12 rounded-lg overflow-hidden">
+                          <img 
+                            src={category.image} 
+                            alt={category.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center">
+                          <ImageIcon className="text-gray-400" size={20} />
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-3">
+                        <button 
+                          onClick={() => handleDeleteCategory(category.id)}
+                          className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filteredCategories.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
+                      {categories.length === 0 ? 'Aucune catégorie disponible' : 'Aucune catégorie correspondant à votre recherche'}
                     </td>
                   </tr>
                 )}
@@ -1379,7 +1522,7 @@ const StockManagement = () => {
                     min="0"
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={selectedVariant.current_stock}
-                    onChange={(e) => setSelectedVariant({...selectedVariant, current_stock: Number(e.target.value) || 0})}
+                    onChange={(e) => setSelectedVariant(prev => prev ? {...prev, current_stock: Number(e.target.value) || 0} : null)}
                   />
                 </div>
                 <div>
@@ -1390,40 +1533,40 @@ const StockManagement = () => {
                     min="0"
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={selectedVariant.min_stock}
-                    onChange={(e) => setSelectedVariant({...selectedVariant, min_stock: Number(e.target.value) || 0})}
+                    onChange={(e) => setSelectedVariant(prev => prev ? {...prev, min_stock: Number(e.target.value) || 0} : null)}
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Stock maximum *</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={selectedVariant.max_stock}
-                    onChange={(e) => setSelectedVariant({...selectedVariant, max_stock: Number(e.target.value) || 0})}
-                  />
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={selectedVariant.max_stock}
+                      onChange={(e) => setSelectedVariant(prev => prev ? {...prev, max_stock: Number(e.target.value) || 0} : null)}
+                    />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Prix (₣) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={selectedVariant.price}
-                    onChange={(e) => setSelectedVariant({...selectedVariant, price: Number(e.target.value) || 0})}
-                  />
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={selectedVariant.price}
+                      onChange={(e) => setSelectedVariant(prev => prev ? {...prev, price: Number(e.target.value) || 0} : null)}
+                    />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Code-barres</label>
-                  <input
-                    type="text"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={selectedVariant.barcode}
-                    onChange={(e) => setSelectedVariant({...selectedVariant, barcode: e.target.value})}
-                  />
+                    <input
+                      type="text"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={selectedVariant.barcode}
+                      onChange={(e) => setSelectedVariant(prev => prev ? {...prev, barcode: e.target.value} : null)}
+                    />
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Image de la variante</label>
@@ -1531,7 +1674,7 @@ const StockManagement = () => {
                     required
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={selectedProduct.name}
-                    onChange={(e) => setSelectedProduct({...selectedProduct, name: e.target.value})}
+                    onChange={(e) => setSelectedProduct(prev => prev ? {...prev, name: e.target.value} : null)}
                   />
                 </div>
                 <div>
@@ -1557,7 +1700,7 @@ const StockManagement = () => {
                     required
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={selectedProduct.sku}
-                    onChange={(e) => setSelectedProduct({...selectedProduct, sku: e.target.value.toUpperCase()})}
+                    onChange={(e) => setSelectedProduct(prev => prev ? {...prev, sku: e.target.value.toUpperCase()} : null)}
                   />
                 </div>
                 <div>
@@ -1650,7 +1793,7 @@ const StockManagement = () => {
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   rows={3}
                   value={selectedProduct.description || ''}
-                  onChange={(e) => setSelectedProduct({...selectedProduct, description: e.target.value})}
+                  onChange={(e) => setSelectedProduct(prev => prev ? {...prev, description: e.target.value} : null)}
                 />
               </div>
               <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
@@ -1673,76 +1816,156 @@ const StockManagement = () => {
         </Modal>
 
         {/* Add Movement Modal */}
-        <Modal isOpen={showMovementModal} onClose={() => setShowMovementModal(false)} title="Nouveau mouvement de Stock">
-          <form onSubmit={handleAddMovement} className="space-y-6">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Produit *</label>
-                <select
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newMovement.product_id}
-                  onChange={(e) => setNewMovement({...newMovement, product_id: e.target.value})}
-                >
-                  <option value="">Sélectionner un produit</option>
-                  {products.map(product => (
-                    <option key={product.id} value={product.id}>{product.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Type *</label>
-                <select
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newMovement.type}
-                  onChange={(e) => setNewMovement({...newMovement, type: e.target.value as any})}
-                >
-                  <option value="">Sélectionner le type</option>
-                  <option value="entree">Entrée</option>
-                  <option value="sortie">Sortie</option>
-                  <option value="ajustement">Ajustement</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Quantité *</label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newMovement.quantity}
-                  onChange={(e) => setNewMovement({...newMovement, quantity: Number(e.target.value) || 0})}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Raison *</label>
-                <input
-                  type="text"
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={newMovement.reason}
-                  onChange={(e) => setNewMovement({...newMovement, reason: e.target.value})}
-                />
-              </div>
-            </div>
-            <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => setShowMovementModal(false)}
-                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium"
-              >
-                Annuler
-              </button>
-              <button
-                type="submit"
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-              >
-                Ajouter le mouvement
-              </button>
-            </div>
-          </form>
-        </Modal>
+
+<Modal isOpen={showMovementModal} onClose={() => setShowMovementModal(false)} title="Nouveau mouvement de Stock">
+  <form onSubmit={handleAddMovement} className="space-y-6">
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-2">Variante de produit *</label>
+        <select
+          required
+          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={newMovement.product_variant_id}
+          onChange={(e) => setNewMovement({...newMovement, product_variant_id: e.target.value})}
+        >
+          <option value="">Sélectionner une variante</option>
+          {variants.map(variant => (
+            <option key={variant.id} value={variant.id}>
+              {variant.product?.name} - {variant.format?.name} (Stock: {variant.current_stock})
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-2">Type *</label>
+        <select
+          required
+          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={newMovement.type}
+          onChange={(e) => setNewMovement({...newMovement, type: e.target.value as any})}
+        >
+          <option value="">Sélectionner le type</option>
+          <option value="entree">Entrée</option>
+          <option value="sortie">Sortie</option>
+          <option value="ajustement">Ajustement</option>
+        </select>
+      </div>
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-2">Quantité *</label>
+        <input
+          type="number"
+          required
+          min="1"
+          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={newMovement.quantity}
+          onChange={(e) => setNewMovement({...newMovement, quantity: Number(e.target.value) || 0})}
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-2">Raison *</label>
+        <input
+          type="text"
+          required
+          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={newMovement.reason}
+          onChange={(e) => setNewMovement({...newMovement, reason: e.target.value})}
+        />
+      </div>
+    </div>
+    <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+      <button
+        type="button"
+        onClick={() => setShowMovementModal(false)}
+        className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium"
+      >
+        Annuler
+      </button>
+      <button
+        type="submit"
+        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+      >
+        Ajouter le mouvement
+      </button>
+    </div>
+  </form>
+</Modal>
+
+<Modal isOpen={showCategoryModal} onClose={() => setShowCategoryModal(false)} title="Ajouter une nouvelle catégorie">
+  <form onSubmit={handleAddCategory} className="space-y-6">
+    <div>
+      <label className="block text-sm font-semibold text-gray-700 mb-2">Nom de la catégorie *</label>
+      <input
+        type="text"
+        required
+        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+        value={newCategory.name}
+        onChange={(e) => setNewCategory({...newCategory, name: e.target.value})}
+      />
+    </div>
+    <div>
+      <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+      <textarea
+        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+        rows={3}
+        value={newCategory.description}
+        onChange={(e) => setNewCategory({...newCategory, description: e.target.value})}
+      />
+    </div>
+    <div>
+      <label className="block text-sm font-semibold text-gray-700 mb-2">Image de la catégorie</label>
+      <div className="flex items-center space-x-4">
+        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100">
+          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+            <Upload className="w-8 h-8 mb-3 text-gray-400" />
+            <p className="mb-2 text-sm text-gray-500">Cliquez pour télécharger</p>
+            <p className="text-xs text-gray-500">PNG, JPG, JPEG (MAX. 5MB)</p>
+          </div>
+          <input 
+            type="file" 
+            className="hidden" 
+            onChange={(e) => {
+              if (e.target.files && e.target.files[0]) {
+                setNewCategory({...newCategory, image: e.target.files[0]});
+              }
+            }}
+            accept="image/*"
+          />
+        </label>
+        {newCategory.image && (
+          <div className="relative w-16 h-16 rounded-lg overflow-hidden">
+            <img
+              src={URL.createObjectURL(newCategory.image)}
+              alt="Preview"
+              className="w-full h-full object-cover"
+            />
+            <button
+              type="button"
+              onClick={() => setNewCategory({...newCategory, image: null})}
+              className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+    <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+      <button
+        type="button"
+        onClick={() => setShowCategoryModal(false)}
+        className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium"
+      >
+        Annuler
+      </button>
+      <button
+        type="submit"
+        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+      >
+        Ajouter la catégorie
+      </button>
+    </div>
+  </form>
+</Modal>
       </div>
     </div>
   );
