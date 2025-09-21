@@ -1133,7 +1133,7 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
                       {purchase.photo ? (
                         <div className="h-10 w-10 rounded-md overflow-hidden bg-gray-100 shadow-sm">
                           <img 
-                            src={`https://backendsupply.onrender.com/api${purchase.photo}`} 
+                            src={`https://api.pushtrack360.com/api${purchase.photo}`} 
                             alt={`Achat ${purchase.id}`}
                             className="h-full w-full object-cover"
                           />

@@ -236,26 +236,26 @@ const OrderManagement = () => {
       try {
         setError(null);
         // Fetch Orders
-        const ordersRes = await fetch('https://backendsupply.onrender.com/api/orders/', { headers });
+        const ordersRes = await fetch('https://api.pushtrack360.com/api/orders/', { headers });
         if (!ordersRes.ok) throw new Error('Échec de la récupération des commandes');
         const ordersData = await ordersRes.json();
         setOrders(ordersData);
         setFilteredOrders(ordersData);
 
         // Fetch Product Variants
-        const variantsRes = await fetch('https://backendsupply.onrender.com/api/product-variants/', { headers });
+        const variantsRes = await fetch('https://api.pushtrack360.com/api/product-variants/', { headers });
         if (!variantsRes.ok) throw new Error('Échec de la récupération des variantes de produits');
         const variantsData = await variantsRes.json();
         setProductVariants(variantsData);
 
         // Fetch Points of Sale
-        const pointsOfSaleRes = await fetch('https://backendsupply.onrender.com/api/points-vente/', { headers });
+        const pointsOfSaleRes = await fetch('https://api.pushtrack360.com/api/points-vente/', { headers });
         if (!pointsOfSaleRes.ok) throw new Error('Échec de la récupération des points de vente');
         const pointsOfSaleData = await pointsOfSaleRes.json();
         setPointsOfSale(pointsOfSaleData);
 
         // Fetch Mobile Vendors
-        const vendorsRes = await fetch('https://backendsupply.onrender.com/api/mobile-vendors/', { headers });
+        const vendorsRes = await fetch('https://api.pushtrack360.com/api/mobile-vendors/', { headers });
         if (vendorsRes.ok) {
           const vendorsData = await vendorsRes.json();
           setMobileVendors(vendorsData);
@@ -365,7 +365,7 @@ const OrderManagement = () => {
     }
     try {
       setError(null);
-      const res = await fetch(`https://backendsupply.onrender.com/api/orders/${orderId}/`, {
+      const res = await fetch(`https://api.pushtrack360.com/api/orders/${orderId}/`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -393,7 +393,7 @@ const OrderManagement = () => {
     }
     try {
       setError(null);
-      const res = await fetch(`https://backendsupply.onrender.com/api/orders/${orderId}/`, {
+      const res = await fetch(`https://api.pushtrack360.com/api/orders/${orderId}/`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -417,7 +417,7 @@ const OrderManagement = () => {
     try {
       setError(null);
       const promises = selectedOrders.map(orderId => 
-        fetch(`https://backendsupply.onrender.com/api/orders/${orderId}/`, {
+        fetch(`https://api.pushtrack360.com/api/orders/${orderId}/`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -477,7 +477,7 @@ const OrderManagement = () => {
         throw new Error("La quantité affectée ne peut pas dépasser la quantité commandée");
       }
 
-      const response = await fetch('https://backendsupply.onrender.com/api/vendor-activities/', {
+      const response = await fetch('https://api.pushtrack360.com/api/vendor-activities/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -580,7 +580,7 @@ const OrderManagement = () => {
       };
 
       // Envoi de la requête
-      const response = await fetch('https://backendsupply.onrender.com/api/orders/', {
+      const response = await fetch('https://api.pushtrack360.com/api/orders/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
