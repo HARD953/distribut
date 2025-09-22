@@ -47,39 +47,46 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     checkAuthStatus();
   }, []);
 
-  const checkAuthStatus = async () => {
-    try {
-      const token = localStorage.getItem("access");
-      if (!token) {
-        setIsLoading(false);
-        return;
-      }
+const checkAuthStatus = async () => {
+  try {
+    const token = localStorage.getItem("access");
+    if (!token) {
+      setIsLoading(false);
+      return;
+    }
 
-      const response = await apiService.get("/dashboard/");
-      if (response.ok) {
-        const storedUser = localStorage.getItem("user_data");
-        if (storedUser) {
-          setUser(JSON.parse(storedUser));
-        } else {
-          const userResponse = await apiService.get("/users/");
-          if (userResponse.ok) {
-            const userData: User = await userResponse.json();
-            localStorage.setItem("user_data", JSON.stringify(userData));
-            setUser(userData);
-          }
-        }
+    // UTILISEZ UN ENDPOINT QUI EXISTE DANS VOTRE API
+    // Essayez d'abord /users/ qui existe dans ApiService
+    const response = await apiService.get("/users/");
+    
+    if (response.ok) {
+      const usersData = await response.json();
+      
+      // Si /users/ retourne une liste, prenez le premier user ou cherchez le current user
+      if (Array.isArray(usersData) && usersData.length > 0) {
+        const userData: User = usersData[0]; // ou trouvez l'user par ID
+        localStorage.setItem("user_data", JSON.stringify(userData));
+        setUser(userData);
+      } else if (usersData.id) {
+        // Si c'est un objet user direct
+        const userData: User = usersData;
+        localStorage.setItem("user_data", JSON.stringify(userData));
+        setUser(userData);
       } else {
-        localStorage.clear();
-        setUser(null);
+        throw new Error("Invalid user data format");
       }
-    } catch (err) {
-      console.error("Auth check failed:", err);
+    } else {
       localStorage.clear();
       setUser(null);
-    } finally {
-      setIsLoading(false);
     }
-  };
+  } catch (err) {
+    console.error("Auth check failed:", err);
+    localStorage.clear();
+    setUser(null);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const login = async (
     username: string,
@@ -162,3 +169,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     </AuthContext.Provider>
   );
 };
+
+
+
+

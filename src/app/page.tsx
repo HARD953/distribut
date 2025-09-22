@@ -101,7 +101,6 @@
 
 // export default App;
 
-
 "use client";
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -112,11 +111,19 @@ export default function HomePage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
 
+  // DEBUG
+  console.log('HomePage - user:', user, 'isLoading:', isLoading);
+
   useEffect(() => {
+    console.log('useEffect triggered');
+    
     if (!isLoading) {
+      console.log('Loading finished, user:', user);
       if (user) {
+        console.log('Redirecting to /dashboard');
         router.push('/dashboard');
       } else {
+        console.log('Redirecting to /login');
         router.push('/login');
       }
     }
@@ -127,7 +134,13 @@ export default function HomePage() {
       <div className="flex items-center space-x-2">
         <Loader2 className="animate-spin text-blue-600" size={24} />
         <span className="text-gray-600">Redirection...</span>
+        {/* DEBUG VISUEL */}
+        <div className="text-xs text-red-600 ml-4">
+          user: {user ? 'true' : 'false'}, loading: {isLoading ? 'true' : 'false'}
+        </div>
       </div>
     </div>
   );
 }
+
+
