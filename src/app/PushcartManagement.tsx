@@ -6,6 +6,7 @@ import {
   Download, Eye, MoreVertical, X, Plus, Loader2,
   ArrowLeft, ShoppingCart, Bike, RefreshCw
 } from 'lucide-react';
+
 import { useAuth } from './AuthContext';
 import { apiService } from './ApiService';
 
@@ -102,10 +103,37 @@ const PushcartManagement = () => {
     vendor: ''
   });
   
+  // États pour la pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  
   const [showFilters, setShowFilters] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [zones, setZones] = useState<string[]>([]);
   const [pushcardTypes, setPushcardTypes] = useState<string[]>([]);
+
+  // Calculs pour la pagination
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredPurchases.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredPurchases.length / itemsPerPage);
+
+  // Fonctions de pagination
+  const nextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const prevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const goToPage = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+  };
 
   // Charger les données initiales
   useEffect(() => {
@@ -116,6 +144,11 @@ const PushcartManagement = () => {
   useEffect(() => {
     filterPurchases();
   }, [filters, purchases]);
+
+  // Réinitialiser la page quand les filtres changent
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters]);
 
   // Fonction pour récupérer les achats
   const fetchPurchases = async () => {
@@ -275,6 +308,33 @@ const PushcartManagement = () => {
     document.body.removeChild(link);
   };
 
+  // Générer les numéros de page à afficher
+  const getPageNumbers = () => {
+    const pageNumbers = [];
+    const maxVisiblePages = 5;
+    
+    if (totalPages <= maxVisiblePages) {
+      // Afficher toutes les pages
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(i);
+      }
+    } else {
+      // Afficher un sous-ensemble de pages
+      let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+      let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+      
+      if (endPage - startPage + 1 < maxVisiblePages) {
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+      }
+      
+      for (let i = startPage; i <= endPage; i++) {
+        pageNumbers.push(i);
+      }
+    }
+    
+    return pageNumbers;
+  };
+
   return (
     <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 min-h-screen">
       <div className="mb-8">
@@ -292,7 +352,7 @@ const PushcartManagement = () => {
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-5 text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm opacity-90">Total des ventes</p>
+              <p className="text-sm opacity-90">Total des ventes (₣)</p>
               <p className="text-2xl font-bold mt-1">
                 {formatCurrency(purchases.reduce((sum, p) => sum + Number(p.total_sales_amount), 0))}
               </p>
@@ -540,7 +600,7 @@ const PushcartManagement = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredPurchases.map((purchase) => (
+                  {currentItems.map((purchase) => (
                     <tr key={purchase.id} className="hover:bg-blue-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="font-medium text-gray-900">{purchase.full_name}</div>
@@ -594,22 +654,64 @@ const PushcartManagement = () => {
               </table>
             </div>
             
-            {/* Pagination (optionnelle) */}
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+            {/* Pagination fonctionnelle */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="text-sm text-gray-700">
-                Affichage de <span className="font-medium">{filteredPurchases.length}</span> résultats
+                Affichage de <span className="font-medium">{indexOfFirstItem + 1}-{Math.min(indexOfLastItem, filteredPurchases.length)}</span> sur <span className="font-medium">{filteredPurchases.length}</span> résultats
               </div>
               
-              <div className="flex space-x-2">
+              <div className="flex items-center space-x-2">
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="5">5 par page</option>
+                  <option value="10">10 par page</option>
+                  <option value="20">20 par page</option>
+                  <option value="50">50 par page</option>
+                </select>
+                
                 <button
-                  className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 font-medium"
-                  disabled
+                  onClick={prevPage}
+                  disabled={currentPage === 1}
+                  className={`px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium ${
+                    currentPage === 1 
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
                 >
                   Précédent
                 </button>
+                
+                {/* Numéros de page */}
+                <div className="flex space-x-1">
+                  {getPageNumbers().map(pageNumber => (
+                    <button
+                      key={pageNumber}
+                      onClick={() => goToPage(pageNumber)}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium min-w-[40px] ${
+                        currentPage === pageNumber
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+                      }`}
+                    >
+                      {pageNumber}
+                    </button>
+                  ))}
+                </div>
+                
                 <button
-                  className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 font-medium"
-                  disabled
+                  onClick={nextPage}
+                  disabled={currentPage === totalPages}
+                  className={`px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium ${
+                    currentPage === totalPages 
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
                 >
                   Suivant
                 </button>
@@ -723,31 +825,30 @@ const PushcartManagement = () => {
                 </div>
                 
                 {/* Résumé */}
-
-                    <div className="mt-8 p-5 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl text-white">
-                    <h3 className="font-medium mb-4 flex items-center">
-                        <BarChart3 size={18} className="mr-2" />
-                        Résumé de la vente
-                    </h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-white/20 p-3 rounded-lg">
-                        <p className="text-sm opacity-90">Montant total</p>
-                        <p className="font-bold text-lg">{formatCurrency(purchaseDetails.statistics.grand_total_amount)}</p>
-                        </div>
-                        <div className="bg-white/20 p-3 rounded-lg">
-                        <p className="text-sm opacity-90">Quantité totale</p>
-                        <p className="font-bold text-lg">{purchaseDetails.statistics.grand_total_quantity}</p>
-                        </div>
-                        <div className="bg-white/20 p-3 rounded-lg">
-                        <p className="text-sm opacity-90">Produits différents</p>
-                        <p className="font-bold text-lg">{purchaseDetails.statistics.total_products}</p>
-                        </div>
-                        <div className="bg-white/20 p-3 rounded-lg">
-                        <p className="text-sm opacity-90">Variantes différentes</p>
-                        <p className="font-bold text-lg">{purchaseDetails.statistics.total_variants}</p>
-                        </div>
+                <div className="mt-8 p-5 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl text-white">
+                  <h3 className="font-medium mb-4 flex items-center">
+                    <BarChart3 size={18} className="mr-2" />
+                    Résumé de la vente
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white/20 p-3 rounded-lg">
+                      <p className="text-sm opacity-90">Montant total</p>
+                      <p className="font-bold text-lg">{formatCurrency(purchaseDetails.statistics.grand_total_amount)}</p>
                     </div>
+                    <div className="bg-white/20 p-3 rounded-lg">
+                      <p className="text-sm opacity-90">Quantité totale</p>
+                      <p className="font-bold text-lg">{purchaseDetails.statistics.grand_total_quantity}</p>
                     </div>
+                    <div className="bg-white/20 p-3 rounded-lg">
+                      <p className="text-sm opacity-90">Produits différents</p>
+                      <p className="font-bold text-lg">{purchaseDetails.statistics.total_products}</p>
+                    </div>
+                    <div className="bg-white/20 p-3 rounded-lg">
+                      <p className="text-sm opacity-90">Variantes différentes</p>
+                      <p className="font-bold text-lg">{purchaseDetails.statistics.total_variants}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
             

@@ -33,26 +33,35 @@ export interface MapCustomer {
   total_quantity: number;
   sales_count: number;
   sales_details: SaleDetail[];
+  vendor_id: number;
+  vendor_name: string;
+  point_of_sale: string;
 }
 
 export interface VendorInfo {
-  id: number;
-  full_name: string;
+  vendor_id: number;
+  vendor_name: string;
   point_of_sale: string;
+  total_customers: number;
+  total_sales: number;
+  total_quantity: number;
 }
 
 export interface PeriodInfo {
   start_date: string;
   end_date: string;
+  period_type: string;
 }
 
 export interface MapResponse {
   period: PeriodInfo;
-  vendor: VendorInfo;
+  user_points_of_sale: string[];
+  vendors_summary: VendorInfo[];
   customers: MapCustomer[];
   total_customers: number;
   grand_total_sales: number;
   grand_total_quantity: number;
+  total_vendors: number;
 }
 
 export interface PointOfSale {
@@ -247,9 +256,9 @@ const MapComponent = () => {
     let csvContent = "";
     
     if (viewType === 'customers' || viewType === 'both') {
-      headers = "Nom, Téléphone, Zone, Base, Type de carte, Montant total, Quantité totale, Nombre de ventes\n";
+      headers = "Nom, Téléphone, Zone, Base, Type de carte, Vendeur, Point de vente, Montant total, Quantité totale, Nombre de ventes\n";
       csvContent = mapData?.customers.reduce((acc, customer) => {
-        return acc + `"${customer.full_name}", "${customer.phone}", "${customer.zone}", "${customer.base}", "${customer.pushcard_type}", ${customer.total_sales_amount}, ${customer.total_quantity}, ${customer.sales_count}\n`;
+        return acc + `"${customer.full_name}", "${customer.phone}", "${customer.zone}", "${customer.base}", "${customer.pushcard_type}", "${customer.vendor_name}", "${customer.point_of_sale}", ${customer.total_sales_amount}, ${customer.total_quantity}, ${customer.sales_count}\n`;
       }, headers) || headers;
     }
     
@@ -296,6 +305,79 @@ const MapComponent = () => {
   const totalCustomerSales = mapData?.grand_total_sales || 0;
   const totalPosRevenue = pointsOfSale.reduce((sum, pos) => sum + pos.turnover, 0);
   const totalOrders = pointsOfSale.reduce((sum, pos) => sum + pos.orders_summary.total_orders, 0);
+
+  // Fonction pour obtenir le résumé des vendeurs (affichage du premier vendeur ou résumé multiple)
+  const getVendorsSummary = () => {
+    if (!mapData || !mapData.vendors_summary || mapData.vendors_summary.length === 0) {
+      return null;
+    }
+
+    if (mapData.vendors_summary.length === 1) {
+      const vendor = mapData.vendors_summary[0];
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-blue-50 rounded-lg">
+          <div className="flex items-center">
+            <Calendar size={18} className="text-blue-600 mr-2" />
+            <div>
+              <p className="text-sm text-blue-800 font-medium">Période</p>
+              <p className="text-sm text-blue-700">
+                {new Date(mapData.period.start_date).toLocaleDateString()} - {new Date(mapData.period.end_date).toLocaleDateString()}
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center">
+            <User size={18} className="text-blue-600 mr-2" />
+            <div>
+              <p className="text-sm text-blue-800 font-medium">Vendeur</p>
+              <p className="text-sm text-blue-700">{vendor.vendor_name}</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center">
+            <Store size={18} className="text-blue-600 mr-2" />
+            <div>
+              <p className="text-sm text-blue-800 font-medium">Point de vente</p>
+              <p className="text-sm text-blue-700">{vendor.point_of_sale}</p>
+            </div>
+          </div>
+        </div>
+      );
+    } else {
+      // Affichage pour plusieurs vendeurs
+      return (
+        <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+          <div className="flex items-center mb-3">
+            <Calendar size={18} className="text-blue-600 mr-2" />
+            <div>
+              <p className="text-sm text-blue-800 font-medium">Période</p>
+              <p className="text-sm text-blue-700">
+                {new Date(mapData.period.start_date).toLocaleDateString()} - {new Date(mapData.period.end_date).toLocaleDateString()}
+              </p>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {mapData.vendors_summary.map((vendor, index) => (
+              <div key={vendor.vendor_id} className="bg-white p-3 rounded-lg border border-blue-200">
+                <div className="flex items-center mb-2">
+                  <User size={16} className="text-blue-600 mr-2" />
+                  <p className="text-sm font-medium text-blue-800">{vendor.vendor_name}</p>
+                </div>
+                <div className="flex items-center">
+                  <Store size={16} className="text-blue-600 mr-2" />
+                  <p className="text-xs text-blue-700">{vendor.point_of_sale}</p>
+                </div>
+                <div className="mt-2 text-xs text-gray-600">
+                  {vendor.total_customers} client(s) • {vendor.total_sales.toLocaleString()} FCFA
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -356,36 +438,8 @@ const MapComponent = () => {
           </div>
         </div>
 
-        {/* Informations sur la période et le vendeur */}
-        {mapData && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-blue-50 rounded-lg">
-            <div className="flex items-center">
-              <Calendar size={18} className="text-blue-600 mr-2" />
-              <div>
-                <p className="text-sm text-blue-800 font-medium">Période</p>
-                <p className="text-sm text-blue-700">
-                  {new Date(mapData.period.start_date).toLocaleDateString()} - {new Date(mapData.period.end_date).toLocaleDateString()}
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-center">
-              <User size={18} className="text-blue-600 mr-2" />
-              <div>
-                <p className="text-sm text-blue-800 font-medium">Vendeur</p>
-                <p className="text-sm text-blue-700">{mapData.vendor.full_name}</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center">
-              <Store size={18} className="text-blue-600 mr-2" />
-              <div>
-                <p className="text-sm text-blue-800 font-medium">Point de vente</p>
-                <p className="text-sm text-blue-700">{mapData.vendor.point_of_sale}</p>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Informations sur la période et les vendeurs */}
+        {mapData && getVendorsSummary()}
 
         {/* Filtres */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
@@ -546,6 +600,12 @@ const MapComponent = () => {
                               <span className="font-medium">Type carte:</span> {customer.pushcard_type}
                             </div>
                             <div>
+                              <span className="font-medium">Vendeur:</span> {customer.vendor_name}
+                            </div>
+                            <div>
+                              <span className="font-medium">Point de vente:</span> {customer.point_of_sale}
+                            </div>
+                            <div>
                               <span className="font-medium">Achat:</span> {new Date(customer.purchase_date).toLocaleDateString()}
                             </div>
                           </div>
@@ -667,6 +727,11 @@ const MapComponent = () => {
                     {totalCustomerSales.toLocaleString()} FCFA
                   </p>
                   <p className="text-sm text-blue-700">Chiffre d'affaires total</p>
+                  {mapData.total_vendors > 0 && (
+                    <p className="text-xs text-blue-600 mt-1">
+                      {mapData.total_vendors} vendeur(s)
+                    </p>
+                  )}
                 </div>
               )}
               
@@ -719,6 +784,7 @@ const MapComponent = () => {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Téléphone</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Zone</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vendeur</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type de carte</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Coordonnées</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
@@ -752,6 +818,7 @@ const MapComponent = () => {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{customer.phone}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{customer.zone}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{customer.vendor_name}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{customer.pushcard_type}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">
                               {hasValidCoords ? (

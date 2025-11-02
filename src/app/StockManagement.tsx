@@ -115,16 +115,6 @@ interface OverviewData {
   critical_products: Product[];
 }
 
-interface ApiOverviewResponse {
-  cumulative?: {
-    total_products: number;
-    stock_value: number;
-    alert_count: number;
-    today_movements: number;
-    critical_products: Product[];
-  };
-  pos_data?: any[];
-}
 
 const StockManagement = () => {
   const [activeView, setActiveView] = useState<'overview' | 'products' | 'movements' | 'analytics'>('overview');

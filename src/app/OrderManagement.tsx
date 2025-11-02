@@ -75,7 +75,7 @@ interface OrderItem {
   quantity: number;
   price: string;
   total: string;
-  quantity_affecte:string;
+  quantity_affecte: string;
 }
 
 interface Order {
@@ -147,6 +147,7 @@ const OrderManagement = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [selectedItem, setSelectedItem] = useState<OrderItem | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -162,6 +163,8 @@ const OrderManagement = () => {
     notes: '',
     items: []
   });
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [editingItems, setEditingItems] = useState<NewOrderItem[]>([]);
   const [vendorActivity, setVendorActivity] = useState<VendorActivity>({
     vendor: null,
     activity_type: 'sale',
@@ -236,26 +239,26 @@ const OrderManagement = () => {
       try {
         setError(null);
         // Fetch Orders
-        const ordersRes = await fetch('https://api.pushtrack360.com/api/orders/', { headers });
+        const ordersRes = await fetch('https://backendsupply.onrender.com/api/orders/', { headers });
         if (!ordersRes.ok) throw new Error('Échec de la récupération des commandes');
         const ordersData = await ordersRes.json();
         setOrders(ordersData);
         setFilteredOrders(ordersData);
 
         // Fetch Product Variants
-        const variantsRes = await fetch('https://api.pushtrack360.com/api/product-variants/', { headers });
+        const variantsRes = await fetch('https://backendsupply.onrender.com/api/product-variants/', { headers });
         if (!variantsRes.ok) throw new Error('Échec de la récupération des variantes de produits');
         const variantsData = await variantsRes.json();
         setProductVariants(variantsData);
 
         // Fetch Points of Sale
-        const pointsOfSaleRes = await fetch('https://api.pushtrack360.com/api/points-vente/', { headers });
+        const pointsOfSaleRes = await fetch('https://backendsupply.onrender.com/api/points-vente/', { headers });
         if (!pointsOfSaleRes.ok) throw new Error('Échec de la récupération des points de vente');
         const pointsOfSaleData = await pointsOfSaleRes.json();
         setPointsOfSale(pointsOfSaleData);
 
         // Fetch Mobile Vendors
-        const vendorsRes = await fetch('https://api.pushtrack360.com/api/mobile-vendors/', { headers });
+        const vendorsRes = await fetch('https://backendsupply.onrender.com/api/mobile-vendors/', { headers });
         if (vendorsRes.ok) {
           const vendorsData = await vendorsRes.json();
           setMobileVendors(vendorsData);
@@ -365,7 +368,7 @@ const OrderManagement = () => {
     }
     try {
       setError(null);
-      const res = await fetch(`https://api.pushtrack360.com/api/orders/${orderId}/`, {
+      const res = await fetch(`https://backendsupply.onrender.com/api/orders/${orderId}/`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -378,10 +381,178 @@ const OrderManagement = () => {
         throw new Error(errorData.detail || 'Échec de la mise à jour du statut');
       }
       const updatedOrder = await res.json();
-      setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
     } catch (error: any) {
       setError(error.message);
     }
+  };
+
+  const handleEditOrder = (order: Order) => {
+    setEditingOrder(order);
+    // Convertir les items existants en format NewOrderItem
+    const convertedItems: NewOrderItem[] = order.items.map(item => ({
+      product_variant_id: item.product_variant?.id || 0,
+      quantity: item.quantity,
+      price: item.price
+    }));
+    setEditingItems(convertedItems);
+    setShowEditModal(true);
+  };
+
+  const handleUpdateOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingOrder) return;
+
+    const token = localStorage.getItem('access');
+    if (!token) {
+      setError('Veuillez vous connecter.');
+      return;
+    }
+
+    try {
+      setError(null);
+      
+      // Validation des articles
+      if (editingItems.length === 0) {
+        throw new Error("Veuillez ajouter au moins un article");
+      }
+
+      // Préparer les données pour l'API
+      const orderData = {
+        point_of_sale: editingOrder.point_of_sale,
+        date: editingOrder.date,
+        delivery_date: editingOrder.delivery_date,
+        priority: editingOrder.priority,
+        status: editingOrder.status,
+        notes: editingOrder.notes,
+        items: editingItems.map(item => ({
+          product_variant_id: item.product_variant_id,
+          quantity: item.quantity
+        }))
+      };
+
+      const res = await fetch(`https://backendsupply.onrender.com/api/orders/${editingOrder.id}/`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(orderData)
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || JSON.stringify(errorData));
+      }
+
+      const updatedOrder = await res.json();
+      setOrders(prev => prev.map(o => o.id === editingOrder.id ? updatedOrder : o));
+      setShowEditModal(false);
+      setEditingOrder(null);
+      setEditingItems([]);
+    } catch (error: any) {
+      setError(error.message);
+      console.error("Erreur modification commande:", error);
+    }
+  };
+
+  const handlePrintOrder = (order: Order) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      setError('Impossible d\'ouvrir la fenêtre d\'impression. Vérifiez les bloqueurs de pop-up.');
+      return;
+    }
+
+    const statusInfo = orderStatuses[order.status];
+    
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Commande #${order.id}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 20px; }
+          .order-info { margin-bottom: 20px; }
+          .table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+          .table th, .table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          .table th { background-color: #f2f2f2; }
+          .total { font-weight: bold; text-align: right; }
+          .status { display: inline-block; padding: 4px 8px; border-radius: 4px; }
+          @media print {
+            body { margin: 0; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Commande #${order.id}</h1>
+          <p>Date: ${order.date ? new Date(order.date).toLocaleDateString('fr-FR') : 'Non spécifiée'}</p>
+        </div>
+        
+        <div class="order-info">
+          <h2>Informations de la commande</h2>
+          <p><strong>Point de vente:</strong> ${order.point_of_sale_details?.name || 'Non spécifié'}</p>
+          <p><strong>Statut:</strong> <span class="status" style="background-color: ${statusInfo.bgColor}; color: ${statusInfo.color.split(' ')[1]};">${statusInfo.label}</span></p>
+          <p><strong>Priorité:</strong> ${order.priority === 'high' ? 'Haute' : order.priority === 'medium' ? 'Moyenne' : 'Basse'}</p>
+          <p><strong>Date de livraison:</strong> ${order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('fr-FR') : 'Non spécifiée'}</p>
+        </div>
+
+        <h2>Articles commandés</h2>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Produit</th>
+              <th>Quantité</th>
+              <th>Prix unitaire</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${order.items.map(item => `
+              <tr>
+                <td>${item.product_name || item.product_variant?.product?.name || 'Produit inconnu'}</td>
+                <td>${item.quantity}</td>
+                <td>${formatCurrency(item.price)}</td>
+                <td>${formatCurrency(item.total)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="3" class="total">Total:</td>
+              <td class="total">${formatCurrency(order.total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        ${order.notes ? `
+        <div class="notes">
+          <h2>Notes</h2>
+          <p>${order.notes}</p>
+        </div>
+        ` : ''}
+
+        <div class="no-print" style="margin-top: 20px; text-align: center;">
+          <button onclick="window.print()" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            Imprimer
+          </button>
+          <button onclick="window.close()" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px;">
+            Fermer
+          </button>
+        </div>
+
+        <script>
+          window.onload = function() {
+            window.print();
+          }
+        </script>
+      </body>
+      </html>
+    `);
+    
+    printWindow.document.close();
   };
 
   const deleteOrder = async (orderId: number) => {
@@ -393,7 +564,7 @@ const OrderManagement = () => {
     }
     try {
       setError(null);
-      const res = await fetch(`https://api.pushtrack360.com/api/orders/${orderId}/`, {
+      const res = await fetch(`https://backendsupply.onrender.com/api/orders/${orderId}/`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -417,7 +588,7 @@ const OrderManagement = () => {
     try {
       setError(null);
       const promises = selectedOrders.map(orderId => 
-        fetch(`https://api.pushtrack360.com/api/orders/${orderId}/`, {
+        fetch(`https://backendsupply.onrender.com/api/orders/${orderId}/`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -477,7 +648,7 @@ const OrderManagement = () => {
         throw new Error("La quantité affectée ne peut pas dépasser la quantité commandée");
       }
 
-      const response = await fetch('https://api.pushtrack360.com/api/vendor-activities/', {
+      const response = await fetch('https://backendsupply.onrender.com/api/vendor-activities/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -491,7 +662,6 @@ const OrderManagement = () => {
         throw new Error(errorData.detail || JSON.stringify(errorData));
       }
 
-      // Succès
       setShowAssignModal(false);
       setSelectedItem(null);
       setSelectedOrder(null);
@@ -533,6 +703,31 @@ const OrderManagement = () => {
     });
   };
 
+  // Fonctions pour gérer les items dans la modification
+  const handleAddEditingItem = () => {
+    setEditingItems(prev => [...prev, { product_variant_id: 0, quantity: 1, price: "0" }]);
+  };
+
+  const handleRemoveEditingItem = (index: number) => {
+    setEditingItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleEditingItemChange = (index: number, field: keyof NewOrderItem, value: any) => {
+    setEditingItems(prev => {
+      const newItems = [...prev];
+      newItems[index] = { ...newItems[index], [field]: value };
+      
+      if (field === 'product_variant_id') {
+        const variant = productVariants.find(v => v.id === value);
+        if (variant) {
+          newItems[index].price = variant.price;
+        }
+      }
+      
+      return newItems;
+    });
+  };
+
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     const token = localStorage.getItem('access');
@@ -544,7 +739,6 @@ const OrderManagement = () => {
     try {
       setError(null);
       
-      // Validation des articles
       if (newOrder.items.length === 0) {
         throw new Error("Veuillez ajouter au moins un article");
       }
@@ -553,7 +747,6 @@ const OrderManagement = () => {
         throw new Error("Veuillez sélectionner un point de vente");
       }
 
-      // Préparation des articles
       const preparedItems = newOrder.items.map(item => {
         const variant = productVariants.find(v => v.id === item.product_variant_id);
         if (!variant) {
@@ -569,7 +762,6 @@ const OrderManagement = () => {
         };
       });
 
-      // Construction de la commande
       const orderData = {
         point_of_sale: newOrder.point_of_sale_id,
         date: newOrder.date,
@@ -579,8 +771,7 @@ const OrderManagement = () => {
         items: preparedItems
       };
 
-      // Envoi de la requête
-      const response = await fetch('https://api.pushtrack360.com/api/orders/', {
+      const response = await fetch('https://backendsupply.onrender.com/api/orders/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -594,7 +785,6 @@ const OrderManagement = () => {
         throw new Error(errorData.detail || JSON.stringify(errorData));
       }
 
-      // Succès
       const createdOrder = await response.json();
       setOrders(prev => [createdOrder, ...prev]);
       resetOrderForm();
@@ -712,7 +902,7 @@ const OrderManagement = () => {
                       <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Quantité</th>
                       <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Prix Unitaire</th>
                       <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Total</th>
-                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Quantité Affècte</th>
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Quantité Affectée</th>
                       <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Actions</th>
                     </tr>
                   </thead>
@@ -724,7 +914,7 @@ const OrderManagement = () => {
                         <td className="px-4 py-3 text-sm text-gray-600 text-center">{item.quantity}</td>
                         <td className="px-4 py-3 text-sm text-gray-600 text-right">{formatCurrency(item.price)}</td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-800 text-right">{formatCurrency(item.total)}</td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-800 text-right">{formatCurrency(item.quantity_affecte)}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-800 text-right">{item.quantity_affecte || '0'}</td>
                         <td className="px-4 py-3 text-sm text-center">
                           <button
                             onClick={() => handleAssignProduct(selectedOrder, item)}
@@ -741,7 +931,7 @@ const OrderManagement = () => {
                     <tr>
                       <td colSpan={4} className="px-4 py-3 text-sm font-bold text-gray-800 text-right">Total Commande:</td>
                       <td className="px-4 py-3 text-sm font-bold text-gray-800 text-right">{formatCurrency(selectedOrder.total)}</td>
-                      <td></td>
+                      <td colSpan={2}></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -762,11 +952,15 @@ const OrderManagement = () => {
                   <option key={key} value={key}>{status.label}</option>
                 ))}
               </select>
-              <button className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-between gap-2">
+              <button 
+                onClick={() => handleEditOrder(selectedOrder)}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-between gap-2">
                 <Edit size={16} />
                 Modifier
               </button>
-              <button className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center justify-between gap-2">
+              <button 
+                onClick={() => handlePrintOrder(selectedOrder)}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center justify-between gap-2">
                 <Download size={16} />
                 Imprimer
               </button>
@@ -777,6 +971,193 @@ const OrderManagement = () => {
                 Supprimer
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const EditOrderModal = () => {
+    if (!editingOrder) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+            <div>
+              <h3 className="text-2xl font-bold text-gray-800">Modifier la Commande</h3>
+              <p className="text-gray-600">Commande #{editingOrder.id}</p>
+            </div>
+            <button 
+              onClick={() => setShowEditModal(false)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <XCircle size={24} />
+            </button>
+          </div>
+          <div className="p-6">
+            <form onSubmit={handleUpdateOrder} className="space-y-6">
+              {error && (
+                <div className="text-red-600 bg-red-100 p-3 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+              
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Date de commande
+                  </label>
+                  <input 
+                    type="date"
+                    value={editingOrder.date}
+                    onChange={(e) => setEditingOrder({...editingOrder, date: e.target.value})}
+                    className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Date de livraison
+                  </label>
+                  <input 
+                    type="date"
+                    value={editingOrder.delivery_date || ''}
+                    onChange={(e) => setEditingOrder({...editingOrder, delivery_date: e.target.value})}
+                    className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Priorité
+                  </label>
+                  <select 
+                    value={editingOrder.priority}
+                    onChange={(e) => setEditingOrder({...editingOrder, priority: e.target.value as 'low' | 'medium' | 'high'})}
+                    className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                    <option value="low">Basse</option>
+                    <option value="medium">Moyenne</option>
+                    <option value="high">Haute</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Statut
+                  </label>
+                  <select 
+                    value={editingOrder.status}
+                    onChange={(e) => setEditingOrder({...editingOrder, status: e.target.value as OrderStatus})}
+                    className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                    {Object.entries(orderStatuses).map(([key, status]) => (
+                      <option key={key} value={key}>{status.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Articles de la commande
+                </label>
+                <div className="border rounded-lg p-4 border-gray-300 space-y-4">
+                  <div className="grid grid-cols-12 gap-2 text-sm font-semibold text-gray-700">
+                    <div className="col-span-5">Produit</div>
+                    <div className="col-span-2">Format</div>
+                    <div className="col-span-2">Quantité</div>
+                    <div className="col-span-2">Prix Unitaire</div>
+                    <div className="col-span-1">Actions</div>
+                  </div>
+                  {editingItems.map((item, index) => {
+                    const variant = productVariants.find(v => v.id === item.product_variant_id);
+                    return (
+                      <div key={index} className="grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-5">
+                          <select 
+                            required
+                            value={item.product_variant_id}
+                            onChange={(e) => handleEditingItemChange(index, 'product_variant_id', parseInt(e.target.value))}
+                            className="w-full text-sm border px-4 py-2 rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                            <option value="0">Sélectionner un produit</option>
+                            {productVariants.map(v => (
+                              <option key={v.id} value={v.id}>
+                                {v.product?.name || 'Produit inconnu'} - {v.format?.name || 'Sans format'}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="col-span-2 text-sm text-gray-600">
+                          {variant?.format?.name || '-'}
+                        </div>
+                        <div className="col-span-2">
+                          <input 
+                            type="number"
+                            required
+                            min="1"
+                            max={variant?.current_stock || 1}
+                            value={item.quantity}
+                            onChange={(e) => handleEditingItemChange(index, 'quantity', parseInt(e.target.value))}
+                            className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <input 
+                            type="text"
+                            readOnly
+                            value={formatCurrency(item.price)}
+                            className="w-full px-4 py-2 text-sm border text-gray-600 bg-gray-100 rounded-lg"
+                          />
+                        </div>
+                        <div className="col-span-1 flex items-center">
+                          <button 
+                            type="button"
+                            onClick={() => handleRemoveEditingItem(index)}
+                            className="text-red-600 hover:text-red-700">
+                            <XCircle size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <button 
+                    type="button"
+                    onClick={handleAddEditingItem}
+                    className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:text-gray-700 hover:border-gray-400 transition-colors bg-white">
+                    + Ajouter un article
+                  </button>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Notes
+                </label>
+                <textarea 
+                  value={editingOrder.notes || ''}
+                  onChange={(e) => setEditingOrder({...editingOrder, notes: e.target.value})}
+                  className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  rows={3}
+                  placeholder="Notes supplémentaires..."
+                />
+              </div>
+              
+              <div className="flex justify-end space-x-3 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button 
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Enregistrer les modifications
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       </div>
@@ -1153,6 +1534,7 @@ const OrderManagement = () => {
                                 <Eye size={16} />
                               </button>
                               <button 
+                                onClick={() => handleEditOrder(order)}
                                 className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                                 title="Modifier"
                               >
@@ -1501,7 +1883,9 @@ const OrderManagement = () => {
           </div>
         </div>
       )}
+      
       {showDetailsModal && <OrderDetailsModal />}
+      {showEditModal && <EditOrderModal />}
       {showAssignModal && <AssignVendorModal />}
     </div>
   );

@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { apiService } from './ApiService';
 
-
 interface Role {
   id: string;
   name: string;
@@ -32,6 +31,10 @@ interface PointOfSale {
   id: string;
   name: string;
   type?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  registration_date?: string;
 }
 
 interface User {
@@ -52,8 +55,9 @@ interface User {
   establishment_phone?: string;
   establishment_email?: string;
   establishment_address: string;
-  points_of_sale: PointOfSale[];
+  points_of_sale: (PointOfSale | number)[];
   establishment_registration_date?: string;
+  role_name?: string;
 }
 
 interface NewUser {
@@ -104,29 +108,57 @@ interface NewSupplier {
   logo?: File | null;
 }
 
-const UserManagement: React.FC = () => {
-  const [users, setUsers] = useState<User[]>([]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [permissions, setPermissions] = useState<Permission[]>([]);
-  const [pointsOfSale, setPointsOfSale] = useState<PointOfSale[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
-  const [selectedRole, setSelectedRole] = useState('all');
-  const [selectedStatus, setSelectedStatus] = useState('all');
-  const [selectedEstablishmentType, setSelectedEstablishmentType] = useState('all');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [showSupplierModal, setShowSupplierModal] = useState(false);
-  const [modalType, setModalType] = useState<'add' | 'edit' | 'view'>('add');
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
-  const [showRoleModal, setShowRoleModal] = useState(false);
-  const [selectedRoleForEdit, setSelectedRoleForEdit] = useState<Role | null>(null);
-  const [activeTab, setActiveTab] = useState<'users' | 'suppliers'>('users');
-  const usersPerPage = 10;
+// Helper functions
+const safeGetStatus = (status?: string): 'active' | 'inactive' | 'suspended' => 
+  status && ['active', 'inactive', 'suspended'].includes(status) 
+    ? status as 'active' | 'inactive' | 'suspended' 
+    : 'inactive';
+
+const safeGetText = (text?: string | null, fallback = '-'): string => text || fallback;
+const safeLowerCase = (text?: string): string => (text || '').toLowerCase();
+
+interface UserModalProps {
+  show: boolean;
+  onClose: () => void;
+  modalType: 'add' | 'edit' | 'view';
+  selectedUser: User | null;
+  roles: Role[];
+  pointsOfSale: PointOfSale[];
+  onUserUpdated: (user: User, type: 'add' | 'edit' | 'view') => void; // Ajouter 'view'
+}
+
+const UserModal: React.FC<UserModalProps> = ({ 
+  show, 
+  onClose, 
+  modalType, 
+  selectedUser, 
+  roles, 
+  pointsOfSale,
+  onUserUpdated 
+}) => {
+  const [formData, setFormData] = useState<NewUser>({
+    user: {
+      username: '',
+      email: '',
+      first_name: '',
+      last_name: '',
+      password: '',
+    },
+    phone: '',
+    location: '',
+    role: '',
+    status: 'active',
+    avatar: null,
+    establishment_name: '',
+    establishment_type: 'Boutique',
+    establishment_phone: '',
+    establishment_email: '',
+    establishment_address: '',
+    points_of_sale_ids: []
+  });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const establishmentTypes = [
     { value: 'Boutique', label: 'Boutique', icon: <Store size={16} /> },
@@ -138,121 +170,67 @@ const UserManagement: React.FC = () => {
     { value: 'mobile_vendor', label: 'Vendeur ambulant', icon: <Bike size={16} /> },
   ];
 
-  const supplierTypes = [
-    { value: 'importateur', label: 'Importateur' },
-    { value: 'producteur_local', label: 'Producteur local' },
-    { value: 'distributeur', label: 'Distributeur' },
-    { value: 'fabricant', label: 'Fabricant' },
-    { value: 'grossiste', label: 'Grossiste' },
-  ];
-
-  const safeGetStatus = (status?: string): 'active' | 'inactive' | 'suspended' => 
-    status && ['active', 'inactive', 'suspended'].includes(status) 
-      ? status as 'active' | 'inactive' | 'suspended' 
-      : 'inactive';
-
-  const safeGetText = (text?: string | null, fallback = '-'): string => text || fallback;
-  const safeLowerCase = (text?: string): string => (text || '').toLowerCase();
-
+  // Réinitialiser le formulaire quand le modal s'ouvre/ferme
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setError(null);
-        setLoading(true);
-
-        const [usersRes, rolesRes, permissionsRes, posRes, suppliersRes] = await Promise.all([
-          apiService.getUsers(),
-          apiService.getRoles(),
-          apiService.getPermissions(),
-          apiService.getPointsVente(),
-          apiService.getSuppliers()
-        ]);
-
-        if (!usersRes.ok) throw new Error('Failed to fetch users');
-        if (!rolesRes.ok) throw new Error('Failed to fetch roles');
-        if (!permissionsRes.ok) throw new Error('Failed to fetch permissions');
-        if (!posRes.ok) throw new Error('Failed to fetch points of sale');
-        if (!suppliersRes.ok) throw new Error('Failed to fetch suppliers');
-
-        const usersData = await usersRes.json();
-        const rolesData: Role[] = await rolesRes.json();
-        const permissionsData: Permission[] = await permissionsRes.json();
-        const posData: PointOfSale[] = await posRes.json();
-        const suppliersData: Supplier[] = await suppliersRes.json();
-
-        // Map user data to match interface
-        setUsers(usersData.map((user: any) => ({
-          id: user.user?.id || 0,
-          username: user.user?.username || '',
-          email: user.user?.email || '',
-          first_name: user.user?.first_name || '',
-          last_name: user.user?.last_name || '',
-          phone: user.phone || '',
-          location: user.location || '',
-          role: user.role || '',
-          status: safeGetStatus(user.status),
-          join_date: user.join_date || '',
-          last_login: user.last_login || '',
-          avatar: user.avatar || '',
-          establishment_name: user.establishment_name || '',
-          establishment_type: user.establishment_type || 'Boutique',
-          establishment_phone: user.establishment_phone || '',
-          establishment_email: user.establishment_email || '',
-          establishment_address: user.establishment_address || '',
-          points_of_sale: user.points_of_sale || [],
-          establishment_registration_date: user.establishment_registration_date || ''
-        })));
-
-        setRoles(rolesData);
-        setPermissions(permissionsData);
-        setPointsOfSale(posData);
-        setSuppliers(suppliersData.map((supplier: any) => ({
-          ...supplier,
-          types: supplier.types || 'grossiste'
-        })));
-
-      } catch (err: any) {
-        if (err.message !== 'Session expired') {
-          setError(err.message || 'An error occurred while fetching data');
-        }
-      } finally {
-        setLoading(false);
+    if (show) {
+      if (modalType === 'edit' && selectedUser) {
+        const newFormData = {
+          user: {
+            username: selectedUser.username,
+            email: selectedUser.email,
+            first_name: selectedUser.first_name || '',
+            last_name: selectedUser.last_name || '',
+            password: '',
+          },
+          phone: selectedUser.phone || '',
+          location: selectedUser.location || '',
+          role: selectedUser.role || '',
+          status: safeGetStatus(selectedUser.status),
+          avatar: null,
+          establishment_name: selectedUser.establishment_name || '',
+          establishment_type: selectedUser.establishment_type || 'Boutique',
+          establishment_phone: selectedUser.establishment_phone || '',
+          establishment_email: selectedUser.establishment_email || '',
+          establishment_address: selectedUser.establishment_address || '',
+          points_of_sale_ids: Array.isArray(selectedUser.points_of_sale) 
+            ? selectedUser.points_of_sale
+                .map(pos => {
+                  if (typeof pos === 'object' && pos !== null && 'id' in pos) {
+                    return pos.id.toString();
+                  }
+                  return pos?.toString() || '';
+                })
+                .filter(id => id !== '')
+            : []
+        };
+        setFormData(newFormData);
+        setAvatarPreview(selectedUser.avatar || null);
+      } else if (modalType === 'add') {
+        setFormData({
+          user: {
+            username: '',
+            email: '',
+            first_name: '',
+            last_name: '',
+            password: '',
+          },
+          phone: '',
+          location: '',
+          role: '',
+          status: 'active',
+          avatar: null,
+          establishment_name: '',
+          establishment_type: 'Boutique',
+          establishment_phone: '',
+          establishment_email: '',
+          establishment_address: '',
+          points_of_sale_ids: []
+        });
+        setAvatarPreview(null);
       }
-    };
-    fetchData();
-  }, []);
-
-  const filteredUsers = users.filter(user => {
-    if (!user) return false;
-
-    const searchTermLower = safeLowerCase(searchTerm);
-
-    return (
-      (safeLowerCase(user.username).includes(searchTermLower) ||
-       safeLowerCase(user.email).includes(searchTermLower) ||
-       safeLowerCase(user.establishment_name).includes(searchTermLower) ||
-       safeLowerCase(user.phone).includes(searchTermLower)) &&
-      (selectedRole === 'all' || (user.role && safeLowerCase(user.role) === safeLowerCase(selectedRole))) &&
-      (selectedStatus === 'all' || user.status === selectedStatus) &&
-      (selectedEstablishmentType === 'all' || user.establishment_type === selectedEstablishmentType)
-    );
-  });
-
-  const filteredSuppliers = suppliers.filter(supplier => {
-    const searchTermLower = safeLowerCase(supplierSearchTerm);
-    return (
-      safeLowerCase(supplier.name).includes(searchTermLower) ||
-      safeLowerCase(supplier.email).includes(searchTermLower) ||
-      safeLowerCase(supplier.contact).includes(searchTermLower) ||
-      safeLowerCase(supplier.address).includes(searchTermLower)
-    );
-  });
-
-  const paginatedUsers = filteredUsers.slice(
-    (currentPage - 1) * usersPerPage,
-    currentPage * usersPerPage
-  );
-  const totalPages = Math.ceil(filteredUsers.length / usersPerPage) || 1;
+      setFormError(null);
+    }
+  }, [show, modalType, selectedUser]);
 
   const getStatusIcon = (status?: string) => {
     switch (safeGetStatus(status)) {
@@ -277,146 +255,7 @@ const UserManagement: React.FC = () => {
     return found ? found.label : type || 'Non spécifié';
   };
 
-  const getSupplierType = (type?: string) => {
-    const found = supplierTypes.find(t => t.value === type);
-    return found ? found.label : type || 'Non spécifié';
-  };
-
-  const deleteUser = async (userId: number) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) return;
-    try {
-      setError(null);
-      const res = await apiService.deleteResource('users', userId);
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData?.detail || 'Failed to delete user');
-      }
-      setUsers(prev => prev.filter(u => u.id !== userId));
-    } catch (err: any) {
-      if (err.message !== 'Session expired') {
-        setError(err.message || 'Failed to delete user');
-      }
-    }
-  };
-
-  const deleteSupplier = async (supplierId: number) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce fournisseur ?')) return;
-    try {
-      setError(null);
-      const res = await apiService.deleteResource('suppliers', supplierId);
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData?.detail || 'Failed to delete supplier');
-      }
-      setSuppliers(prev => prev.filter(s => s.id !== supplierId));
-    } catch (err: any) {
-      if (err.message !== 'Session expired') {
-        setError(err.message || 'Failed to delete supplier');
-      }
-    }
-  };
-
-  const deleteRole = async (roleId: string) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce rôle ?')) return;
-    try {
-      setError(null);
-      const res = await apiService.deleteResource('roles', roleId);
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData?.detail || 'Failed to delete role');
-      }
-      setRoles(prev => prev.filter(r => r.id !== roleId));
-    } catch (err: any) {
-      if (err.message !== 'Session expired') {
-        setError(err.message || 'Failed to delete role');
-      }
-    }
-  };
-
-const UserModal: React.FC = () => {
-  const [formData, setFormData] = useState<NewUser>({
-    user: {
-      username: '',
-      email: '',
-      first_name: '',
-      last_name: '',
-      password: '',
-    },
-    phone: '',
-    location: '',
-    role: '',
-    status: 'active',
-    avatar: null,
-    establishment_name: '',
-    establishment_type: 'Boutique',
-    establishment_phone: '',
-    establishment_email: '',
-    establishment_address: '',
-    points_of_sale_ids: []
-  });
-  const [formError, setFormError] = useState<string | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-
-  // Debug: Tracer les changements de formData
-  useEffect(() => {
-    console.log('FormData state updated:', formData);
-  }, [formData]);
-
-  useEffect(() => {
-    if (modalType === 'edit' && selectedUser) {
-      const newFormData = {
-        user: {
-          username: selectedUser.username,
-          email: selectedUser.email,
-          first_name: selectedUser.first_name || '',
-          last_name: selectedUser.last_name || '',
-          password: '',
-        },
-        phone: selectedUser.phone || '',
-        location: selectedUser.location || '',
-        role: selectedUser.role || '',
-        status: safeGetStatus(selectedUser.status),
-        avatar: null,
-        establishment_name: selectedUser.establishment_name || '',
-        establishment_type: selectedUser.establishment_type || 'Boutique',
-        establishment_phone: selectedUser.establishment_phone || '',
-        establishment_email: selectedUser.establishment_email || '',
-        establishment_address: selectedUser.establishment_address || '',
-        points_of_sale_ids: selectedUser.points_of_sale?.map(pos => pos.id) || []
-      };
-      console.log('Setting form data for edit:', newFormData);
-      setFormData(newFormData);
-      setAvatarPreview(selectedUser.avatar || null);
-    } else if (modalType === 'add') {
-      const newFormData = {
-        user: {
-          username: '',
-          email: '',
-          first_name: '',
-          last_name: '',
-          password: '',
-        },
-        phone: '',
-        location: '',
-        role: '',
-        status: 'active' as const,
-        avatar: null,
-        establishment_name: '',
-        establishment_type: 'Boutique',
-        establishment_phone: '',
-        establishment_email: '',
-        establishment_address: '',
-        points_of_sale_ids: []
-      };
-      console.log('Setting form data for add:', newFormData);
-      setFormData(newFormData);
-      setAvatarPreview(null);
-    }
-  }, [modalType, selectedUser]);
-
-  // Handlers séparés pour une meilleure traçabilité
   const handleUserFieldChange = (field: keyof NewUser['user'], value: string) => {
-    console.log(`User field '${field}' changed to:`, value);
     setFormData(prev => ({
       ...prev,
       user: {
@@ -427,7 +266,6 @@ const UserModal: React.FC = () => {
   };
 
   const handleDirectFieldChange = (field: keyof Omit<NewUser, 'user' | 'avatar'>, value: string) => {
-    console.log(`Field '${field}' changed to:`, value);
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -435,64 +273,49 @@ const UserModal: React.FC = () => {
   };
 
   const handleStatusChange = (value: 'active' | 'inactive' | 'suspended') => {
-    console.log('Status changed to:', value);
     setFormData(prev => ({
       ...prev,
       status: value
     }));
   };
 
-  const validateForm = () => {
-    console.log('Validating form with data:', formData);
-    
-    if (!formData.user.username?.trim()) {
-      console.log('Validation failed: username empty');
-      return 'Le nom d\'utilisateur est requis.';
-    }
-    if (!formData.user.email?.trim()) {
-      console.log('Validation failed: email empty');
-      return 'L\'email est requis.';
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.user.email)) {
-      console.log('Validation failed: invalid email format');
-      return 'Format d\'email invalide.';
-    }
-    if (modalType === 'add' && !formData.user.password?.trim()) {
-      console.log('Validation failed: password empty for new user');
-      return 'Le mot de passe est requis pour un nouvel utilisateur.';
-    }
-    if (!formData.role?.trim()) {
-      console.log('Validation failed: role empty');
-      return 'Le rôle est requis.';
-    }
-    if (!formData.establishment_name?.trim()) {
-      console.log('Validation failed: establishment_name empty');
-      return 'Le nom de l\'établissement est requis.';
-    }
-    if (!formData.establishment_type?.trim()) {
-      console.log('Validation failed: establishment_type empty');
-      return 'Le type d\'établissement est requis.';
-    }
-    if (!formData.establishment_address?.trim()) {
-      console.log('Validation failed: establishment_address empty');
-      return 'L\'adresse de l\'établissement est requise.';
-    }
-    
-    console.log('Validation passed');
-    return null;
-  };
+ const validateForm = () => {
+  if (!formData.user.username?.trim()) {
+    return 'Le nom d\'utilisateur est requis.';
+  }
+  if (!formData.user.email?.trim()) {
+    return 'L\'email est requis.';
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.user.email)) {
+    return 'Format d\'email invalide.';
+  }
+  if (modalType === 'add' && !formData.user.password?.trim()) {
+    return 'Le mot de passe est requis pour un nouvel utilisateur.';
+  }
+  if (!formData.role) {  // ✅ CORRIGÉ : pas de .trim() pour un nombre
+    return 'Le rôle est requis.';
+  }
+  if (!formData.establishment_name?.trim()) {
+    return 'Le nom de l\'établissement est requis.';
+  }
+  if (!formData.establishment_type?.trim()) {
+    return 'Le type d\'établissement est requis.';
+  }
+  if (!formData.establishment_address?.trim()) {
+    return 'L\'adresse de l\'établissement est requise.';
+  }
+  return null;
+};
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      console.log('Avatar file selected:', file.name, file.type, file.size);
       setFormData(prev => ({ ...prev, avatar: file }));
       setAvatarPreview(URL.createObjectURL(file));
     }
   };
 
   const handlePointsOfSaleChange = (posId: string, isChecked: boolean) => {
-    console.log(`Point of sale ${posId} ${isChecked ? 'checked' : 'unchecked'}`);
     setFormData(prev => ({
       ...prev,
       points_of_sale_ids: isChecked
@@ -501,203 +324,283 @@ const UserModal: React.FC = () => {
     }));
   };
 
+  const getPointOfSaleName = (posId: string | number) => {
+    const pointOfSale = pointsOfSale.find(p => p.id.toString() === posId.toString());
+    return pointOfSale?.name || `Point de vente ${posId}`;
+  };
+
+  const getPointOfSaleType = (posId: string | number) => {
+    const pointOfSale = pointsOfSale.find(p => p.id.toString() === posId.toString());
+    return pointOfSale?.type || 'Non spécifié';
+  };
+
 const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
   
+  console.log('🎯 handleSubmit EXECUTE! modalType:', modalType);
+  console.log('🎯 Données du formulaire:', formData);
+  
   const validationError = validateForm();
+  console.log('🎯 Résultat validation:', validationError);
+  
   if (validationError) {
+    console.log('❌ Validation échouée:', validationError);
     setFormError(validationError);
     return;
   }
 
+  console.log('✅ Validation réussie, début de l\'envoi...');
   try {
     setFormError(null);
+    setIsSubmitting(true);
     
-    // Préparer les données dans le format attendu par le backend Django
-    const dataToSend = {
-      // Données utilisateur dans un objet user
-      user: {
-        username: formData.user.username,
-        email: formData.user.email,
-        password: formData.user.password || '',
-        first_name: formData.user.first_name || '',
-        last_name: formData.user.last_name || '',
-      },
-      
-      // Données profil
-      phone: formData.phone || '',
-      location: formData.location || '',
-      status: formData.status,
-      role: formData.role || '',
-      
-      // Données établissement
-      establishment_name: formData.establishment_name,
-      establishment_type: formData.establishment_type,
-      establishment_address: formData.establishment_address,
-      establishment_phone: formData.establishment_phone || '',
-      establishment_email: formData.establishment_email || '',
-      
-      // Points de vente
-      points_of_sale: formData.points_of_sale_ids || [],
-    };
+    let dataToSend: any;
+    
+    if (modalType === 'edit' && selectedUser) {
+      // ✅ CORRECTION : Structure compatible avec votre serializer Django
+      dataToSend = {
+        user: {
+          // Ne pas envoyer le username sauf s'il a changé
+          ...(formData.user.username !== selectedUser.username && { 
+            username: formData.user.username 
+          }),
+          email: formData.user.email,
+          first_name: formData.user.first_name || '',
+          last_name: formData.user.last_name || '',
+        },
+        phone: formData.phone || '',
+        location: formData.location || '',
+        status: formData.status,
+        role_id: formData.role || '',  // ← Utilise role_id comme dans le serializer
+        establishment_name: formData.establishment_name,
+        establishment_type: formData.establishment_type,
+        establishment_address: formData.establishment_address,
+        establishment_phone: formData.establishment_phone || '',
+        establishment_email: formData.establishment_email || '',
+        points_of_sale: formData.points_of_sale_ids || [],  // ← Même nom que le serializer
+      };
+    } else {
+      // Pour la création
+      dataToSend = {
+        user: {
+          username: formData.user.username,
+          email: formData.user.email,
+          first_name: formData.user.first_name || '',
+          last_name: formData.user.last_name || '',
+          password: formData.user.password || '',
+        },
+        phone: formData.phone || '',
+        location: formData.location || '',
+        status: formData.status,
+        role_id: formData.role || '',
+        establishment_name: formData.establishment_name,
+        establishment_type: formData.establishment_type,
+        establishment_address: formData.establishment_address,
+        establishment_phone: formData.establishment_phone || '',
+        establishment_email: formData.establishment_email || '',
+        points_of_sale: formData.points_of_sale_ids || [],
+      };
+    }
 
-    console.log('Données envoyées (format user object):', dataToSend);
-
+    console.log('🔄 DONNÉES ENVOYÉES:', dataToSend);
+    
     let res;
     if (modalType === 'edit' && selectedUser) {
-      res = await apiService.updateResource('users', selectedUser.id, dataToSend, false);
+      res = await apiService.updateUser(selectedUser.id, dataToSend);
     } else {
       res = await apiService.createUser(dataToSend);
     }
 
-    if (!res.ok) {
-      const errorData = await res.json();
-      console.error('Erreur backend:', errorData);
-      throw new Error(errorData?.detail || errorData?.message || `Échec de ${modalType === 'edit' ? 'modification' : 'création'}`);
-    }
 
-    const updatedUser = await res.json();
-    console.log('Utilisateur créé avec succès:', updatedUser);
-    
-    if (modalType === 'edit') {
-      setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-    } else {
-      setUsers(prev => [...prev, updatedUser]);
-    }
-    
-    setShowModal(false);
-    
-  } catch (err: any) {
-    console.error('Erreur détaillée:', err);
-    if (err.message !== 'Session expired') {
-      setFormError(err.message || 'Une erreur est survenue');
-    }
-  }
-};
+      console.log('📡 RÉPONSE API:', res);
 
-// Fonction de validation améliorée
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold text-gray-800">
-                {modalType === 'add' ? 'Ajouter un utilisateur' : 
-                 modalType === 'edit' ? 'Modifier l\'utilisateur' : 
-                 'Détails de l\'utilisateur'}
-              </h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
-            </div>
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error('❌ ERREUR API:', errorData);
+        
+        let errorMessage = errorData?.detail || errorData?.message;
+        if (!errorMessage && errorData) {
+          for (const key in errorData) {
+            if (Array.isArray(errorData[key])) {
+              errorMessage = errorData[key].join(', ');
+              break;
+            }
+          }
+        }
+        
+        throw new Error(errorMessage || `Échec de ${modalType === 'edit' ? 'modification' : 'création'}`);
+      }
+
+      const updatedUser = await res.json();
+      console.log('✅ SUCCÈS:', updatedUser);
+      
+      onUserUpdated(updatedUser, modalType);
+      onClose();
+      
+    } catch (err: any) {
+      console.error('💥 ERREUR:', err);
+      if (err.message !== 'Session expired') {
+        setFormError(err.message || 'Une erreur est survenue lors de l\'enregistrement');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!show) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xl font-semibold text-gray-800">
+              {modalType === 'add' ? 'Ajouter un utilisateur' : 
+               modalType === 'edit' ? 'Modifier l\'utilisateur' : 
+               'Détails de l\'utilisateur'}
+            </h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <X size={24} />
+            </button>
           </div>
+        </div>
 
-          {modalType === 'view' && selectedUser ? (
-            <div className="p-6 space-y-6">
-              <div className="flex items-center space-x-4">
-                {selectedUser.avatar ? (
-                  <img 
-                    src={selectedUser.avatar} 
-                    alt={selectedUser.username}
-                    className="w-16 h-16 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-xl font-bold">
-                    {selectedUser.username.charAt(0).toUpperCase()}
-                  </div>
-                )}
-                <div>
-                  <h4 className="text-xl font-semibold text-gray-800">
-                    {safeGetText(selectedUser.first_name)} {safeGetText(selectedUser.last_name)}
-                  </h4>
-                  <p className="text-gray-600">@{selectedUser.username}</p>
-                  <div className="flex items-center mt-1">
-                    {getStatusIcon(selectedUser.status)}
-                    <span className="ml-2 text-sm">{getStatusText(selectedUser.status)}</span>
-                  </div>
+        {modalType === 'view' && selectedUser ? (
+          <div className="p-6 space-y-6">
+            <div className="flex items-center space-x-4">
+              {selectedUser.avatar ? (
+                <img 
+                  src={selectedUser.avatar} 
+                  alt={selectedUser.username}
+                  className="w-16 h-16 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-xl font-bold">
+                  {selectedUser.username.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div>
+                <h4 className="text-xl font-semibold text-gray-800">
+                  {safeGetText(selectedUser.first_name)} {safeGetText(selectedUser.last_name)}
+                </h4>
+                <p className="text-gray-600">@{selectedUser.username}</p>
+                <div className="flex items-center mt-1">
+                  {getStatusIcon(selectedUser.status)}
+                  <span className="ml-2 text-sm">{getStatusText(selectedUser.status)}</span>
                 </div>
               </div>
-              
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="flex items-center text-gray-600">
+                  <Mail size={16} className="mr-2" />
+                  <span>{selectedUser.email}</span>
+                </div>
+                <div className="flex items-center text-gray-600">
+                  <Phone size={16} className="mr-2" />
+                  <span>{safeGetText(selectedUser.phone)}</span>
+                </div>
+                <div className="flex items-center text-gray-600">
+                  <MapPin size={16} className="mr-2" />
+                  <span>{safeGetText(selectedUser.location)}</span>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="flex items-center text-gray-600">
+                  <Calendar size={16} className="mr-2" />
+                  <span>Rejoint le {new Date(selectedUser.join_date).toLocaleDateString('fr-FR')}</span>
+                </div>
+                <div className="flex items-center text-gray-600">
+                  <Clock size={16} className="mr-2" />
+                  <span>{selectedUser.last_login ? 
+                    `Dernière connexion: ${new Date(selectedUser.last_login).toLocaleString('fr-FR')}` : 
+                    'Jamais connecté'}</span>
+                </div>
+                <div className="flex items-center text-gray-600">
+                  <Shield size={16} className="mr-2" />
+                  <span>{selectedUser.role_name || roles.find(r => r.id === selectedUser.role)?.name || 'Aucun rôle'}</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="pt-4 border-t border-gray-200">
+              <h4 className="text-lg font-semibold text-gray-800 mb-4">Informations de l'établissement</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div className="flex items-center text-gray-600">
-                    <Mail size={16} className="mr-2" />
-                    <span>{selectedUser.email}</span>
+                    <Store size={16} className="mr-2" />
+                    <span>{selectedUser.establishment_name}</span>
+                  </div>
+                  <div className="flex items-center text-gray-600">
+                    {establishmentTypes.find(t => t.value === selectedUser.establishment_type)?.icon || <Store size={16} className="mr-2" />}
+                    <span className="ml-2">{getEstablishmentType(selectedUser.establishment_type)}</span>
                   </div>
                   <div className="flex items-center text-gray-600">
                     <Phone size={16} className="mr-2" />
-                    <span>{safeGetText(selectedUser.phone)}</span>
-                  </div>
-                  <div className="flex items-center text-gray-600">
-                    <MapPin size={16} className="mr-2" />
-                    <span>{safeGetText(selectedUser.location)}</span>
+                    <span>{safeGetText(selectedUser.establishment_phone)}</span>
                   </div>
                 </div>
                 <div className="space-y-4">
                   <div className="flex items-center text-gray-600">
-                    <Calendar size={16} className="mr-2" />
-                    <span>Rejoint le {new Date(selectedUser.join_date).toLocaleDateString('fr-FR')}</span>
+                    <Mail size={16} className="mr-2" />
+                    <span>{safeGetText(selectedUser.establishment_email)}</span>
                   </div>
                   <div className="flex items-center text-gray-600">
-                    <Clock size={16} className="mr-2" />
-                    <span>{selectedUser.last_login ? 
-                      `Dernière connexion: ${new Date(selectedUser.last_login).toLocaleString('fr-FR')}` : 
-                      'Jamais connecté'}</span>
-                  </div>
-                  <div className="flex items-center text-gray-600">
-                    <Shield size={16} className="mr-2" />
-                    <span>{roles.find(r => r.id === selectedUser.role)?.name || 'Aucun rôle'}</span>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="pt-4 border-t border-gray-200">
-                <h4 className="text-lg font-semibold text-gray-800 mb-4">Informations de l'établissement</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center text-gray-600">
-                      <Store size={16} className="mr-2" />
-                      <span>{selectedUser.establishment_name}</span>
-                    </div>
-                    <div className="flex items-center text-gray-600">
-                      {establishmentTypes.find(t => t.value === selectedUser.establishment_type)?.icon || <Store size={16} className="mr-2" />}
-                      <span className="ml-2">{getEstablishmentType(selectedUser.establishment_type)}</span>
-                    </div>
-                    <div className="flex items-center text-gray-600">
-                      <Phone size={16} className="mr-2" />
-                      <span>{safeGetText(selectedUser.establishment_phone)}</span>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex items-center text-gray-600">
-                      <Mail size={16} className="mr-2" />
-                      <span>{safeGetText(selectedUser.establishment_email)}</span>
-                    </div>
-                    <div className="flex items-center text-gray-600">
-                      <MapPin size={16} className="mr-2" />
-                      <span>{selectedUser.establishment_address}</span>
-                    </div>
+                    <MapPin size={16} className="mr-2" />
+                    <span>{selectedUser.establishment_address}</span>
                   </div>
                 </div>
               </div>
             </div>
-          ) : (
+
+            <div className="pt-4 border-t border-gray-200">
+              <h4 className="text-lg font-semibold text-gray-800 mb-4">Points de vente associés</h4>
+              <div className="space-y-3">
+                {selectedUser.points_of_sale && selectedUser.points_of_sale.length > 0 ? (
+                  selectedUser.points_of_sale.map((pos, index) => {
+                    const posId = typeof pos === 'object' && pos !== null && 'id' in pos ? pos.id : pos;
+                    const posName = typeof pos === 'object' && pos !== null && 'name' in pos 
+                      ? pos.name 
+                      : getPointOfSaleName(posId);
+                    const posType = typeof pos === 'object' && pos !== null && 'type' in pos 
+                      ? pos.type 
+                      : getPointOfSaleType(posId);
+                    
+                    return (
+                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                        <div className="flex items-center space-x-3">
+                          <Store size={16} className="text-gray-600" />
+                          <div>
+                            <span className="font-medium text-gray-800">{posName}</span>
+                            {posType && <span className="text-sm text-gray-500 ml-2">({posType})</span>}
+                          </div>
+                        </div>
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                          {typeof pos === 'object' ? 'Objet complet' : 'ID référence'}
+                        </span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-4 text-gray-500">
+                    <Store size={32} className="mx-auto mb-2 text-gray-300" />
+                    <p>Aucun point de vente associé</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
             {formError && (
-              <div className="p-3 bg-red-100 text-red-600 rounded-lg">{formError}</div>
-            )}
-            
-            {/* Panel de debug temporaire - à retirer en production */}
-            <div className="bg-gray-50 p-4 rounded-lg border">
-              <h4 className="font-bold mb-2 text-sm">DEBUG - État du formulaire:</h4>
-              <div className="text-xs">
-                <p>Username: "{formData.user.username}"</p>
-                <p>Email: "{formData.user.email}"</p>
-                <p>Role: "{formData.role}"</p>
-                <p>Establishment: "{formData.establishment_name}"</p>
-                <p>Address: "{formData.establishment_address}"</p>
+              <div className="p-3 bg-red-100 text-red-600 rounded-lg">
+                <div className="flex items-center">
+                  <AlertCircle size={16} className="mr-2" />
+                  <span>{formError}</span>
+                </div>
               </div>
-            </div>
+            )}
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
@@ -856,19 +759,22 @@ const handleSubmit = async (e: React.FormEvent) => {
             
             <div className="pt-4 border-t border-gray-200">
               <h4 className="text-lg font-semibold text-gray-800 mb-4">Points de vente associés</h4>
-              <div className="space-y-2">
-                {pointsOfSale.map((pos, index) => (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {pointsOfSale.map((pos) => (
                   <label 
-                    key={pos.id || `pos-${index}`} 
-                    className="flex items-center space-x-2"
+                    key={pos.id} 
+                    className="flex items-center space-x-2 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
                   >
                     <input
                       type="checkbox"
-                      checked={formData.points_of_sale_ids?.includes(pos.id) || false}
-                      onChange={(e) => handlePointsOfSaleChange(pos.id, e.target.checked)}
+                      checked={formData.points_of_sale_ids?.includes(pos.id.toString()) || false}
+                      onChange={(e) => handlePointsOfSaleChange(pos.id.toString(), e.target.checked)}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
-                    <span>{pos.name} ({pos.type || 'Non spécifié'})</span>
+                    <div>
+                      <span className="font-medium">{pos.name}</span>
+                      {pos.type && <span className="text-sm text-gray-500 ml-2">({pos.type})</span>}
+                    </div>
                   </label>
                 ))}
               </div>
@@ -893,17 +799,19 @@ const handleSubmit = async (e: React.FormEvent) => {
             <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
               <button
                 type="button"
-                onClick={() => setShowModal(false)}
+                onClick={onClose}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Annuler
               </button>
-              <button
-                type="submit"
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                {modalType === 'add' ? 'Ajouter' : 'Modifier'}
-              </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  onClick={() => console.log('🖱️ Bouton cliqué!')}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? 'Enregistrement...' : (modalType === 'add' ? 'Ajouter' : 'Modifier')}
+                </button>
             </div>
           </form>
         )}
@@ -912,19 +820,42 @@ const handleSubmit = async (e: React.FormEvent) => {
   );
 };
 
-  const SupplierModal: React.FC = () => {
-    const [formData, setFormData] = useState<NewSupplier>({
-      name: '',
-      types: '',
-      contact: '',
-      address: '',
-      email: '',
-      logo: null
-    });
-    const [formError, setFormError] = useState<string | null>(null);
-    const [logoPreview, setLogoPreview] = useState<string | null>(null);
+// SupplierModal Component
+interface SupplierModalProps {
+  show: boolean;
+  onClose: () => void;
+  selectedSupplier: Supplier | null;
+  onSupplierUpdated: (supplier: Supplier, type: 'add' | 'edit') => void;
+}
 
-    useEffect(() => {
+const SupplierModal: React.FC<SupplierModalProps> = ({ 
+  show, 
+  onClose, 
+  selectedSupplier, 
+  onSupplierUpdated 
+}) => {
+  const [formData, setFormData] = useState<NewSupplier>({
+    name: '',
+    types: '',
+    contact: '',
+    address: '',
+    email: '',
+    logo: null
+  });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const supplierTypes = [
+    { value: 'importateur', label: 'Importateur' },
+    { value: 'producteur_local', label: 'Producteur local' },
+    { value: 'distributeur', label: 'Distributeur' },
+    { value: 'fabricant', label: 'Fabricant' },
+    { value: 'grossiste', label: 'Grossiste' },
+  ];
+
+  useEffect(() => {
+    if (show) {
       if (selectedSupplier) {
         setFormData({
           name: selectedSupplier.name,
@@ -946,195 +877,222 @@ const handleSubmit = async (e: React.FormEvent) => {
         });
         setLogoPreview(null);
       }
-    }, [selectedSupplier]);
+      setFormError(null);
+    }
+  }, [show, selectedSupplier]);
 
-    const validateForm = () => {
-      if (!formData.name.trim()) return 'Le nom du fournisseur est requis.';
-      if (!formData.types.trim()) return 'Le type de fournisseur est requis.';
-      if (!formData.contact.trim()) return 'Le contact est requis.';
-      return null;
-    };
+  const validateForm = () => {
+    if (!formData.name.trim()) return 'Le nom du fournisseur est requis.';
+    if (!formData.types.trim()) return 'Le type de fournisseur est requis.';
+    if (!formData.contact.trim()) return 'Le contact est requis.';
+    if (!formData.email.trim()) return 'L\'email est requis.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      return 'Format d\'email invalide.';
+    }
+    return null;
+  };
 
-    const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-        setFormData(prev => ({ ...prev, logo: file }));
-        setLogoPreview(URL.createObjectURL(file));
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setFormData(prev => ({ ...prev, logo: file }));
+      setLogoPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const validationError = validateForm();
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+    try {
+      setFormError(null);
+      setIsSubmitting(true);
+      const formDataToSend = new FormData();
+      
+      formDataToSend.append('name', formData.name);
+      formDataToSend.append('types', formData.types);
+      formDataToSend.append('contact', formData.contact);
+      formDataToSend.append('address', formData.address);
+      formDataToSend.append('email', formData.email);
+      
+      if (formData.logo) {
+        formDataToSend.append('logo', formData.logo);
       }
-    };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      const validationError = validateForm();
-      if (validationError) {
-        setFormError(validationError);
-        return;
+      let res;
+      if (selectedSupplier) {
+        res = await apiService.updateResource('/suppliers', selectedSupplier.id, formDataToSend, true);
+      } else {
+        res = await apiService.createResource('/suppliers', formDataToSend, true);
       }
-      try {
-        setFormError(null);
-        const formDataToSend = new FormData();
-        
-        formDataToSend.append('name', formData.name);
-        formDataToSend.append('types', formData.types);
-        formDataToSend.append('contact', formData.contact);
-        formDataToSend.append('address', formData.address);
-        formDataToSend.append('email', formData.email);
-        
-        if (formData.logo) {
-          formDataToSend.append('logo', formData.logo);
-        }
 
-        let res;
-        if (selectedSupplier) {
-          // Utilisez updateResource avec isFormData: true
-          res = await apiService.updateResource('/suppliers', selectedSupplier.id, formDataToSend, true);
-        } else {
-          // Utilisez createResource avec isFormData: true au lieu de createSupplier
-          res = await apiService.createResource('/suppliers', formDataToSend, true);
-        }
-
-        if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData?.detail || errorData?.message || `Failed to ${selectedSupplier ? 'update' : 'create'} supplier`);
-        }
-        const updatedSupplier = await res.json();
-        setSuppliers(prev => selectedSupplier ? 
-          prev.map(s => s.id === updatedSupplier.id ? updatedSupplier : s) : 
-          [...prev, updatedSupplier]);
-        setShowSupplierModal(false);
-      } catch (err: any) {
-        if (err.message !== 'Session expired') {
-          setFormError(err.message || 'An error occurred');
-        }
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData?.detail || errorData?.message || `Failed to ${selectedSupplier ? 'update' : 'create'} supplier`);
       }
-    };
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold text-gray-800">
-                {selectedSupplier ? 'Modifier le fournisseur' : 'Ajouter un fournisseur'}
-              </h3>
-              <button onClick={() => setShowSupplierModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
+      const updatedSupplier = await res.json();
+      onSupplierUpdated(updatedSupplier, selectedSupplier ? 'edit' : 'add');
+      onClose();
+    } catch (err: any) {
+      if (err.message !== 'Session expired') {
+        setFormError(err.message || 'Une erreur est survenue');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!show) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xl font-semibold text-gray-800">
+              {selectedSupplier ? 'Modifier le fournisseur' : 'Ajouter un fournisseur'}
+            </h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <X size={24} />
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {formError && (
+            <div className="p-3 bg-red-100 text-red-600 rounded-lg">{formError}</div>
+          )}
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Nom du fournisseur *</label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Type *</label>
+              <select
+                value={formData.types}
+                onChange={(e) => setFormData({...formData, types: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="">Sélectionner un type</option>
+                {supplierTypes.map(type => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Contact *</label>
+              <input
+                type="text"
+                value={formData.contact}
+                onChange={(e) => setFormData({...formData, contact: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({...formData, email: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Adresse</label>
+              <textarea
+                value={formData.address}
+                onChange={(e) => setFormData({...formData, address: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows={3}
+              />
+            </div>
+          </div>
+          
+          <div className="pt-4 border-t border-gray-200">
+            <h4 className="text-lg font-semibold text-gray-800 mb-4">Logo</h4>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Logo du fournisseur</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleLogoChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              />
+              {logoPreview && (
+                <img src={logoPreview} alt="Logo Preview" className="mt-2 w-20 h-20 rounded object-cover" />
+              )}
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-6">
-            {formError && (
-              <div className="p-3 bg-red-100 text-red-600 rounded-lg">{formError}</div>
-            )}
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Nom du fournisseur *</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Type *</label>
-                <select
-                  value={formData.types}
-                  onChange={(e) => setFormData({...formData, types: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Sélectionner un type</option>
-                  {supplierTypes.map(type => (
-                    <option key={type.value} value={type.value}>{type.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Contact *</label>
-                <input
-                  type="text"
-                  value={formData.contact}
-                  onChange={(e) => setFormData({...formData, contact: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Adresse</label>
-                <textarea
-                  value={formData.address}
-                  onChange={(e) => setFormData({...formData, address: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows={3}
-                />
-              </div>
-            </div>
-            
-            <div className="pt-4 border-t border-gray-200">
-              <h4 className="text-lg font-semibold text-gray-800 mb-4">Logo</h4>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Logo du fournisseur</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleLogoChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-                {logoPreview && (
-                  <img src={logoPreview} alt="Logo Preview" className="mt-2 w-20 h-20 rounded object-cover" />
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => setShowSupplierModal(false)}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Annuler
-              </button>
-              <button
-                type="submit"
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                {selectedSupplier ? 'Modifier' : 'Ajouter'}
-              </button>
-            </div>
-          </form>
-        </div>
+          <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? 'Enregistrement...' : (selectedSupplier ? 'Modifier' : 'Ajouter')}
+            </button>
+          </div>
+        </form>
       </div>
-    );
-  };
+    </div>
+  );
+};
 
-  const RoleModal: React.FC = () => {
-    const [formData, setFormData] = useState<NewRole>({
-      id: '',
-      name: '',
-      description: '',
-      permissions: []
-    });
-    const [formError, setFormError] = useState<string | null>(null);
+// RoleModal Component
+interface RoleModalProps {
+  show: boolean;
+  onClose: () => void;
+  selectedRole: Role | null;
+  permissions: Permission[];
+  onRoleUpdated: (role: Role, type: 'add' | 'edit') => void;
+}
 
-    useEffect(() => {
-      if (selectedRoleForEdit) {
+const RoleModal: React.FC<RoleModalProps> = ({ 
+  show, 
+  onClose, 
+  selectedRole, 
+  permissions, 
+  onRoleUpdated 
+}) => {
+  const [formData, setFormData] = useState<NewRole>({
+    id: '',
+    name: '',
+    description: '',
+    permissions: []
+  });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (show) {
+      if (selectedRole) {
         setFormData({
-          id: selectedRoleForEdit.id,
-          name: selectedRoleForEdit.name,
-          description: selectedRoleForEdit.description || '',
-          permissions: selectedRoleForEdit.permissions.map(p => p.id)
+          id: selectedRole.id,
+          name: selectedRole.name,
+          description: selectedRole.description || '',
+          permissions: selectedRole.permissions.map(p => p.id)
         });
       } else {
         setFormData({
@@ -1144,171 +1102,412 @@ const handleSubmit = async (e: React.FormEvent) => {
           permissions: []
         });
       }
-    }, [selectedRoleForEdit]);
+      setFormError(null);
+    }
+  }, [show, selectedRole]);
 
-    const validateForm = () => {
-      if (!formData.id.trim()) return 'L\'ID du rôle est requis.';
-      if (!formData.name.trim()) return 'Le nom du rôle est requis.';
-      return null;
-    };
+  const validateForm = () => {
+    if (!formData.id.trim()) return 'L\'ID du rôle est requis.';
+    if (!formData.name.trim()) return 'Le nom du rôle est requis.';
+    return null;
+  };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      const validationError = validateForm();
-      if (validationError) {
-        setFormError(validationError);
-        return;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const validationError = validateForm();
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+    try {
+      setFormError(null);
+      setIsSubmitting(true);
+      const data = {
+        id: formData.id,
+        name: formData.name,
+        description: formData.description,
+        permissions: formData.permissions
+      };
+      let res;
+      if (selectedRole) {
+        res = await apiService.updateResource('roles', selectedRole.id, data);
+      } else {
+        res = await apiService.createRole(data);
       }
-      try {
-        setFormError(null);
-        const data = {
-          id: formData.id,
-          name: formData.name,
-          description: formData.description,
-          permissions: formData.permissions
-        };
-        let res;
-        if (selectedRoleForEdit) {
-          res = await apiService.updateResource('roles', selectedRoleForEdit.id, data);
-        } else {
-          res = await apiService.createRole(data);
-        }
-        if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData?.detail || `Failed to ${selectedRoleForEdit ? 'update' : 'create'} role`);
-        }
-        const updatedRole = await res.json();
-        setRoles(prev => selectedRoleForEdit ? 
-          prev.map(r => r.id === updatedRole.id ? updatedRole : r) : 
-          [...prev, updatedRole]);
-        setShowRoleModal(false);
-        setSelectedRoleForEdit(null);
-      } catch (err: any) {
-        if (err.message !== 'Session expired') {
-          setFormError(err.message || 'An error occurred');
-        }
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData?.detail || `Failed to ${selectedRole ? 'update' : 'create'} role`);
       }
-    };
+      const updatedRole = await res.json();
+      onRoleUpdated(updatedRole, selectedRole ? 'edit' : 'add');
+      onClose();
+    } catch (err: any) {
+      if (err.message !== 'Session expired') {
+        setFormError(err.message || 'Une erreur est survenue');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-    const toggleRolePermission = (permissionId: string) => {
-      setFormData(prev => ({
-        ...prev,
-        permissions: prev.permissions.includes(permissionId)
-          ? prev.permissions.filter(p => p !== permissionId)
-          : [...prev.permissions, permissionId]
-      }));
-    };
+  const toggleRolePermission = (permissionId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      permissions: prev.permissions.includes(permissionId)
+        ? prev.permissions.filter(p => p !== permissionId)
+        : [...prev.permissions, permissionId]
+    }));
+  };
 
-    const permissionsByCategory = permissions.reduce((acc, permission) => {
-      const category = permission.category || 'Autre';
-      if (!acc[category]) acc[category] = [];
-      acc[category].push(permission);
-      return acc;
-    }, {} as Record<string, Permission[]>);
+  const permissionsByCategory = permissions.reduce((acc, permission) => {
+    const category = permission.category || 'Autre';
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(permission);
+    return acc;
+  }, {} as Record<string, Permission[]>);
 
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold text-gray-800">
-                {selectedRoleForEdit ? 'Modifier le rôle' : 'Ajouter un rôle'}
-              </h3>
-              <button 
-                onClick={() => {
-                  setShowRoleModal(false);
-                  setSelectedRoleForEdit(null);
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={24} />
-              </button>
+  if (!show) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xl font-semibold text-gray-800">
+              {selectedRole ? 'Modifier le rôle' : 'Ajouter un rôle'}
+            </h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <X size={24} />
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {formError && (
+            <div className="p-3 bg-red-100 text-red-600 rounded-lg">{formError}</div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">ID du rôle *</label>
+              <input 
+                type="text"
+                value={formData.id}
+                onChange={(e) => setFormData({...formData, id: e.target.value})}
+                className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required 
+                disabled={!!selectedRole}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Nom du rôle *</label>
+              <input 
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required 
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+              <input 
+                type="text"
+                value={formData.description}
+                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-6">
-            {formError && (
-              <div className="p-3 bg-red-100 text-red-600 rounded-lg">{formError}</div>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">ID du rôle *</label>
-                <input 
-                  type="text"
-                  value={formData.id}
-                  onChange={(e) => setFormData({...formData, id: e.target.value})}
-                  className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required 
-                  disabled={!!selectedRoleForEdit}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Nom du rôle *</label>
-                <input 
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required 
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
-                <input 
-                  type="text"
-                  value={formData.description}
-                  onChange={(e) => setFormData({...formData, description: e.target.value})}
-                  className="w-full px-4 py-2 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-4">Permissions</label>
-              <div className="space-y-4">
-                {Object.entries(permissionsByCategory).map(([category, categoryPermissions]) => (
-                  <div key={category} className="border border-gray-200 rounded-lg p-4">
-                    <h6 className="font-medium text-gray-800 mb-3">{category}</h6>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {categoryPermissions.map(permission => (
-                        <label key={permission.id} className="flex items-center space-x-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={formData.permissions.includes(permission.id)}
-                            onChange={() => toggleRolePermission(permission.id)}
-                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <span className="text-sm text-gray-700">{permission.name}</span>
-                        </label>
-                      ))}
-                    </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-4">Permissions</label>
+            <div className="space-y-4">
+              {Object.entries(permissionsByCategory).map(([category, categoryPermissions]) => (
+                <div key={category} className="border border-gray-200 rounded-lg p-4">
+                  <h6 className="font-medium text-gray-800 mb-3">{category}</h6>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {categoryPermissions.map(permission => (
+                      <label key={permission.id} className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.permissions.includes(permission.id)}
+                          onChange={() => toggleRolePermission(permission.id)}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700">{permission.name}</span>
+                      </label>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
+          </div>
 
-            <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
-              <button 
-                type="button"
-                onClick={() => {
-                  setShowRoleModal(false);
-                  setSelectedRoleForEdit(null);
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
-              >
-                Annuler
-              </button>
-              <button 
-                type="submit"
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                {selectedRoleForEdit ? 'Modifier' : 'Ajouter'}
-              </button>
-            </div>
-          </form>
-        </div>
+          <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
+            <button 
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              Annuler
+            </button>
+            <button 
+              type="submit"
+              disabled={isSubmitting}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? 'Enregistrement...' : (selectedRole ? 'Modifier' : 'Ajouter')}
+            </button>
+          </div>
+        </form>
       </div>
+    </div>
+  );
+};
+
+// Main UserManagement Component
+const UserManagement: React.FC = () => {
+  const [users, setUsers] = useState<User[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [pointsOfSale, setPointsOfSale] = useState<PointOfSale[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
+  const [selectedRole, setSelectedRole] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedEstablishmentType, setSelectedEstablishmentType] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [modalType, setModalType] = useState<'add' | 'edit' | 'view'>('add');
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [selectedRoleForEdit, setSelectedRoleForEdit] = useState<Role | null>(null);
+  const [activeTab, setActiveTab] = useState<'users' | 'suppliers'>('users');
+  const usersPerPage = 10;
+
+  const establishmentTypes = [
+    { value: 'Boutique', label: 'Boutique', icon: <Store size={16} /> },
+    { value: 'supermarche', label: 'Supermarché', icon: <ShoppingCart size={16} /> },
+    { value: 'superette', label: 'Supérette', icon: <Store size={16} /> },
+    { value: 'epicerie', label: 'Épicerie', icon: <Store size={16} /> },
+    { value: 'demi_grossiste', label: 'Demi-Grossiste', icon: <Truck size={16} /> },
+    { value: 'grossiste', label: 'Grossiste', icon: <Truck size={16} /> },
+    { value: 'mobile_vendor', label: 'Vendeur ambulant', icon: <Bike size={16} /> },
+  ];
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setError(null);
+        setLoading(true);
+
+        const [usersRes, rolesRes, permissionsRes, posRes, suppliersRes] = await Promise.all([
+          apiService.getUsers(),
+          apiService.getRoles(),
+          apiService.getPermissions(),
+          apiService.getPointsVente(),
+          apiService.getSuppliers()
+        ]);
+
+        if (!usersRes.ok) throw new Error('Failed to fetch users');
+        if (!rolesRes.ok) throw new Error('Failed to fetch roles');
+        if (!permissionsRes.ok) throw new Error('Failed to fetch permissions');
+        if (!posRes.ok) throw new Error('Failed to fetch points of sale');
+        if (!suppliersRes.ok) throw new Error('Failed to fetch suppliers');
+
+        const usersData = await usersRes.json();
+        const rolesData: Role[] = await rolesRes.json();
+        const permissionsData: Permission[] = await permissionsRes.json();
+        const posData: PointOfSale[] = await posRes.json();
+        const suppliersData: Supplier[] = await suppliersRes.json();
+
+        setUsers(usersData.map((user: any) => ({
+          id: user.id,
+          username: user.user?.username || user.username || '',
+          email: user.user?.email || user.email || '',
+          first_name: user.user?.first_name || user.first_name || '',
+          last_name: user.user?.last_name || user.last_name || '',
+          phone: user.phone || '',
+          location: user.location || '',
+          role: user.role || '',
+          status: safeGetStatus(user.status),
+          join_date: user.join_date || '',
+          last_login: user.last_login || '',
+          avatar: user.avatar || '',
+          establishment_name: user.establishment_name || '',
+          establishment_type: user.establishment_type || 'Boutique',
+          establishment_phone: user.establishment_phone || '',
+          establishment_email: user.establishment_email || '',
+          establishment_address: user.establishment_address || '',
+          points_of_sale: user.points_of_sale || [],
+          establishment_registration_date: user.establishment_registration_date || '',
+          role_name: user.role_name || ''
+        })));
+
+        setRoles(rolesData);
+        setPermissions(permissionsData);
+        setPointsOfSale(posData);
+        setSuppliers(suppliersData.map((supplier: any) => ({
+          ...supplier,
+          types: supplier.types || 'grossiste'
+        })));
+
+      } catch (err: any) {
+        if (err.message !== 'Session expired') {
+          setError(err.message || 'An error occurred while fetching data');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const filteredUsers = users.filter(user => {
+    if (!user) return false;
+
+    const searchTermLower = safeLowerCase(searchTerm);
+
+    return (
+      (safeLowerCase(user.username).includes(searchTermLower) ||
+       safeLowerCase(user.email).includes(searchTermLower) ||
+       safeLowerCase(user.establishment_name).includes(searchTermLower) ||
+       safeLowerCase(user.phone).includes(searchTermLower)) &&
+      (selectedRole === 'all' || (user.role && safeLowerCase(user.role) === safeLowerCase(selectedRole))) &&
+      (selectedStatus === 'all' || user.status === selectedStatus) &&
+      (selectedEstablishmentType === 'all' || user.establishment_type === selectedEstablishmentType)
     );
+  });
+
+  const filteredSuppliers = suppliers.filter(supplier => {
+    const searchTermLower = safeLowerCase(supplierSearchTerm);
+    return (
+      safeLowerCase(supplier.name).includes(searchTermLower) ||
+      safeLowerCase(supplier.email).includes(searchTermLower) ||
+      safeLowerCase(supplier.contact).includes(searchTermLower) ||
+      safeLowerCase(supplier.address).includes(searchTermLower)
+    );
+  });
+
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * usersPerPage,
+    currentPage * usersPerPage
+  );
+  const totalPages = Math.ceil(filteredUsers.length / usersPerPage) || 1;
+
+  const getStatusIcon = (status?: string) => {
+    switch (safeGetStatus(status)) {
+      case 'active': return <CheckCircle className="text-green-500" size={16} />;
+      case 'inactive': return <XCircle className="text-red-500" size={16} />;
+      case 'suspended': return <AlertCircle className="text-yellow-500" size={16} />;
+      default: return <AlertCircle className="text-gray-500" size={16} />;
+    }
+  };
+
+  const getStatusText = (status?: string) => {
+    switch (safeGetStatus(status)) {
+      case 'active': return 'Actif';
+      case 'inactive': return 'Inactif';
+      case 'suspended': return 'Suspendu';
+      default: return 'Inconnu';
+    }
+  };
+
+  const getEstablishmentType = (type?: string) => {
+    const found = establishmentTypes.find(t => t.value === type);
+    return found ? found.label : type || 'Non spécifié';
+  };
+
+  const getSupplierType = (type?: string) => {
+    const supplierTypes = [
+      { value: 'importateur', label: 'Importateur' },
+      { value: 'producteur_local', label: 'Producteur local' },
+      { value: 'distributeur', label: 'Distributeur' },
+      { value: 'fabricant', label: 'Fabricant' },
+      { value: 'grossiste', label: 'Grossiste' },
+    ];
+    const found = supplierTypes.find(t => t.value === type);
+    return found ? found.label : type || 'Non spécifié';
+  };
+
+  const deleteUser = async (userId: number) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur ?')) return;
+    try {
+      setError(null);
+      const res = await apiService.deleteResource('users', userId);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData?.detail || 'Failed to delete user');
+      }
+      setUsers(prev => prev.filter(u => u.id !== userId));
+    } catch (err: any) {
+      if (err.message !== 'Session expired') {
+        setError(err.message || 'Failed to delete user');
+      }
+    }
+  };
+
+  const deleteSupplier = async (supplierId: number) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce fournisseur ?')) return;
+    try {
+      setError(null);
+      const res = await apiService.deleteResource('suppliers', supplierId);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData?.detail || 'Failed to delete supplier');
+      }
+      setSuppliers(prev => prev.filter(s => s.id !== supplierId));
+    } catch (err: any) {
+      if (err.message !== 'Session expired') {
+        setError(err.message || 'Failed to delete supplier');
+      }
+    }
+  };
+
+  const deleteRole = async (roleId: string) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce rôle ?')) return;
+    try {
+      setError(null);
+      const res = await apiService.deleteResource('roles', roleId);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData?.detail || 'Failed to delete role');
+      }
+      setRoles(prev => prev.filter(r => r.id !== roleId));
+    } catch (err: any) {
+      if (err.message !== 'Session expired') {
+        setError(err.message || 'Failed to delete role');
+      }
+    }
+  };
+
+const handleUserUpdated = (updatedUser: User, type: 'add' | 'edit' | 'view') => {
+  if (type === 'edit') {
+    setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+  } else if (type === 'add') {
+    setUsers(prev => [...prev, updatedUser]);
+  }
+  // Pour 'view', ne rien faire
+};
+  const handleSupplierUpdated = (updatedSupplier: Supplier, type: 'add' | 'edit') => {
+    if (type === 'edit') {
+      setSuppliers(prev => prev.map(s => s.id === updatedSupplier.id ? updatedSupplier : s));
+    } else {
+      setSuppliers(prev => [...prev, updatedSupplier]);
+    }
+  };
+
+  const handleRoleUpdated = (updatedRole: Role, type: 'add' | 'edit') => {
+    if (type === 'edit') {
+      setRoles(prev => prev.map(r => r.id === updatedRole.id ? updatedRole : r));
+    } else {
+      setRoles(prev => [...prev, updatedRole]);
+    }
   };
 
   if (loading) {
@@ -1370,7 +1569,10 @@ const handleSubmit = async (e: React.FormEvent) => {
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold text-gray-800">Gestion des Rôles</h3>
           <button
-            onClick={() => setShowRoleModal(true)}
+            onClick={() => {
+              setSelectedRoleForEdit(null);
+              setShowRoleModal(true);
+            }}
             className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <Plus size={16} />
@@ -1378,9 +1580,9 @@ const handleSubmit = async (e: React.FormEvent) => {
           </button>
         </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {roles.map((role, index) => (
+            {roles.map((role) => (
               <div 
-                key={role.id ? role.id : `role-${index}`} 
+                key={role.id} 
                 className={`border rounded-lg p-4 ${role.color ? `bg-[${role.color}20]` : 'bg-gray-100'}`}
               >
                 <div className="flex justify-between items-start mb-2">
@@ -1538,7 +1740,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                               />
                             ) : (
                               <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold">
-                                {user.username.charAt(0).toUpperCase()}
+                                {user.username?.charAt(0)?.toUpperCase() || 'U'}
                               </div>
                             )}
                             <div>
@@ -1556,6 +1758,19 @@ const handleSubmit = async (e: React.FormEvent) => {
                               {establishmentTypes.find(t => t.value === user.establishment_type)?.icon || <Store size={16} />}
                               <span className="ml-1">{getEstablishmentType(user.establishment_type)}</span>
                             </div>
+                            {user.points_of_sale && user.points_of_sale.length > 0 && (
+                              <div className="mt-1">
+                                <p className="text-xs text-gray-500">
+                                  Points de vente: {user.points_of_sale.map(pos => {
+                                    if (typeof pos === 'object' && pos !== null && 'name' in pos) {
+                                      return (pos as PointOfSale).name;
+                                    }
+                                    const pointOfSale = pointsOfSale.find(p => p.id.toString() === pos.toString());
+                                    return pointOfSale?.name || 'Point de vente inconnu';
+                                  }).join(', ')}
+                                </p>
+                              </div>
+                            )}
                           </div>
                         </td>
                         <td className="py-4 px-4">
@@ -1570,7 +1785,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                             <span 
                               className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
                             >
-                              {roles.find(r => r.id === user.role)?.name || 'Rôle inconnu'}
+                              {user.role_name || roles.find(r => r.id === user.role)?.name || 'Rôle inconnu'}
                             </span>
                           ) : (
                             <span className="text-gray-500">Aucun rôle</span>
@@ -1791,10 +2006,33 @@ const handleSubmit = async (e: React.FormEvent) => {
         )}
       </div>
 
-      {showModal && <UserModal />}
-      {showSupplierModal && <SupplierModal />}
-      {showRoleModal && <RoleModal />}
+      {/* Modals */}
+      <UserModal 
+        show={showModal}
+        onClose={() => setShowModal(false)}
+        modalType={modalType}
+        selectedUser={selectedUser}
+        roles={roles}
+        pointsOfSale={pointsOfSale}
+        onUserUpdated={handleUserUpdated}
+      />
+      
+      <SupplierModal 
+        show={showSupplierModal}
+        onClose={() => setShowSupplierModal(false)}
+        selectedSupplier={selectedSupplier}
+        onSupplierUpdated={handleSupplierUpdated}
+      />
+      
+      <RoleModal 
+        show={showRoleModal}
+        onClose={() => setShowRoleModal(false)}
+        selectedRole={selectedRoleForEdit}
+        permissions={permissions}
+        onRoleUpdated={handleRoleUpdated}
+      />
     </div>
   );
 };
+
 export default UserManagement;

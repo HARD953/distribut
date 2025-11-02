@@ -128,7 +128,7 @@ const LoginPage = () => {
                   <span className="text-white font-bold text-xl">LT</span>
                 </div>
                 <div>
-                  <h1 className="text-3xl font-bold text-white">LanfiaTech</h1>
+                  <h1 className="text-3xl font-bold text-white">FrieslandCampina</h1>
                   <p className="text-white/80 text-sm">Plateforme de Distribution</p>
                 </div>
               </div>

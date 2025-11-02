@@ -43,12 +43,13 @@ interface PointOfSale {
   monthly_orders: number;
   evaluation_score: number;
   avatar: string;
+  // Nouveaux attributs
+  brander: boolean;
+  marque_brander: string | null;
 }
 
-
 const PointsVenteManagement = () => {
-  const API_BASE_URL = 'https://api.pushtrack360.com/api';
-  //const API_BASE_URL = 'http://127.0.0.1:8000/api';
+  const API_BASE_URL = 'https://backendsupply.onrender.com/api';
   const [pointsVente, setPointsVente] = useState<PointOfSale[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +72,10 @@ const PointsVenteManagement = () => {
     latitude: 0,
     longitude: 0,
     registration_date: new Date().toISOString().split('T')[0],
-    avatar: ''
+    avatar: '',
+    // Nouveaux attributs
+    brander: false,
+    marque_brander: ''
   });
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -202,7 +206,10 @@ const PointsVenteManagement = () => {
           avatar: point.avatar || '/default-avatar.png',
           latitude: isValidCoordinate(point.latitude) ? point.latitude : 5.3197,
           longitude: isValidCoordinate(point.longitude) ? point.longitude : -4.0267,
-          registration_date: point.registration_date || new Date().toISOString().split('T')[0]
+          registration_date: point.registration_date || new Date().toISOString().split('T')[0],
+          // Valeurs par défaut pour les nouveaux champs
+          brander: point.brander || false,
+          marque_brander: point.marque_brander || null
         }));
         setPointsVente(validatedData);
       } catch (err: any) {
@@ -258,7 +265,10 @@ const PointsVenteManagement = () => {
       'Date d\'inscription',
       'Chiffre d\'affaires',
       'Commandes mensuelles',
-      'Score d\'évaluation'
+      'Score d\'évaluation',
+      // Nouveaux en-têtes
+      'Est brandé',
+      'Marque du brander'
     ];
 
     const csvData = filteredPoints.map(point => [
@@ -275,7 +285,10 @@ const PointsVenteManagement = () => {
       point.registration_date,
       point.turnover,
       point.monthly_orders,
-      point.evaluation_score
+      point.evaluation_score,
+      // Nouvelles données
+      point.brander ? 'Oui' : 'Non',
+      point.marque_brander || ''
     ]);
 
     // Créer le contenu CSV
@@ -349,6 +362,11 @@ const PointsVenteManagement = () => {
       formData.append('latitude', newPoint.latitude.toString());
       formData.append('longitude', newPoint.longitude.toString());
       formData.append('registration_date', newPoint.registration_date);
+      // Nouveaux champs
+      formData.append('brander', newPoint.brander.toString());
+      if (newPoint.brander && newPoint.marque_brander) {
+        formData.append('marque_brander', newPoint.marque_brander);
+      }
       if (avatarFile) {
         formData.append('avatar', avatarFile);
       }
@@ -366,7 +384,11 @@ const PointsVenteManagement = () => {
       }
 
       const createdPoint = await response.json();
-      setPointsVente([...pointsVente, createdPoint]);
+      setPointsVente([...pointsVente, {
+        ...createdPoint,
+        brander: createdPoint.brander || false,
+        marque_brander: createdPoint.marque_brander || null
+      }]);
       setShowAddModal(false);
       setNewPoint({
         name: '',
@@ -381,7 +403,9 @@ const PointsVenteManagement = () => {
         latitude: 0,
         longitude: 0,
         registration_date: new Date().toISOString().split('T')[0],
-        avatar: ''
+        avatar: '',
+        brander: false,
+        marque_brander: ''
       });
       setAvatarFile(null);
     } catch (err: any) {
@@ -412,12 +436,20 @@ const PointsVenteManagement = () => {
       formData.append('email', editingPoint.email);
       formData.append('address', editingPoint.address);
       formData.append('type', editingPoint.type);
+      formData.append('status', editingPoint.status);
       formData.append('district', editingPoint.district);
       formData.append('region', editingPoint.region);
       formData.append('commune', editingPoint.commune);
       formData.append('latitude', editingPoint.latitude.toString());
       formData.append('longitude', editingPoint.longitude.toString());
       formData.append('registration_date', editingPoint.registration_date);
+      // Nouveaux champs
+      formData.append('brander', editingPoint.brander.toString());
+      if (editingPoint.brander && editingPoint.marque_brander) {
+        formData.append('marque_brander', editingPoint.marque_brander);
+      } else {
+        formData.append('marque_brander', '');
+      }
       if (avatarFile) {
         formData.append('avatar', avatarFile);
       }
@@ -431,12 +463,17 @@ const PointsVenteManagement = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Erreur lors de la mise à jour du point de vente');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erreur lors de la mise à jour du point de vente');
       }
 
       const updatedPoint = await response.json();
       setPointsVente(pointsVente.map(point => 
-        point.id === updatedPoint.id ? updatedPoint : point
+        point.id === updatedPoint.id ? {
+          ...updatedPoint,
+          brander: updatedPoint.brander || false,
+          marque_brander: updatedPoint.marque_brander || null
+        } : point
       ));
       setEditingPoint(null);
       setAvatarFile(null);
@@ -615,6 +652,7 @@ const PointsVenteManagement = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Type</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Statut</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Localisation</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Branding</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">Actions</th>
                 </tr>
               </thead>
@@ -662,6 +700,22 @@ const PointsVenteManagement = () => {
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-900">{point.district}</div>
                       <div className="text-xs text-gray-500">{point.region}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col gap-1">
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                          point.brander 
+                            ? 'bg-purple-100 text-purple-800 border-purple-200' 
+                            : 'bg-gray-100 text-gray-800 border-gray-200'
+                        }`}>
+                          {point.brander ? 'Brandé' : 'Non brandé'}
+                        </span>
+                        {point.brander && point.marque_brander && (
+                          <span className="text-xs text-gray-600 truncate max-w-[120px]" title={point.marque_brander}>
+                            {point.marque_brander}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
@@ -981,6 +1035,46 @@ const PointsVenteManagement = () => {
                   />
                 </div>
 
+                {/* Nouveaux champs pour le brander */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Est brandé
+                  </label>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2">
+                      <input 
+                        type="checkbox"
+                        checked={newPoint.brander}
+                        onChange={(e) => {
+                          setNewPoint({
+                            ...newPoint, 
+                            brander: e.target.checked,
+                            marque_brander: e.target.checked ? newPoint.marque_brander : ''
+                          })
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Ce point de vente est brandé</span>
+                    </label>
+                  </div>
+                </div>
+
+                {newPoint.brander && (
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Marque du brander *
+                    </label>
+                    <input 
+                      type="text"
+                      value={newPoint.marque_brander}
+                      onChange={(e) => setNewPoint({...newPoint, marque_brander: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Ex: Coca-Cola, Nestlé, etc."
+                      required={newPoint.brander}
+                    />
+                  </div>
+                )}
+
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Coordonnées
@@ -1049,7 +1143,7 @@ const PointsVenteManagement = () => {
               <button 
                 onClick={handleAddPoint}
                 className={`px-4 py-2 rounded-lg ${colors.primary}`}
-                disabled={!newPoint.name || !newPoint.owner || !newPoint.phone || !newPoint.email || !newPoint.address || !newPoint.district || !newPoint.region || !newPoint.commune || !newPoint.registration_date}
+                disabled={!newPoint.name || !newPoint.owner || !newPoint.phone || !newPoint.email || !newPoint.address || !newPoint.district || !newPoint.region || !newPoint.commune || !newPoint.registration_date || (newPoint.brander && !newPoint.marque_brander)}
               >
                 {loading ? <Loader className="animate-spin" size={16} /> : 'Ajouter'}
               </button>
@@ -1237,6 +1331,46 @@ const PointsVenteManagement = () => {
                   />
                 </div>
 
+                {/* Nouveaux champs pour le brander */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Est brandé
+                  </label>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2">
+                      <input 
+                        type="checkbox"
+                        checked={editingPoint.brander}
+                        onChange={(e) => {
+                          setEditingPoint({
+                            ...editingPoint, 
+                            brander: e.target.checked,
+                            marque_brander: e.target.checked ? editingPoint.marque_brander : ''
+                          })
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Ce point de vente est brandé</span>
+                    </label>
+                  </div>
+                </div>
+
+                {editingPoint.brander && (
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Marque du brander *
+                    </label>
+                    <input 
+                      type="text"
+                      value={editingPoint.marque_brander || ''}
+                      onChange={(e) => setEditingPoint({...editingPoint, marque_brander: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Ex: Coca-Cola, Nestlé, etc."
+                      required={editingPoint.brander}
+                    />
+                  </div>
+                )}
+
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Coordonnées
@@ -1300,7 +1434,7 @@ const PointsVenteManagement = () => {
               <button 
                 onClick={updatePoint}
                 className={`px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white`}
-                disabled={!editingPoint.name || !editingPoint.owner || !editingPoint.phone || !editingPoint.email || !editingPoint.address || !editingPoint.district || !editingPoint.region || !editingPoint.commune || !editingPoint.registration_date}
+                disabled={!editingPoint.name || !editingPoint.owner || !editingPoint.phone || !editingPoint.email || !editingPoint.address || !editingPoint.district || !editingPoint.region || !editingPoint.commune || !editingPoint.registration_date || (editingPoint.brander && !editingPoint.marque_brander)}
               >
                 {loading ? <Loader className="animate-spin" size={16} /> : 'Enregistrer'}
               </button>
@@ -1441,6 +1575,28 @@ const PointsVenteManagement = () => {
                         <div className="text-2xl font-bold text-emerald-600">{selectedPoint.monthly_orders}</div>
                         <div className="text-sm text-gray-600">Commandes ce mois</div>
                       </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-white border border-gray-200 rounded-lg p-5">
+                    <h4 className="font-semibold text-gray-800 mb-4">Information Branding</h4>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">Est brandé:</span>
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                          selectedPoint.brander 
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-200' 
+                            : 'bg-gray-100 text-gray-800 border-gray-200'
+                        }`}>
+                          {selectedPoint.brander ? 'Oui' : 'Non'}
+                        </span>
+                      </div>
+                      {selectedPoint.brander && selectedPoint.marque_brander && (
+                        <div>
+                          <p className="text-sm text-gray-600">Marque du brander</p>
+                          <p className="font-medium">{selectedPoint.marque_brander}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                   

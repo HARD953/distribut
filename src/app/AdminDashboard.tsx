@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Home, MapPin, Package, ShoppingCart, Users, Coins, 
-  Scale, BarChart3, Map, Settings, Menu, Bell, Search,
+  Scale, BarChart3, Map, Settings, Menu, Bell, Search,Truck,
   ChevronDown, LogOut, Plus, AlertTriangle, Clock, CheckCircle, Loader2, ChevronsUpDown, UserRound, Bike,
   X
 } from 'lucide-react';
@@ -16,8 +16,9 @@ import UserManagement from './UserManagement';
 import MobileVendorsManagement from './MobileVendorsManagement';
 import ParametresManagement from './ParametresManagement';
 import MapComponent from './MapComponent';
-import ReportPage from './ReportPage';
+// import ReportPage from './ReportPage';
 import PushcartManagement from './PushcartManagement';
+import StatisticsDashboard from './StatisticsDashboard';
 
 export interface Notification {
   id: number;
@@ -67,6 +68,16 @@ export interface User {
   id: string;
   username?: string;
   email?: string;
+  first_name?: string;
+  last_name?: string;
+  profile?: {
+    role: {
+      name: string;
+    };
+    phone?: string;
+    location?: string;
+    points_of_sale?: string[];
+  };
 }
 
 const iconComponents: Record<string, React.ComponentType<any>> = {
@@ -102,6 +113,40 @@ const AdminDashboard = () => {
   const [selectedPOS, setSelectedPOS] = useState<POSData | null>(null);
   const [posDropdownOpen, setPosDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<string>('');
+
+  // Récupérer les informations détaillées de l'utilisateur connecté
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const token = localStorage.getItem('access');
+        if (!token) {
+          console.warn('No access token found');
+          return;
+        }
+
+        const response = await fetch('https://backendsupply.onrender.com/api/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const userData = await response.json();
+          setCurrentUser(userData);
+          setUserRole(userData.profile?.role?.name || '');
+        } else {
+          console.error('Failed to fetch user data');
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+      }
+    };
+
+    fetchUserData();
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -192,27 +237,101 @@ const AdminDashboard = () => {
   };
 
   const getUserInitials = () => {
-    if (user?.username) {
-      return user.username.slice(0, 2).toUpperCase();
+    if (currentUser?.first_name && currentUser?.last_name) {
+      return `${currentUser.first_name[0]}${currentUser.last_name[0]}`.toUpperCase();
     }
-    if (user?.email) {
-      return user.email.slice(0, 2).toUpperCase();
+    if (currentUser?.username) {
+      return currentUser.username.slice(0, 2).toUpperCase();
+    }
+    if (currentUser?.email) {
+      return currentUser.email.slice(0, 2).toUpperCase();
     }
     return 'AU';
   };
 
   const getUserDisplayName = () => {
-    if (user?.username) {
-      return user.username;
+    if (currentUser?.first_name && currentUser?.last_name) {
+      return `${currentUser.first_name} ${currentUser.last_name}`;
     }
-    if (user?.email) {
-      return user.email;
+    if (currentUser?.username) {
+      return currentUser.username;
     }
-    return 'Admin User';
+    if (currentUser?.email) {
+      return currentUser.email;
+    }
+    return 'Utilisateur';
   };
+
+  const getUserRoleDisplay = () => {
+    return currentUser?.profile?.role?.name || userRole || 'Utilisateur';
+  };
+
+  const getUserLocation = () => {
+    return currentUser?.profile?.location || 'Non spécifié';
+  };
+
+  const getUserPointsOfSale = () => {
+    return currentUser?.profile?.points_of_sale || [];
+  };
+
+  // Définir les menus en fonction du rôle
+  const getMenuItems = () => {
+    const allMenuItems = [
+      { id: 'dashboard', icon: Home, label: 'Dashboard', color: 'text-indigo-600' },
+      { id: 'points-vente', icon: MapPin, label: 'Distributeurs', color: 'text-green-600' },
+      { id: 'vendeurs-ambulants', icon: Bike, label: 'Commerciaux Terrain', color: 'text-amber-600' },
+      { id: 'Pushcart', icon: Truck, label: 'Prospect', color: 'text-yellow-600' },
+      { id: 'stocks', icon: Package, label: 'Gestion Stocks', color: 'text-orange-600' },
+      { id: 'commandes', icon: ShoppingCart, label: 'Commandes', color: 'text-purple-600' },
+      { id: 'utilisateurs', icon: Users, label: 'Utilisateurs', color: 'text-indigo-600' },
+      // { id: 'rapports', icon: BarChart3, label: 'Rapports', color: 'text-teal-600' },
+      { id: 'statistiques', icon: BarChart3, label: 'Statistiques', color: 'text-teal-600' },
+      { id: 'cartes', icon: Map, label: 'Cartes', color: 'text-cyan-600' },
+      { id: 'parametres', icon: Settings, label: 'Paramètres', color: 'text-gray-600' }
+    ];
+
+    // Si l'utilisateur est SuperU, afficher tous les menus
+    if (userRole === 'SuperU') {
+      return allMenuItems;
+    }
+
+    // Sinon, afficher seulement les menus spécifiés
+    const allowedMenuItems = ['dashboard', 'vendeurs-ambulants', 'Pushcart', 'statistiques', 'cartes'];
+    return allMenuItems.filter(item => allowedMenuItems.includes(item.id));
+  };
+
+  const menuItems = getMenuItems();
 
   const DashboardContent = () => {
     const currentData = getCurrentData();
+    
+    // Actions rapides - seulement pour SuperU
+    const quickActions = [
+      { 
+        icon: Plus, 
+        label: 'Ajouter Point de Vente', 
+        color: 'from-green-500 to-green-600',
+        onClick: () => setActiveTab('points-vente')
+      },
+      { 
+        icon: Package, 
+        label: 'Gérer Stocks', 
+        color: 'from-orange-500 to-orange-600',
+        onClick: () => setActiveTab('stocks')
+      },
+      { 
+        icon: ShoppingCart, 
+        label: 'Nouvelle Commande', 
+        color: 'from-purple-500 to-purple-600',
+        onClick: () => setActiveTab('commandes')
+      },
+      { 
+        icon: BarChart3, 
+        label: 'Vue Rapports', 
+        color: 'from-indigo-500 to-indigo-600',
+        onClick: () => setActiveTab('rapports')
+      }
+    ];
     
     return (
       <div className="space-y-6">
@@ -223,13 +342,44 @@ const AdminDashboard = () => {
           </div>
         )}
 
+        {/* En-tête personnalisé avec les informations de l'utilisateur */}
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-6 text-white shadow-lg">
-          <h1 className="text-2xl font-bold mb-2">Bonjour, {'Admin'} 👋</h1>
-          <p className="opacity-90">
-            {selectedPOS?.pos_name === "Total Général" 
-              ? "Vue d'ensemble de tous vos points de vente" 
-              : `Activité du point de vente: ${selectedPOS?.pos_name}`}
-          </p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold mb-2">
+                Bonjour, {getUserDisplayName()} 👋
+              </h1>
+              <p className="opacity-90 mb-2">
+                {selectedPOS?.pos_name === "Total Général" 
+                  ? "Vue d'ensemble de tous vos points de vente" 
+                  : `Activité du point de vente: ${selectedPOS?.pos_name}`}
+              </p>
+              <div className="flex flex-wrap gap-4 text-sm opacity-90">
+                <div className="flex items-center">
+                  <UserRound size={16} className="mr-1" />
+                  <span>Rôle: {getUserRoleDisplay()}</span>
+                </div>
+                <div className="flex items-center">
+                  <MapPin size={16} className="mr-1" />
+                  <span>Localisation: {getUserLocation()}</span>
+                </div>
+ 
+                  <div className="flex items-center">
+                    <Package size={16} className="mr-1" />
+                    <span>Points de vente: {getUserPointsOfSale()}</span>
+                  </div>
+
+              </div>
+            </div>
+            
+            {/* Badge du rôle */}
+            <div className="mt-4 md:mt-0">
+              <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-full px-4 py-2 inline-flex items-center">
+                <div className="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
+                <span className="font-medium">{getUserRoleDisplay()}</span>
+              </div>
+            </div>
+          </div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -254,51 +404,29 @@ const AdminDashboard = () => {
           })}
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-gray-800">Actions Rapides</h3>
-            <button className="text-indigo-600 text-sm font-medium flex items-center">
-              Voir plus <ChevronDown size={16} className="ml-1" />
-            </button>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { 
-                icon: Plus, 
-                label: 'Ajouter Point de Vente', 
-                color: 'from-green-500 to-green-600',
-                onClick: () => setActiveTab('points-vente')
-              },
-              { 
-                icon: Package, 
-                label: 'Gérer Stocks', 
-                color: 'from-orange-500 to-orange-600',
-                onClick: () => setActiveTab('stocks')
-              },
-              { 
-                icon: ShoppingCart, 
-                label: 'Nouvelle Commande', 
-                color: 'from-purple-500 to-purple-600',
-                onClick: () => setActiveTab('commandes')
-              },
-              { 
-                icon: BarChart3, 
-                label: 'Vue Rapports', 
-                color: 'from-indigo-500 to-indigo-600',
-                onClick: () => setActiveTab('rapports')
-              }
-            ].map((action, index) => (
-              <button 
-                key={index} 
-                onClick={action.onClick}
-                className={`bg-gradient-to-r ${action.color} text-white p-4 rounded-lg transition-all hover:shadow-lg flex flex-col items-center space-y-2`}
-              >
-                <action.icon size={24} />
-                <span className="text-sm font-medium text-center">{action.label}</span>
+        {/* Section Actions Rapides - Uniquement pour SuperU */}
+        {userRole === 'SuperU' && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Actions Rapides</h3>
+              <button className="text-indigo-600 text-sm font-medium flex items-center">
+                Voir plus <ChevronDown size={16} className="ml-1" />
               </button>
-            ))}
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {quickActions.map((action, index) => (
+                <button 
+                  key={index} 
+                  onClick={action.onClick}
+                  className={`bg-gradient-to-r ${action.color} text-white p-4 rounded-lg transition-all hover:shadow-lg flex flex-col items-center space-y-2`}
+                >
+                  <action.icon size={24} />
+                  <span className="text-sm font-medium text-center">{action.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
         
         <div className="grid lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -383,8 +511,10 @@ const AdminDashboard = () => {
         return React.createElement(OrderManagement as any, { selectedPOS });
       case 'vendeurs-ambulants':
         return React.createElement(MobileVendorsManagement as any, { selectedPOS });
-      case 'rapports':
-        return React.createElement(ReportPage as any);
+      // case 'rapports':
+      //   return React.createElement(ReportPage as any);
+      case 'statistiques':
+        return <StatisticsDashboard />;
       case 'utilisateurs':
         return React.createElement(UserManagement as any);
       case 'parametres':
@@ -417,19 +547,6 @@ const AdminDashboard = () => {
         );
     }
   };
-
-  const menuItems = [
-    { id: 'dashboard', icon: Home, label: 'Dashboard', color: 'text-indigo-600' },
-    { id: 'points-vente', icon: MapPin, label: 'Distributeurs', color: 'text-green-600' },
-    { id: 'vendeurs-ambulants', icon: Bike, label: 'Bikers', color: 'text-amber-600' },
-    { id: 'Pushcart', icon: Bike, label: 'Pushcart', color: 'text-yellow-600' },
-    { id: 'stocks', icon: Package, label: 'Gestion Stocks', color: 'text-orange-600' },
-    { id: 'commandes', icon: ShoppingCart, label: 'Commandes', color: 'text-purple-600' },
-    { id: 'utilisateurs', icon: Users, label: 'Utilisateurs', color: 'text-indigo-600' },
-    { id: 'rapports', icon: BarChart3, label: 'Rapports', color: 'text-teal-600' },
-    { id: 'cartes', icon: Map, label: 'Cartes', color: 'text-cyan-600' },
-    { id: 'parametres', icon: Settings, label: 'Paramètres', color: 'text-gray-600' }
-  ];
 
   if (isLoading) {
     return (
@@ -487,7 +604,7 @@ const AdminDashboard = () => {
                   <span className="text-white font-bold">LT</span>
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-gray-800">LanfiaTech</h1>
+                  <h1 className="text-lg font-bold text-gray-800">FrieslandCampina</h1>
                   <p className="text-xs text-gray-500">Admin Panel</p>
                 </div>
               </div>
@@ -526,7 +643,8 @@ const AdminDashboard = () => {
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-gray-800">{getUserDisplayName()}</p>
-                  <p className="text-xs text-gray-500">{user?.email || 'admin@lanfiatech.com'}</p>
+                  <p className="text-xs text-gray-500">{currentUser?.email || 'admin@lanfiatech.com'}</p>
+                  <p className="text-xs text-indigo-600 font-medium">{getUserRoleDisplay()}</p>
                 </div>
                 <button
                   onClick={handleLogout}
@@ -553,7 +671,7 @@ const AdminDashboard = () => {
                   <span className="text-white font-bold">LT</span>
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-gray-800">LanfiaTech</h1>
+                  <h1 className="text-lg font-bold text-gray-800">FrieslandCampina</h1>
                   <p className="text-xs text-gray-500">Admin Panel</p>
                 </div>
               </div>
@@ -597,7 +715,8 @@ const AdminDashboard = () => {
               {sidebarOpen && (
                 <div className="flex-1">
                   <p className="text-sm font-medium text-gray-800">{getUserDisplayName()}</p>
-                  <p className="text-xs text-gray-500">{user?.email || 'admin@lanfiatech.com'}</p>
+                  <p className="text-xs text-gray-500">{currentUser?.email || 'admin@lanfiatech.com'}</p>
+                  <p className="text-xs text-indigo-600 font-medium">{getUserRoleDisplay()}</p>
                 </div>
               )}
               {sidebarOpen && (
@@ -725,6 +844,10 @@ const AdminDashboard = () => {
               </div>
               
               <div className="flex items-center space-x-2">
+                <div className="text-right hidden sm:block">
+                  <p className="text-sm font-medium text-gray-800">{getUserDisplayName()}</p>
+                  <p className="text-xs text-gray-500">{getUserRoleDisplay()}</p>
+                </div>
                 <div className="w-8 h-8 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
                   {getUserInitials()}
                 </div>

@@ -6,7 +6,8 @@ import {
   ChevronLeft, ChevronRight, Frown, Smile, Meh, Check,
   Edit, Trash2, Save, Coins, Image as ImageIcon, Calendar,
   BarChart3, TrendingUp, TrendingDown, Filter, Key, User,
-  ShoppingBag, X, Download, Upload, Eye, Award, Target
+  ShoppingBag, X, Download, Upload, Eye, Award, Target,
+  RefreshCw,Map
 } from 'lucide-react';
 import { apiService } from './ApiService';
 import { useAuth } from './AuthContext';
@@ -33,6 +34,24 @@ interface Vendor {
   point_of_sale?: number;
   point_of_sale_name?: string;
   purchases?: Purchase[];
+}
+
+interface Sale {
+  id: number;
+  product_variant: number;
+  customer: number;
+  quantity: number;
+  total_amount: string;
+  created_at: string;
+  updated_at: string;
+  vendor: number;
+  product_variant_name: string;
+  format: string;
+  customer_name: string;
+  vendor_name: string;
+  vendor_activity: number;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 interface Purchase {
@@ -131,6 +150,11 @@ interface MonthlyPerformance {
   revenue_per_customer: number;
 }
 
+interface PerformanceUpdateResponse {
+  message: string;
+  performance: number;
+}
+
 interface Props {
   selectedPOS: POSData | null;
 }
@@ -147,7 +171,9 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
   const [editForm, setEditForm] = useState<Partial<FormVendor>>({});
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newVendor, setNewVendor] = useState<FormVendor>(getDefaultVendorForm(selectedPOS));
-  const [activeTab, setActiveTab] = useState<'activities' | 'performance' | 'notes' | 'purchases'>('activities');
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [loadingSales, setLoadingSales] = useState(false);
+  const [activeTab, setActiveTab] = useState<'activities' | 'performance' | 'notes' | 'purchases' | 'map'>('activities');
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -160,7 +186,12 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
     startDate: '',
     endDate: ''
   });
+  const [updatingPerformance, setUpdatingPerformance] = useState<number | null>(null);
+  const [performanceDays, setPerformanceDays] = useState<number>(30);
   const { user } = useAuth();
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [purchaseFilterType, setPurchaseFilterType] = useState<string>('all');
 
   function getDefaultVendorForm(pos: POSData | null): FormVendor {
     return {
@@ -207,6 +238,90 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
       default: return <Meh className="text-yellow-500" size={16} />;
     }
   };
+
+  // Fonction pour mettre à jour les performances d'un vendeur
+  const updateVendorPerformance = async (vendorId: number, days: number) => {
+    try {
+      setUpdatingPerformance(vendorId);
+      setError(null);
+
+      const response = await apiService.post(
+        `/vendors/${vendorId}/update_performance/`,
+        { days }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erreur lors de la mise à jour des performances');
+      }
+
+      const data: PerformanceUpdateResponse = await response.json();
+      
+      // Mettre à jour la performance du vendeur dans la liste
+      setVendors(prevVendors => 
+        prevVendors.map(vendor => 
+          vendor.id === vendorId 
+            ? { ...vendor, performance: data.performance }
+            : vendor
+        )
+      );
+
+      // Mettre à jour le vendeur sélectionné si c'est le même
+      if (selectedVendor && selectedVendor.id === vendorId) {
+        setSelectedVendor(prev => prev ? { ...prev, performance: data.performance } : null);
+      }
+
+      return data;
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setUpdatingPerformance(null);
+    }
+  };
+
+// Fonction pour mettre à jour les performances de tous les vendeurs (approche parallèle)
+const updateAllVendorsPerformance = async (days: number) => {
+  try {
+    setUpdatingPerformance(-1);
+    setError(null);
+
+    // Créer un tableau de promesses pour tous les vendeurs
+    const updatePromises = vendors.map(vendor => 
+      apiService.post(`/vendors/${vendor.id}/update_performance/`, { days })
+    );
+
+    // Exécuter toutes les requêtes en parallèle
+    const responses = await Promise.all(updatePromises);
+    
+    // Vérifier si toutes les requêtes ont réussi
+    const allSuccessful = responses.every(response => response.ok);
+    
+    if (!allSuccessful) {
+      throw new Error('Certaines mises à jour ont échoué');
+    }
+
+    // Récupérer les données mises à jour
+    const updateResults = await Promise.all(
+      responses.map(response => response.json())
+    );
+
+    // Mettre à jour chaque vendeur avec sa nouvelle performance
+    const updatedVendors = vendors.map((vendor, index) => ({
+      ...vendor,
+      performance: updateResults[index].performance
+    }));
+
+    setVendors(updatedVendors);
+    
+    setError(`Performance mise à jour pour ${vendors.length} vendeur(s)`);
+    
+  } catch (err: any) {
+    setError(err.message);
+  } finally {
+    setUpdatingPerformance(null);
+  }
+};
 
   const filteredVendors = vendors
     .filter(vendor =>
@@ -274,6 +389,24 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
     }
   };
 
+  // Fonction pour charger les ventes
+  const fetchVendorSales = async (vendorId: number) => {
+    try {
+      setLoadingSales(true);
+      const response = await apiService.get(`/sales/?vendor=${vendorId}`);
+      if (!response.ok) throw new Error('Failed to fetch vendor sales');
+      const data: Sale[] = await response.json();
+      setSales(data);
+    } catch (err: any) {
+      console.error('Error fetching sales data:', err);
+      setError('Impossible de charger les données de vente');
+    } finally {
+      setLoadingSales(false);
+    }
+  };
+
+
+  // Modifier la fonction viewVendorDetails pour charger les ventes
   const viewVendorDetails = async (vendor: Vendor) => {
     try {
       setDateFilter({
@@ -300,7 +433,11 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
       setShowVendorDetails(true);
       setActiveTab('activities');
       
-      await fetchVendorPerformance(data.id);
+      // Charger les performances ET les ventes
+      await Promise.all([
+        fetchVendorPerformance(data.id),
+        fetchVendorSales(data.id)
+      ]);
     } catch (err: any) {
       setError(err.message);
     }
@@ -481,6 +618,240 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
     }
   }, [selectedVendor?.id, showVendorDetails]);
 
+
+
+  // Composant pour la carte des ventes
+  const SalesMap = ({ sales }: { sales: Sale[] }) => {
+    const [mapLoaded, setMapLoaded] = useState(false);
+
+    // Filtrer les ventes qui ont des coordonnées GPS
+    const salesWithLocation = sales.filter(sale => 
+      sale.latitude !== null && sale.longitude !== null
+    );
+
+    useEffect(() => {
+      // Charger Leaflet CSS et JS dynamiquement
+      const loadLeaflet = async () => {
+        if (salesWithLocation.length === 0) return;
+
+        // Charger CSS
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        link.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';
+        link.crossOrigin = '';
+        document.head.appendChild(link);
+
+        // Charger JS
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';
+        script.crossOrigin = '';
+        script.onload = () => setMapLoaded(true);
+        document.head.appendChild(script);
+
+        return () => {
+          // Nettoyer
+          document.head.removeChild(link);
+          document.head.removeChild(script);
+        };
+      };
+
+      loadLeaflet();
+    }, [salesWithLocation.length]);
+
+    useEffect(() => {
+      if (!mapLoaded || salesWithLocation.length === 0) return;
+
+      // Initialiser la carte
+      const map = (window as any).L.map('sales-map').setView(
+        [salesWithLocation[0].latitude!, salesWithLocation[0].longitude!], 
+        13
+      );
+
+      // Ajouter la couche OpenStreetMap
+      (window as any).L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+
+      // Ajouter les marqueurs pour chaque vente
+      salesWithLocation.forEach((sale, index) => {
+        if (sale.latitude && sale.longitude) {
+          const popupContent = `
+            <div class="p-2">
+              <h4 class="font-bold">${sale.product_variant_name}</h4>
+              <p><strong>Client:</strong> ${sale.customer_name}</p>
+              <p><strong>Montant:</strong> ${new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(parseFloat(sale.total_amount))}</p>
+              <p><strong>Quantité:</strong> ${sale.quantity}</p>
+              <p><strong>Date:</strong> ${new Date(sale.created_at).toLocaleDateString('fr-FR')}</p>
+            </div>
+          `;
+
+          (window as any).L.marker([sale.latitude, sale.longitude])
+            .addTo(map)
+            .bindPopup(popupContent);
+        }
+      });
+
+      // Ajuster la vue pour montrer tous les marqueurs
+      if (salesWithLocation.length > 1) {
+        const group = new (window as any).L.featureGroup(
+          salesWithLocation
+            .filter(sale => sale.latitude && sale.longitude)
+            .map(sale => (window as any).L.marker([sale.latitude!, sale.longitude!]))
+        );
+        map.fitBounds(group.getBounds().pad(0.1));
+      }
+
+      return () => {
+        if (map) {
+          map.remove();
+        }
+      };
+    }, [mapLoaded, salesWithLocation]);
+
+    if (salesWithLocation.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center h-96 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-8 text-center">
+          <Map className="text-gray-400 mb-4" size={48} />
+          <p className="text-gray-500 font-medium">Aucune donnée de localisation disponible</p>
+          <p className="text-gray-400 text-sm mt-2">
+            Les ventes avec localisation GPS s'afficheront ici
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {/* Statistiques des ventes localisées */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <MapPin className="text-blue-600 mr-2" size={20} />
+              <div>
+                <p className="text-sm font-medium text-blue-800">Ventes localisées</p>
+                <p className="text-2xl font-bold text-blue-900">{salesWithLocation.length}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <ShoppingBag className="text-green-600 mr-2" size={20} />
+              <div>
+                <p className="text-sm font-medium text-green-800">Total des ventes</p>
+                <p className="text-2xl font-bold text-green-900">{sales.length}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <Coins className="text-purple-600 mr-2" size={20} />
+              <div>
+                <p className="text-sm font-medium text-purple-800">Chiffre d'affaires</p>
+                <p className="text-2xl font-bold text-purple-900">
+                  {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(
+                    sales.reduce((total, sale) => total + parseFloat(sale.total_amount), 0)
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Carte Leaflet */}
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-lg">
+          <div 
+            id="sales-map" 
+            className="h-96 w-full relative"
+            style={{ 
+              minHeight: '384px',
+              background: '#f8f9fa'
+            }}
+          >
+            {!mapLoaded && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                  <p className="text-gray-600">Chargement de la carte...</p>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Légende et contrôles */}
+          <div className="p-4 bg-gray-50 border-t border-gray-200">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="flex items-center text-sm text-gray-600">
+                <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
+                <span>Points de vente localisés: {salesWithLocation.length}</span>
+              </div>
+              
+              <div className="text-xs text-gray-500">
+                Cliquez sur les marqueurs pour voir les détails des ventes
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Liste détaillée des ventes localisées */}
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="p-4 border-b border-gray-200">
+            <h3 className="font-bold text-gray-800 flex items-center">
+              <MapPin className="mr-2 text-blue-500" size={18} />
+              Détail des ventes localisées
+            </h3>
+          </div>
+          
+          <div className="max-h-64 overflow-y-auto">
+            {salesWithLocation.map((sale) => (
+              <div key={sale.id} className="p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium text-gray-900">
+                        {sale.product_variant_name} ({sale.format})
+                      </span>
+                      <span className="text-green-600 font-bold">
+                        {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(parseFloat(sale.total_amount))}
+                      </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-600">
+                      <div className="flex items-center">
+                        <User className="mr-1" size={14} />
+                        <span>{sale.customer_name}</span>
+                      </div>
+                      <div className="flex items-center">
+                        <ShoppingBag className="mr-1" size={14} />
+                        <span>Quantité: {sale.quantity}</span>
+                      </div>
+                      <div className="flex items-center">
+                        <Calendar className="mr-1" size={14} />
+                        <span>
+                          {new Date(sale.created_at).toLocaleDateString('fr-FR')}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {sale.latitude && sale.longitude && (
+                      <div className="mt-2 text-xs text-gray-500">
+                        <span className="font-medium">Coordonnées:</span>{' '}
+                        {sale.latitude.toFixed(4)}, {sale.longitude.toFixed(4)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderLoading = () => (
     <div className="flex justify-center items-center h-64">
       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
@@ -501,6 +872,58 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
           >
             Fermer
           </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderPerformanceUpdateSection = () => (
+    <div className="bg-white border border-gray-200 rounded-xl p-4 mb-6 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h4 className="font-bold text-gray-800 text-lg flex items-center">
+            <RefreshCw className="mr-2 text-blue-500" size={20} />
+            Mise à jour des Performances
+          </h4>
+          <p className="text-gray-600 text-sm">
+            Mettre à jour les performances des vendeurs sur une période spécifique
+          </p>
+        </div>
+        
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex items-center space-x-2">
+            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+              Période (jours):
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="365"
+              value={performanceDays}
+              onChange={(e) => setPerformanceDays(parseInt(e.target.value) || 30)}
+              className="w-20 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          
+          <div className="flex space-x-2">
+            <button
+              onClick={() => updateAllVendorsPerformance(performanceDays)}
+              disabled={updatingPerformance === -1 || vendors.length === 0}
+              className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center text-sm"
+            >
+              {updatingPerformance === -1 ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                  Mise à jour...
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={16} className="mr-2" />
+                  Mettre à jour tous
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -823,7 +1246,7 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
               <p className="text-sm font-medium opacity-90">Total Vendeurs</p>
               <p className="text-2xl font-bold mt-1">{vendors.length}</p>
             </div>
-            <div className="p-3 bg-white bg-opacity-20 rounded-lg">
+            <div className="p-3 bg-blue-400 bg-opacity-30 rounded-full">
               <UserRound className="text-white" size={24} />
             </div>
           </div>
@@ -837,7 +1260,7 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
                 {vendors.filter(v => v.status === 'actif').length}
               </p>
             </div>
-            <div className="p-3 bg-white bg-opacity-20 rounded-lg">
+            <div className="p-3 bg-green-400 bg-opacity-30 rounded-full">
               <Check className="text-white" size={24} />
             </div>
           </div>
@@ -853,7 +1276,7 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
                   : 0}%
               </p>
             </div>
-            <div className="p-3 bg-white bg-opacity-20 rounded-lg">
+            <div className="p-3 bg-purple-400 bg-opacity-30 rounded-full">
               <Star className="text-white" size={24} />
             </div>
           </div>
@@ -862,194 +1285,221 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
     );
   };
 
-  const renderPerformanceChart = () => {
-    if (!performanceData || !performanceData.monthly_performance.length) {
-      return (
-        <div className="flex flex-col items-center justify-center h-64 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-8 text-center">
-          <BarChart3 className="text-gray-400 mb-4" size={48} />
-          <p className="text-gray-500 font-medium">Aucune donnée de performance disponible</p>
-          <p className="text-gray-400 text-sm mt-2">Les données de performance s'afficheront ici une fois disponibles</p>
-        </div>
-      );
-    }
-
-    const monthlyData = performanceData.monthly_performance;
-    const maxRevenue = Math.max(...monthlyData.map(item => item.total_revenue), 100000);
-    const maxProducts = Math.max(...monthlyData.map(item => item.total_products_sold), 50);
-
+const renderPerformanceChart = () => {
+  if (!performanceData || !performanceData.monthly_performance.length) {
     return (
-      <div className="space-y-6">
-        <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
-          <div className="flex items-center justify-between mb-6">
-            <h4 className="font-bold text-gray-800 text-lg">Performance mensuelle</h4>
-            <div className="flex items-center space-x-2 text-sm text-gray-500">
-              <div className="flex items-center">
-                <div className="w-3 h-3 bg-blue-500 rounded mr-2"></div>
-                <span>Revenus (XOF)</span>
-              </div>
-              <div className="flex items-center">
-                <div className="w-3 h-3 bg-green-500 rounded mr-2"></div>
-                <span>Produits vendus</span>
-              </div>
+      <div className="flex flex-col items-center justify-center h-64 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-8 text-center">
+        <BarChart3 className="text-gray-400 mb-4" size={48} />
+        <p className="text-gray-500 font-medium">Aucune donnée de performance disponible</p>
+        <p className="text-gray-400 text-sm mt-2">Les données de performance s'afficheront ici une fois disponibles</p>
+      </div>
+    );
+  }
+
+  const monthlyData = performanceData.monthly_performance;
+  
+  // Calcul des valeurs maximales pour l'échelle
+  const maxRevenue = Math.max(...monthlyData.map(item => item.total_revenue), 1);
+  const maxProducts = Math.max(...monthlyData.map(item => item.total_products_sold), 1); // CORRECTION ICI : monthlyData au lieu de monthlData
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
+        <div className="flex items-center justify-between mb-6">
+          <h4 className="font-bold text-gray-800 text-lg">Performance mensuelle - Diagramme en Barres</h4>
+          <div className="flex items-center space-x-4 text-sm text-gray-500">
+            <div className="flex items-center">
+              <div className="w-3 h-3 bg-blue-500 rounded mr-2"></div>
+              <span>Revenus (XOF)</span>
             </div>
-          </div>
-          
-          <div className="h-80">
-            <div className="flex h-full space-x-4 items-end justify-center">
-              {monthlyData.map((item, index) => (
-                <div key={index} className="flex flex-col items-center" style={{ width: `${100 / Math.max(monthlyData.length, 3)}%` }}>
-                  <div className="flex flex-col items-center w-full h-full justify-end space-y-2">
-                    <div 
-                      className="w-3/4 bg-gradient-to-t from-blue-500 to-blue-600 rounded-t-lg transition-all duration-300 hover:from-blue-600 hover:to-blue-700 cursor-pointer"
-                      style={{ height: `${(item.total_revenue / maxRevenue) * 70}%` }}
-                      title={`${item.month}: ${new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(item.total_revenue)}`}
-                    >
-                      <div className="text-white text-xs font-bold text-center mt-1">
-                        {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF', notation: 'compact' }).format(item.total_revenue)}
-                      </div>
-                    </div>
-                    
-                    <div 
-                      className="w-3/4 bg-gradient-to-t from-green-500 to-green-600 rounded-t-lg transition-all duration-300 hover:from-green-600 hover:to-green-700 cursor-pointer"
-                      style={{ height: `${(item.total_products_sold / maxProducts) * 70}%` }}
-                      title={`${item.month}: ${item.total_products_sold} produits`}
-                    >
-                      <div className="text-white text-xs font-bold text-center mt-1">
-                        {item.total_products_sold}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="text-sm text-gray-700 font-medium mt-2 text-center">
-                    {item.month.split(' ')[0]}
-                  </div>
-                  <div className="text-xs text-gray-500 text-center">
-                    {item.year}
-                  </div>
-                </div>
-              ))}
+            <div className="flex items-center">
+              <div className="w-3 h-3 bg-green-500 rounded mr-2"></div>
+              <span>Produits vendus</span>
             </div>
           </div>
         </div>
         
-        <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
-          <h4 className="font-bold text-gray-800 text-lg mb-6">Indicateurs de performance</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-5 rounded-xl border border-blue-200">
-              <div className="flex items-center mb-3">
-                <Award className="text-blue-600 mr-2" size={20} />
-                <h5 className="font-semibold text-blue-800">Meilleur mois</h5>
-              </div>
-              {performanceData.performance_indicators.best_month ? (
-                <div>
-                  <p className="text-sm text-blue-700">{performanceData.performance_indicators.best_month.month}</p>
-                  <p className="text-xl font-bold text-blue-900">
-                    {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(performanceData.performance_indicators.best_month.total_revenue)}
-                  </p>
-                  <div className="flex justify-between mt-2 text-sm text-blue-700">
-                    <span>{performanceData.performance_indicators.best_month.total_products_sold} produits</span>
-                    <span>{performanceData.performance_indicators.best_month.total_customers} clients</span>
+        {/* Conteneur du graphique avec hauteur fixe */}
+        <div className="h-80 border border-gray-200 rounded-lg bg-gray-50 p-4">
+          <div className="flex items-end justify-between h-full space-x-2">
+            {monthlyData.map((item, index) => (
+              <div 
+                key={index} 
+                className="flex flex-col items-center justify-end h-full flex-1 space-x-1"
+              >
+                {/* Groupe de barres pour chaque mois */}
+                <div className="flex items-end justify-center space-x-1 w-full">
+                  {/* Barre des revenus */}
+                  <div className="flex flex-col items-center">
+                    <div 
+                      className="w-8 bg-blue-500 rounded-t hover:bg-blue-600 transition-all duration-300 cursor-pointer relative min-h-4"
+                      style={{ 
+                        height: `${(item.total_revenue / maxRevenue) * 90}%`,
+                        minHeight: '20px' // Hauteur minimale pour être visible
+                      }}
+                      title={`Revenus: ${new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(item.total_revenue)}`}
+                    >
+                      <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-xs font-medium text-blue-700 whitespace-nowrap">
+                        {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF', notation: 'compact' }).format(item.total_revenue)}
+                      </div>
+                    </div>
+                    <div className="text-xs text-blue-600 mt-1 font-medium">Revenus</div>
+                  </div>
+                  
+                  {/* Barre des produits vendus */}
+                  <div className="flex flex-col items-center">
+                    <div 
+                      className="w-8 bg-green-500 rounded-t hover:bg-green-600 transition-all duration-300 cursor-pointer relative min-h-4"
+                      style={{ 
+                        height: `${(item.total_products_sold / maxProducts) * 90}%`,
+                        minHeight: '20px' // Hauteur minimale pour être visible
+                      }}
+                      title={`Produits vendus: ${item.total_products_sold}`}
+                    >
+                      <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-xs font-medium text-green-700 whitespace-nowrap">
+                        {item.total_products_sold}
+                      </div>
+                    </div>
+                    <div className="text-xs text-green-600 mt-1 font-medium">Produits</div>
                   </div>
                 </div>
-              ) : (
-                <p className="text-sm text-blue-500">Aucune donnée</p>
-              )}
-            </div>
-            
-            <div className="bg-gradient-to-br from-red-50 to-red-100 p-5 rounded-xl border border-red-200">
-              <div className="flex items-center mb-3">
-                <Target className="text-red-600 mr-2" size={20} />
-                <h5 className="font-semibold text-red-800">Moins bon mois</h5>
-              </div>
-              {performanceData.performance_indicators.worst_month ? (
-                <div>
-                  <p className="text-sm text-red-700">{performanceData.performance_indicators.worst_month.month}</p>
-                  <p className="text-xl font-bold text-red-900">
-                    {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(performanceData.performance_indicators.worst_month.total_revenue)}
-                  </p>
-                  <div className="flex justify-between mt-2 text-sm text-red-700">
-                    <span>{performanceData.performance_indicators.worst_month.total_products_sold} produits</span>
-                    <span>{performanceData.performance_indicators.worst_month.total_customers} clients</span>
+                
+                {/* Label du mois */}
+                <div className="mt-3 text-center">
+                  <div className="text-sm font-medium text-gray-700">
+                    {item.month.split(' ')[0]}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {item.year}
                   </div>
                 </div>
-              ) : (
-                <p className="text-sm text-red-500">Aucune donnée</p>
-              )}
-            </div>
-            
-            <div className="md:col-span-2 bg-gradient-to-br from-gray-50 to-gray-100 p-5 rounded-xl border border-gray-200">
-              <h5 className="font-semibold text-gray-800 mb-4">Résumé de la période</h5>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center p-3 bg-white rounded-lg shadow-sm">
-                  <p className="text-sm text-gray-600">Revenu total</p>
-                  <p className="text-lg font-bold text-blue-600">
-                    {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(performanceData.summary.total_revenue)}
-                  </p>
-                </div>
-                <div className="text-center p-3 bg-white rounded-lg shadow-sm">
-                  <p className="text-sm text-gray-600">Produits vendus</p>
-                  <p className="text-lg font-bold text-green-600">{performanceData.summary.total_products_sold}</p>
-                </div>
-                <div className="text-center p-3 bg-white rounded-lg shadow-sm">
-                  <p className="text-sm text-gray-600">Clients</p>
-                  <p className="text-lg font-bold text-purple-600">{performanceData.summary.total_customers}</p>
-                </div>
-                <div className="text-center p-3 bg-white rounded-lg shadow-sm">
-                  <p className="text-sm text-gray-600">Ventes</p>
-                  <p className="text-lg font-bold text-orange-600">{performanceData.summary.total_sales}</p>
-                </div>
               </div>
-            </div>
-            
-            <div className="md:col-span-2 bg-gradient-to-br from-green-50 to-green-100 p-5 rounded-xl border border-green-200">
-              <h5 className="font-semibold text-green-800 mb-3">Taux de croissance</h5>
-              <div className="flex items-center">
-                {performanceData.performance_indicators.growth_rate > 0 ? (
-                  <TrendingUp className="text-green-600 mr-2" size={24} />
-                ) : performanceData.performance_indicators.growth_rate < 0 ? (
-                  <TrendingDown className="text-red-600 mr-2" size={24} />
-                ) : (
-                  <span className="mr-2">➡️</span>
-                )}
-                <span className={`text-2xl font-bold ${performanceData.performance_indicators.growth_rate > 0 ? 'text-green-600' : performanceData.performance_indicators.growth_rate < 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                  {performanceData.performance_indicators.growth_rate > 0 ? '+' : ''}
-                  {performanceData.performance_indicators.growth_rate.toFixed(2)}%
-                </span>
-              </div>
-              <p className="text-sm text-green-700 mt-2">
-                Période: {new Date(performanceData.period.start_date).toLocaleDateString('fr-FR')} - {new Date(performanceData.period.end_date).toLocaleDateString('fr-FR')}
-              </p>
-            </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Légende et informations supplémentaires */}
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
+          <div className="text-center">
+            <span className="font-semibold">Période couverte: </span>
+            {monthlyData.length} mois
+          </div>
+          <div className="text-center">
+            <span className="font-semibold">Revenu total: </span>
+            {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(
+              monthlyData.reduce((sum, item) => sum + item.total_revenue, 0)
+            )}
+          </div>
+          <div className="text-center">
+            <span className="font-semibold">Produits total: </span>
+            {monthlyData.reduce((sum, item) => sum + item.total_products_sold, 0)}
           </div>
         </div>
       </div>
+
+      {/* Section des indicateurs de performance (conservée) */}
+      <div className="bg-white rounded-xl shadow-md p-6 border border-gray-100">
+        <h4 className="font-bold text-gray-800 text-lg mb-6">Indicateurs de performance</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-5 rounded-xl border border-blue-200">
+            <div className="flex items-center mb-3">
+              <Award className="text-blue-600 mr-2" size={20} />
+              <h5 className="font-semibold text-blue-800">Meilleur mois</h5>
+            </div>
+            {performanceData.performance_indicators.best_month ? (
+              <div>
+                <p className="text-sm text-blue-700">{performanceData.performance_indicators.best_month.month}</p>
+                <p className="text-xl font-bold text-blue-900">
+                  {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(performanceData.performance_indicators.best_month.total_revenue)}
+                </p>
+                <div className="flex justify-between mt-2 text-sm text-blue-700">
+                  <span>{performanceData.performance_indicators.best_month.total_products_sold} produits</span>
+                  <span>{performanceData.performance_indicators.best_month.total_customers} clients</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-blue-500">Aucune donnée</p>
+            )}
+          </div>
+          
+          <div className="bg-gradient-to-br from-red-50 to-red-100 p-5 rounded-xl border border-red-200">
+            <div className="flex items-center mb-3">
+              <Target className="text-red-600 mr-2" size={20} />
+              <h5 className="font-semibold text-red-800">Moins bon mois</h5>
+            </div>
+            {performanceData.performance_indicators.worst_month ? (
+              <div>
+                <p className="text-sm text-red-700">{performanceData.performance_indicators.worst_month.month}</p>
+                <p className="text-xl font-bold text-red-900">
+                  {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(performanceData.performance_indicators.worst_month.total_revenue)}
+                </p>
+                <div className="flex justify-between mt-2 text-sm text-red-700">
+                  <span>{performanceData.performance_indicators.worst_month.total_products_sold} produits</span>
+                  <span>{performanceData.performance_indicators.worst_month.total_customers} clients</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-red-500">Aucune donnée</p>
+            )}
+          </div> 
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const renderPurchasesList = () => {
+  if (!selectedVendor?.purchases || selectedVendor.purchases.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-8 text-center">
+        <ShoppingBag className="text-gray-400 mb-4" size={48} />
+        <p className="text-gray-500 font-medium">Aucun achat enregistré pour ce vendeur</p>
+        <p className="text-gray-400 text-sm mt-2">Les achats apparaîtront ici une fois enregistrés</p>
+      </div>
     );
+  }
+
+  const uniqueTypes = Array.from(new Set(selectedVendor.purchases.map(p => p.pushcard_type)));
+  const filteredPurchases = purchaseFilterType === 'all' 
+    ? selectedVendor.purchases 
+    : selectedVendor.purchases.filter(p => p.pushcard_type === purchaseFilterType);
+
+  // Calcul des données pour la pagination
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentPurchases = filteredPurchases.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredPurchases.length / itemsPerPage);
+
+  // Fonction pour changer de page
+  const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
+
+  // Fonction pour aller à la page précédente
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
   };
 
-  const renderPurchasesList = () => {
-    if (!selectedVendor?.purchases || selectedVendor.purchases.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center h-64 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-8 text-center">
-          <ShoppingBag className="text-gray-400 mb-4" size={48} />
-          <p className="text-gray-500 font-medium">Aucun achat enregistré pour ce vendeur</p>
-          <p className="text-gray-400 text-sm mt-2">Les achats apparaîtront ici une fois enregistrés</p>
-        </div>
-      );
+  // Fonction pour aller à la page suivante
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
     }
+  };
 
-    const uniqueTypes = Array.from(new Set(selectedVendor.purchases.map(p => p.pushcard_type)));
-    const filteredPurchases = filterType === 'all' 
-      ? selectedVendor.purchases 
-      : selectedVendor.purchases.filter(p => p.pushcard_type === filterType);
-
-    return (
-      <div className="space-y-4">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-          <div className="flex items-center space-x-4 mb-3 md:mb-0">
+  return (
+    <div className="space-y-4">
+      {/* En-tête avec filtres et informations */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4 mb-3 md:mb-0">
+          <div className="flex items-center space-x-2">
             <label className="text-sm font-medium text-gray-700">Filtrer par type:</label>
             <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
+              value={purchaseFilterType}
+              onChange={(e) => {
+                setPurchaseFilterType(e.target.value);
+                setCurrentPage(1); // Reset à la première page quand le filtre change
+              }}
               className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">Tous les types</option>
@@ -1059,116 +1509,181 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
             </select>
           </div>
           
-          <div className="text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded-full">
-            {filteredPurchases.length} achat(s) sur {selectedVendor.purchases.length}
+          <div className="flex items-center space-x-2">
+            <label className="text-sm font-medium text-gray-700">Afficher:</label>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1); // Reset à la première page quand le nombre d'items change
+              }}
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+            </select>
           </div>
         </div>
-
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-md">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Client
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Zone
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Montant
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Photo
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredPurchases.map((purchase) => (
-                  <tr key={purchase.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {purchase.first_name} {purchase.last_name}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {purchase.phone}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {new Date(purchase.purchase_date).toLocaleDateString('fr-FR')}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {new Date(purchase.purchase_date).toLocaleTimeString('fr-FR')}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
-                        {purchase.pushcard_type}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{purchase.zone}</div>
-                      <div className="text-xs text-gray-500">{purchase.base}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-green-600">
-                        {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(parseFloat(purchase.amount))}
-                      </div>
-                      {purchase.sales_total && (
-                        <div className="text-xs text-blue-600">
-                          Ventes: {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(parseFloat(purchase.sales_total))}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {purchase.photo ? (
-                        <div className="h-10 w-10 rounded-md overflow-hidden bg-gray-100 shadow-sm">
-                          <img 
-                            src={`https://api.pushtrack360.com/api${purchase.photo}`} 
-                            alt={`Achat ${purchase.id}`}
-                            className="h-full w-full object-cover"
-                          />
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-400">Aucune</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {filteredPurchases.length > 0 && (
-            <div className="px-6 py-3 bg-gray-50 border-t border-gray-200">
-              <div className="text-sm text-gray-500">
-                Affichage de {filteredPurchases.length} achat(s)
-              </div>
-            </div>
-          )}
+        
+        <div className="text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded-full">
+          {filteredPurchases.length} achat(s) au total
         </div>
-
-        {filteredPurchases.length === 0 && filterType !== 'all' && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-            <p className="text-yellow-800">
-              Aucun achat trouvé pour le type "{filterType}"
-            </p>
-          </div>
-        )}
       </div>
-    );
-  };
 
-  const renderVendorDetails = () => {
+      {/* Tableau des achats */}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-md">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Client
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Date
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Type
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Zone
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Montant
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Photo
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {currentPurchases.map((purchase) => (
+                <tr key={purchase.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {purchase.first_name} {purchase.last_name}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {purchase.phone}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {new Date(purchase.purchase_date).toLocaleDateString('fr-FR')}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {new Date(purchase.purchase_date).toLocaleTimeString('fr-FR')}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                      {purchase.pushcard_type}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{purchase.zone}</div>
+                    <div className="text-xs text-gray-500">{purchase.base}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-green-600">
+                      {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(parseFloat(purchase.amount))}
+                    </div>
+                    {purchase.sales_total && (
+                      <div className="text-xs text-blue-600">
+                        Ventes: {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(parseFloat(purchase.sales_total))}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {purchase.photo ? (
+                      <div className="h-10 w-10 rounded-md overflow-hidden bg-gray-100 shadow-sm">
+                        <img 
+                          src={`https://api.pushtrack360.com${purchase.photo}`}  
+                          alt={`Achat ${purchase.id}`}
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400">Aucune</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pied de tableau avec pagination */}
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between space-y-3 sm:space-y-0">
+          <div className="text-sm text-gray-500">
+            Affichage de <span className="font-medium">{indexOfFirstItem + 1}</span> à{' '}
+            <span className="font-medium">
+              {Math.min(indexOfLastItem, filteredPurchases.length)}
+            </span> sur{' '}
+            <span className="font-medium">{filteredPurchases.length}</span> achat(s)
+          </div>
+          
+          {/* Contrôles de pagination */}
+          <div className="flex items-center space-x-2">
+            {/* Bouton précédent */}
+            <button
+              onClick={goToPreviousPage}
+              disabled={currentPage === 1}
+              className="p-2 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            
+            {/* Numéros de page */}
+            <div className="flex space-x-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => paginate(page)}
+                  className={`min-w-[40px] px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    currentPage === page
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+            </div>
+            
+            {/* Bouton suivant */}
+            <button
+              onClick={goToNextPage}
+              disabled={currentPage === totalPages}
+              className="p-2 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Message si aucun résultat avec le filtre actuel */}
+      {filteredPurchases.length === 0 && purchaseFilterType !== 'all' && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+          <p className="text-yellow-800">
+            Aucun achat trouvé pour le type "{purchaseFilterType}"
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const renderVendorDetails = () => {
     if (!selectedVendor) return null;
 
     return (
@@ -1384,7 +1899,7 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
                     <span className="text-sm text-gray-600">Point de vente:</span>
                     <span className="text-sm font-medium text-gray-900">{selectedVendor.point_of_sale_name || 'Non assigné'}</span>
                   </div>
-                    <div className="flex justify-between">
+                  <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Quantité en stock:</span>
                     <span className="text-sm font-medium text-blue-600">
                       {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(selectedVendor.average_daily_sales)}
@@ -1394,6 +1909,7 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
               </div>
             </div>
             
+            {/* Navigation des onglets - MODIFIÉ POUR INCLURE LA CARTE */}
             <div className="border-b border-gray-200 mb-6">
               <nav className="-mb-px flex space-x-8 overflow-x-auto">
                 <button
@@ -1425,6 +1941,17 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
                   }`}
                 >
                   Pushcart ({selectedVendor.purchases?.length || 0})
+                </button>
+                <button
+                  onClick={() => setActiveTab('map')}
+                  className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'map'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <Map className="inline mr-1" size={16} />
+                  Carte ({sales.filter(s => s.latitude && s.longitude).length})
                 </button>
                 <button
                   onClick={() => setActiveTab('notes')}
@@ -1491,6 +2018,18 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
             {activeTab === 'purchases' && (
               <div className="space-y-4">
                 {renderPurchasesList()}
+              </div>
+            )}
+            
+            {activeTab === 'map' && (
+              <div className="space-y-4">
+                {loadingSales ? (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                  </div>
+                ) : (
+                  <SalesMap sales={sales} />
+                )}
               </div>
             )}
             
@@ -1587,6 +2126,18 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
                         ></div>
                       </div>
                       <span className="ml-2 text-sm font-medium">{vendor.performance}%</span>
+                      <button
+                        onClick={() => updateVendorPerformance(vendor.id, performanceDays)}
+                        disabled={updatingPerformance === vendor.id}
+                        className="ml-2 p-1 text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Mettre à jour la performance"
+                      >
+                        {updatingPerformance === vendor.id ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-600"></div>
+                        ) : (
+                          <RefreshCw size={14} />
+                        )}
+                      </button>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -1685,6 +2236,8 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
       </div>
 
       {error && renderError()}
+
+      {!showVendorDetails && renderPerformanceUpdateSection()}
 
       {renderStatsCards(showVendorDetails)}
 
