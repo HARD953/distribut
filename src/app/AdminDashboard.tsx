@@ -3,9 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Home, MapPin, Package, ShoppingCart, Users, Coins, 
-  Scale, BarChart3, Map, Settings, Menu, Bell, Search,Truck,
+  Scale, BarChart3, Map, Settings, Menu, Bell, Search, Truck,
   ChevronDown, LogOut, Plus, AlertTriangle, Clock, CheckCircle, Loader2, ChevronsUpDown, UserRound, Bike,
-  X
+  X, TrendingUp, TrendingDown, Eye, MoreHorizontal,
+  Building2, Smartphone, Mail, Calendar, Target, ArrowUpRight,
+  Shield, Zap, Globe, Activity, CreditCard, PieChart,
+  Crown, Sparkles, Rocket, BarChart
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { apiService } from './ApiService';
@@ -16,7 +19,6 @@ import UserManagement from './UserManagement';
 import MobileVendorsManagement from './MobileVendorsManagement';
 import ParametresManagement from './ParametresManagement';
 import MapComponent from './MapComponent';
-// import ReportPage from './ReportPage';
 import PushcartManagement from './PushcartManagement';
 import StatisticsDashboard from './StatisticsDashboard';
 
@@ -88,7 +90,18 @@ const iconComponents: Record<string, React.ComponentType<any>> = {
   AlertTriangle,
   CheckCircle,
   UserRound,
-  Bike
+  Bike,
+  TrendingUp,
+  TrendingDown,
+  Package,
+  BarChart3,
+  Truck,
+  Activity,
+  CreditCard,
+  Target,
+  Crown,
+  Rocket,
+  BarChart
 };
 
 const AdminDashboard = () => {
@@ -98,7 +111,7 @@ const AdminDashboard = () => {
   const [dashboardData, setDashboardData] = useState<DashboardData>({
     cumulative: {
       pos_id: null,
-      pos_name: "Total Général",
+      pos_name: "Vue d'ensemble",
       stats: [],
       recent_activities: [],
       alerts: []
@@ -277,17 +290,16 @@ const AdminDashboard = () => {
   // Définir les menus en fonction du rôle
   const getMenuItems = () => {
     const allMenuItems = [
-      { id: 'dashboard', icon: Home, label: 'Dashboard', color: 'text-indigo-600' },
-      { id: 'points-vente', icon: MapPin, label: 'Distributeurs', color: 'text-green-600' },
-      { id: 'vendeurs-ambulants', icon: Bike, label: 'Commerciaux Terrain', color: 'text-amber-600' },
-      { id: 'Pushcart', icon: Truck, label: 'Prospect', color: 'text-yellow-600' },
-      { id: 'stocks', icon: Package, label: 'Gestion Stocks', color: 'text-orange-600' },
-      { id: 'commandes', icon: ShoppingCart, label: 'Commandes', color: 'text-purple-600' },
-      { id: 'utilisateurs', icon: Users, label: 'Utilisateurs', color: 'text-indigo-600' },
-      // { id: 'rapports', icon: BarChart3, label: 'Rapports', color: 'text-teal-600' },
-      { id: 'statistiques', icon: BarChart3, label: 'Statistiques', color: 'text-teal-600' },
-      { id: 'cartes', icon: Map, label: 'Cartes', color: 'text-cyan-600' },
-      { id: 'parametres', icon: Settings, label: 'Paramètres', color: 'text-gray-600' }
+      { id: 'dashboard', icon: Home, label: 'Tableau de bord', color: 'text-blue-600', badge: null },
+      { id: 'points-vente', icon: MapPin, label: 'Points de vente', color: 'text-green-600', badge: null },
+      { id: 'vendeurs-ambulants', icon: Bike, label: 'Commerciaux', color: 'text-amber-600', badge: '12' },
+      { id: 'Pushcart', icon: Truck, label: 'Prospects', color: 'text-purple-600', badge: '24' },
+      { id: 'stocks', icon: Package, label: 'Inventaire', color: 'text-orange-600', badge: '3' },
+      { id: 'commandes', icon: ShoppingCart, label: 'Commandes', color: 'text-indigo-600', badge: '45' },
+      { id: 'utilisateurs', icon: Users, label: 'Utilisateurs', color: 'text-pink-600', badge: null },
+      { id: 'statistiques', icon: BarChart3, label: 'Analytiques', color: 'text-teal-600', badge: 'PRO' },
+      { id: 'cartes', icon: Map, label: 'Géolocalisation', color: 'text-cyan-600', badge: 'PRO'  },
+      { id: 'parametres', icon: Settings, label: 'Configuration', color: 'text-gray-600', badge: null }
     ];
 
     // Si l'utilisateur est SuperU, afficher tous les menus
@@ -309,95 +321,215 @@ const AdminDashboard = () => {
     const quickActions = [
       { 
         icon: Plus, 
-        label: 'Ajouter Point de Vente', 
-        color: 'from-green-500 to-green-600',
+        label: 'Nouveau point de vente', 
+        color: 'from-green-500 to-emerald-600',
+        gradient: 'bg-gradient-to-r from-green-500 to-emerald-600',
         onClick: () => setActiveTab('points-vente')
       },
       { 
         icon: Package, 
-        label: 'Gérer Stocks', 
-        color: 'from-orange-500 to-orange-600',
+        label: 'Gérer stock', 
+        color: 'from-orange-500 to-amber-600',
+        gradient: 'bg-gradient-to-r from-orange-500 to-amber-600',
         onClick: () => setActiveTab('stocks')
       },
       { 
         icon: ShoppingCart, 
-        label: 'Nouvelle Commande', 
-        color: 'from-purple-500 to-purple-600',
+        label: 'Nouvelle commande', 
+        color: 'from-purple-500 to-violet-600',
+        gradient: 'bg-gradient-to-r from-purple-500 to-violet-600',
         onClick: () => setActiveTab('commandes')
       },
       { 
         icon: BarChart3, 
-        label: 'Vue Rapports', 
-        color: 'from-indigo-500 to-indigo-600',
-        onClick: () => setActiveTab('rapports')
+        label: 'Voir rapports', 
+        color: 'from-indigo-500 to-blue-600',
+        gradient: 'bg-gradient-to-r from-indigo-500 to-blue-600',
+        onClick: () => setActiveTab('statistiques')
       }
     ];
+
+    // Stats par défaut si aucune donnée
+    const defaultStats = [
+      { icon: 'ShoppingCart', title: 'Commandes du jour', value: '0', change: '+0%', color: 'blue' },
+      { icon: 'Coins', title: 'Chiffre d\'affaires', value: '0 FCFA', change: '+0%', color: 'green' },
+      { icon: 'Package', title: 'Stock disponible', value: '0 unités', change: '+0%', color: 'orange' },
+      { icon: 'Users', title: 'Commerciaux actifs', value: '0', change: '+0%', color: 'purple' }
+    ];
+
+    const displayStats = currentData.stats.length > 0 ? currentData.stats : defaultStats;
     
     return (
-      <div className="space-y-6">
+      <div className="space-y-8">
         {error && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center">
-            <AlertTriangle className="text-red-600 mr-2" size={20} />
-            <p className="text-red-600">{error}</p>
+          <div className="p-6 bg-gradient-to-r from-red-500/10 to-red-600/10 backdrop-blur-xl border border-red-500/20 rounded-2xl flex items-center">
+            <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center mr-4">
+              <AlertTriangle className="text-red-400" size={24} />
+            </div>
+            <div>
+              <p className="text-red-800 font-semibold">Erreur de chargement</p>
+              <p className="text-red-600 text-sm mt-1">{error}</p>
+            </div>
           </div>
         )}
 
         {/* En-tête personnalisé avec les informations de l'utilisateur */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold mb-2">
-                Bonjour, {getUserDisplayName()} 👋
-              </h1>
-              <p className="opacity-90 mb-2">
-                {selectedPOS?.pos_name === "Total Général" 
-                  ? "Vue d'ensemble de tous vos points de vente" 
-                  : `Activité du point de vente: ${selectedPOS?.pos_name}`}
-              </p>
-              <div className="flex flex-wrap gap-4 text-sm opacity-90">
-                <div className="flex items-center">
-                  <UserRound size={16} className="mr-1" />
-                  <span>Rôle: {getUserRoleDisplay()}</span>
-                </div>
-                <div className="flex items-center">
-                  <MapPin size={16} className="mr-1" />
-                  <span>Localisation: {getUserLocation()}</span>
-                </div>
- 
-                  <div className="flex items-center">
-                    <Package size={16} className="mr-1" />
-                    <span>Points de vente: {getUserPointsOfSale()}</span>
+        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl p-8 text-white shadow-2xl relative overflow-hidden border border-white/10">
+          {/* Background Elements */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-blue-500/20 to-purple-500/20 rounded-full -translate-y-32 translate-x-32"></div>
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-emerald-500/20 to-cyan-500/20 rounded-full translate-y-24 -translate-x-24"></div>
+          <div className="absolute top-1/2 left-1/2 w-32 h-32 bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-full -translate-x-1/2 -translate-y-1/2"></div>
+          
+          <div className="relative z-10">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex-1">
+                <div className="flex items-center mb-6">
+                  <div className="relative">
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center mr-4 shadow-lg border border-white/20">
+                      <UserRound className="text-white" size={28} />
+                    </div>
+                    {userRole === 'SuperU' && (
+                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-gradient-to-r from-amber-500 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
+                        <Crown size={12} className="text-white" />
+                      </div>
+                    )}
                   </div>
-
+                  <div>
+                    <h1 className="text-3xl lg:text-4xl font-bold mb-2 font-sans bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent">
+                      Bon retour, {getUserDisplayName()} 👋
+                    </h1>
+                    <p className="text-blue-100/90 text-lg font-light">
+                      {selectedPOS?.pos_name === "Vue d'ensemble" 
+                        ? "Aperçu global de votre réseau commercial" 
+                        : `Activité du point de vente: ${selectedPOS?.pos_name}`}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex flex-wrap gap-3 mb-6">
+                  <div className="flex items-center bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-3 border border-white/20">
+                    <Building2 size={18} className="mr-2 text-blue-300" />
+                    <span className="font-medium text-white/90">{getUserRoleDisplay()}</span>
+                  </div>
+                  <div className="flex items-center bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-3 border border-white/20">
+                    <MapPin size={18} className="mr-2 text-green-300" />
+                    <span className="font-medium text-white/90">{getUserLocation()}</span>
+                  </div>
+                  <div className="flex items-center bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-3 border border-white/20">
+                    <Calendar size={18} className="mr-2 text-amber-300" />
+                    <span className="font-medium text-white/90">{new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Badge du rôle */}
+              <div className="mt-6 lg:mt-0">
+                <div className="bg-white/20 backdrop-blur-xl rounded-2xl px-6 py-4 inline-flex items-center border border-white/30 shadow-lg">
+                  <div className="w-3 h-3 bg-gradient-to-r from-emerald-400 to-green-500 rounded-full mr-3 animate-pulse shadow-lg"></div>
+                  <div>
+                    <span className="font-semibold text-white block">{getUserRoleDisplay()}</span>
+                    <span className="text-white/70 text-sm">Connecté</span>
+                  </div>
+                </div>
               </div>
             </div>
-            
-            {/* Badge du rôle */}
-            <div className="mt-4 md:mt-0">
-              <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-full px-4 py-2 inline-flex items-center">
-                <div className="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
-                <span className="font-medium">{getUserRoleDisplay()}</span>
+
+            {/* Performance Metrics */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
+                <div className="flex items-center justify-between">
+                  <span className="text-white/70 text-sm">Performance</span>
+                  <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                </div>
+                <div className="text-white font-semibold text-lg mt-2">98.2%</div>
+              </div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
+                <div className="flex items-center justify-between">
+                  <span className="text-white/70 text-sm">Temps réponse</span>
+                  <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                </div>
+                <div className="text-white font-semibold text-lg mt-2">47ms</div>
+              </div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
+                <div className="flex items-center justify-between">
+                  <span className="text-white/70 text-sm">Sessions actives</span>
+                  <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
+                </div>
+                <div className="text-white font-semibold text-lg mt-2">24</div>
+              </div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
+                <div className="flex items-center justify-between">
+                  <span className="text-white/70 text-sm">Uptime</span>
+                  <div className="w-2 h-2 bg-amber-400 rounded-full"></div>
+                </div>
+                <div className="text-white font-semibold text-lg mt-2">99.9%</div>
               </div>
             </div>
           </div>
         </div>
         
+        {/* Cartes de statistiques */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {currentData.stats.map((stat, index) => {
-            const IconComponent = iconComponents[stat.icon] || CheckCircle;
+          {displayStats.map((stat, index) => {
+            const IconComponent = iconComponents[stat.icon] || BarChart3;
+            const isPositive = stat.change.startsWith('+');
+            const colorMap = {
+              blue: { 
+                gradient: 'from-blue-500 to-cyan-500', 
+                bg: 'bg-blue-50', 
+                text: 'text-blue-600',
+                light: 'bg-blue-500/10'
+              },
+              green: { 
+                gradient: 'from-emerald-500 to-green-500', 
+                bg: 'bg-emerald-50', 
+                text: 'text-emerald-600',
+                light: 'bg-emerald-500/10'
+              },
+              orange: { 
+                gradient: 'from-orange-500 to-amber-500', 
+                bg: 'bg-orange-50', 
+                text: 'text-orange-600',
+                light: 'bg-orange-500/10'
+              },
+              purple: { 
+                gradient: 'from-purple-500 to-violet-500', 
+                bg: 'bg-purple-50', 
+                text: 'text-purple-600',
+                light: 'bg-purple-500/10'
+              }
+            };
+            const colors = colorMap[stat.color as keyof typeof colorMap] || colorMap.blue;
+            
             return (
-              <div key={index} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm transition-all hover:shadow-md flex items-center">
-                <div className="mr-4 p-3 rounded-full bg-indigo-100 text-indigo-600">
-                  <IconComponent size={24} />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-800">{stat.value}</p>
-                  <p className={`text-sm font-semibold ${
-                    stat.change.startsWith('+') ? 'text-green-600' : stat.change.startsWith('-') ? 'text-red-600' : 'text-gray-600'
-                  }`}>
-                    {stat.change}
-                  </p>
+              <div key={index} className="group bg-white/80 backdrop-blur-xl rounded-2xl border border-white/20 shadow-sm hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 p-6 relative overflow-hidden">
+                {/* Background Gradient */}
+                <div className={`absolute top-0 right-0 w-20 h-20 bg-gradient-to-br ${colors.gradient} opacity-5 rounded-full -translate-y-10 translate-x-10 group-hover:scale-150 transition-transform duration-500`}></div>
+                
+                <div className="relative z-10">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className={`p-3 rounded-2xl ${colors.light} ${colors.text} shadow-sm group-hover:scale-110 transition-transform duration-300`}>
+                      <IconComponent size={24} />
+                    </div>
+                    {stat.change && (
+                      <div className={`flex items-center text-sm font-semibold px-3 py-1 rounded-full backdrop-blur-sm ${
+                        isPositive ? 'bg-emerald-500/20 text-emerald-700' : 'bg-red-500/20 text-red-700'
+                      }`}>
+                        {isPositive ? <TrendingUp size={14} className="mr-1" /> : <TrendingDown size={14} className="mr-1" />}
+                        {stat.change}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600 mb-2">{stat.title}</p>
+                    <p className="text-2xl font-bold text-slate-800 font-sans tracking-tight">{stat.value}</p>
+                  </div>
+                  
+                  {/* View Details Link */}
+                  <button className="mt-4 flex items-center text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors group/link">
+                    <span>Voir détails</span>
+                    <ArrowUpRight size={14} className="ml-1 group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform" />
+                  </button>
                 </div>
               </div>
             );
@@ -406,91 +538,150 @@ const AdminDashboard = () => {
 
         {/* Section Actions Rapides - Uniquement pour SuperU */}
         {userRole === 'SuperU' && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-800">Actions Rapides</h3>
-              <button className="text-indigo-600 text-sm font-medium flex items-center">
-                Voir plus <ChevronDown size={16} className="ml-1" />
+          <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-sm border border-white/20 p-8">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h3 className="text-2xl font-bold text-slate-800 font-sans">Actions Rapides</h3>
+                <p className="text-slate-600 text-lg mt-2">Accédez rapidement aux fonctionnalités principales</p>
+              </div>
+              <button className="text-blue-600 text-sm font-semibold flex items-center hover:text-blue-700 transition-colors group">
+                Voir plus <ChevronDown size={16} className="ml-1 group-hover:translate-y-0.5 transition-transform" />
               </button>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
               {quickActions.map((action, index) => (
                 <button 
                   key={index} 
                   onClick={action.onClick}
-                  className={`bg-gradient-to-r ${action.color} text-white p-4 rounded-lg transition-all hover:shadow-lg flex flex-col items-center space-y-2`}
+                  className={`${action.gradient} text-white p-6 rounded-2xl transition-all duration-300 hover:shadow-2xl flex flex-col items-center space-y-4 group transform hover:-translate-y-2 active:scale-95 relative overflow-hidden`}
                 >
-                  <action.icon size={24} />
-                  <span className="text-sm font-medium text-center">{action.label}</span>
+                  {/* Background Effect */}
+                  <div className="absolute inset-0 bg-white/10 transform scale-0 group-hover:scale-100 transition-transform duration-500"></div>
+                  
+                  <div className="p-4 bg-white/20 rounded-2xl group-hover:scale-110 transition-transform duration-300 shadow-lg relative z-10">
+                    <action.icon size={28} />
+                  </div>
+                  <span className="text-sm font-semibold text-center leading-tight relative z-10">{action.label}</span>
+                  
+                  {/* Hover Effect */}
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/30 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                 </button>
               ))}
             </div>
           </div>
         )}
         
-        <div className="grid lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-800">Activités Récentes</h3>
-              <button className="text-indigo-600 text-sm font-medium">Voir tout</button>
+        <div className="grid lg:grid-cols-2 gap-8">
+          {/* Activités récentes */}
+          <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-sm border border-white/20 p-8">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h3 className="text-2xl font-bold text-slate-800 font-sans">Activités Récentes</h3>
+                <p className="text-slate-600 text-lg mt-2">Dernières actions sur la plateforme</p>
+              </div>
+              <button className="text-blue-600 text-sm font-semibold hover:text-blue-700 transition-colors flex items-center group">
+                Voir tout <ArrowUpRight size={14} className="ml-1 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </button>
             </div>
             <div className="space-y-4">
               {currentData.recent_activities.length > 0 ? (
                 currentData.recent_activities.map((activity, index) => {
-                  const IconComponent = iconComponents[activity.icon] || CheckCircle;
+                  const IconComponent = iconComponents[activity.icon] || Activity;
                   return (
-                    <div key={index} className="flex items-start p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className="p-2 rounded-full mr-3 bg-indigo-100 text-indigo-600">
-                        <IconComponent size={18} />
+                    <div key={index} className="flex items-start p-4 rounded-xl hover:bg-white/50 transition-all duration-200 group border border-transparent hover:border-white/20 backdrop-blur-sm">
+                      <div className="p-3 rounded-2xl bg-blue-500/10 text-blue-600 mr-4 group-hover:bg-blue-500/20 group-hover:scale-110 transition-all duration-300 shadow-sm">
+                        <IconComponent size={20} />
                       </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-800">{activity.action}</p>
-                        <p className="text-sm text-gray-600">{activity.user}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-800 truncate">{activity.action}</p>
+                        <p className="text-sm text-slate-600 truncate">{activity.user}</p>
                       </div>
-                      <div className="flex items-center text-xs text-gray-400">
-                        <Clock size={14} className="mr-1" />
+                      <div className="flex items-center text-xs text-slate-400 ml-2 bg-slate-100/50 px-3 py-2 rounded-full backdrop-blur-sm">
+                        <Clock size={12} className="mr-1 flex-shrink-0" />
                         {activity.time}
                       </div>
                     </div>
                   );
                 })
               ) : (
-                <p className="text-sm text-gray-600">Aucune activité récente</p>
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 bg-slate-100/50 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
+                    <Activity className="text-slate-400" size={32} />
+                  </div>
+                  <p className="text-lg font-medium text-slate-600 mb-2">Aucune activité récente</p>
+                  <p className="text-sm text-slate-500 max-w-sm mx-auto">
+                    Les activités de votre équipe apparaîtront ici lorsqu'elles utiliseront la plateforme.
+                  </p>
+                </div>
               )}
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-800">Alertes Importantes</h3>
-              <button className="text-indigo-600 text-sm font-medium">Tout marquer comme lu</button>
+          {/* Alertes importantes */}
+          <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-sm border border-white/20 p-8">
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h3 className="text-2xl font-bold text-slate-800 font-sans">Alertes Importantes</h3>
+                <p className="text-slate-600 text-lg mt-2">Notifications nécessitant votre attention</p>
+              </div>
+              <button className="text-blue-600 text-sm font-semibold hover:text-blue-700 transition-colors">
+                Tout marquer comme lu
+              </button>
             </div>
             <div className="space-y-4">
               {currentData.alerts.length > 0 ? (
                 currentData.alerts.map((alert, index) => {
                   const IconComponent = iconComponents[alert.icon] || AlertTriangle;
+                  const priorityColors = {
+                    high: { 
+                      border: 'border-red-200', 
+                      bg: 'bg-red-50/80', 
+                      text: 'text-red-700',
+                      iconBg: 'bg-red-500/20 text-red-600',
+                      accent: 'bg-red-500'
+                    },
+                    medium: { 
+                      border: 'border-amber-200', 
+                      bg: 'bg-amber-50/80', 
+                      text: 'text-amber-700',
+                      iconBg: 'bg-amber-500/20 text-amber-600',
+                      accent: 'bg-amber-500'
+                    },
+                    low: { 
+                      border: 'border-blue-200', 
+                      bg: 'bg-blue-50/80', 
+                      text: 'text-blue-700',
+                      iconBg: 'bg-blue-500/20 text-blue-600',
+                      accent: 'bg-blue-500'
+                    }
+                  };
+                  const colors = priorityColors[alert.priority];
+                  
                   return (
-                    <div key={index} className={`p-4 rounded-lg border-l-4 flex items-start ${
-                      alert.priority === 'high' ? 'border-red-500 bg-red-50' :
-                      alert.priority === 'medium' ? 'border-yellow-500 bg-yellow-50' :
-                      'border-blue-500 bg-blue-50'
-                    }`}>
-                      <div className={`p-2 rounded-full mr-3 ${
-                        alert.priority === 'high' ? 'text-red-600 bg-red-100' :
-                        alert.priority === 'medium' ? 'text-yellow-600 bg-yellow-100' :
-                        'text-blue-600 bg-blue-100'
-                      }`}>
-                        <IconComponent size={18} />
+                    <div key={index} className={`p-4 rounded-xl border-l-4 flex items-start ${colors.border} ${colors.bg} backdrop-blur-sm transition-all hover:shadow-sm group`} style={{ borderLeftColor: colors.accent }}>
+                      <div className={`p-3 rounded-2xl mr-4 ${colors.iconBg} shadow-sm group-hover:scale-110 transition-transform duration-300`}>
+                        <IconComponent size={20} />
                       </div>
-                      <div>
-                        <div className="font-medium text-sm text-gray-800">{alert.type}</div>
-                        <div className="text-sm text-gray-600">{alert.message}</div>
+                      <div className="flex-1">
+                        <div className="flex items-center mb-2">
+                          <div className="font-semibold text-sm text-slate-800">{alert.type}</div>
+                          <div className={`w-2 h-2 rounded-full ml-2 ${colors.accent}`}></div>
+                        </div>
+                        <div className="text-sm text-slate-600 leading-relaxed">{alert.message}</div>
                       </div>
                     </div>
                   );
                 })
               ) : (
-                <p className="text-sm text-gray-600">Aucune alerte pour le moment</p>
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 bg-slate-100/50 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
+                    <CheckCircle className="text-slate-400" size={32} />
+                  </div>
+                  <p className="text-lg font-medium text-slate-600 mb-2">Aucune alerte</p>
+                  <p className="text-sm text-slate-500 max-w-sm mx-auto">
+                    Toutes les opérations se déroulent normalement. Aucune intervention requise.
+                  </p>
+                </div>
               )}
             </div>
           </div>
@@ -511,8 +702,6 @@ const AdminDashboard = () => {
         return React.createElement(OrderManagement as any, { selectedPOS });
       case 'vendeurs-ambulants':
         return React.createElement(MobileVendorsManagement as any, { selectedPOS });
-      // case 'rapports':
-      //   return React.createElement(ReportPage as any);
       case 'statistiques':
         return <StatisticsDashboard />;
       case 'utilisateurs':
@@ -525,21 +714,24 @@ const AdminDashboard = () => {
         return <PushcartManagement />
       default:
         return (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-            <div className="text-gray-400 mb-4">
+          <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-sm border border-white/20 p-12 text-center">
+            <div className="w-24 h-24 bg-gradient-to-br from-slate-100 to-slate-200 rounded-3xl flex items-center justify-center mx-auto mb-6">
               {menuItems.find(item => item.id === activeTab)?.icon && 
-                React.createElement(menuItems.find(item => item.id === activeTab)!.icon, { size: 48, className: 'mx-auto' })
+                React.createElement(menuItems.find(item => item.id === activeTab)!.icon, { 
+                  size: 48, 
+                  className: 'text-slate-400' 
+                })
               }
             </div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">
+            <h3 className="text-2xl font-bold text-slate-800 mb-3 font-sans">
               {menuItems.find(item => item.id === activeTab)?.label}
             </h3>
-            <p className="text-gray-600 max-w-md mx-auto">
+            <p className="text-slate-600 max-w-md mx-auto text-lg leading-relaxed">
               Cette section est en cours de développement. Elle sera disponible dans la prochaine mise à jour.
             </p>
             <button 
               onClick={() => setActiveTab('dashboard')}
-              className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              className="mt-6 px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-2xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-1"
             >
               Retour au tableau de bord
             </button>
@@ -550,182 +742,163 @@ const AdminDashboard = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-          <span className="text-gray-600">Chargement du tableau de bord...</span>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+        <div className="flex flex-col items-center space-y-6">
+          <div className="relative">
+            <div className="w-20 h-20 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full animate-pulse"></div>
+            </div>
+          </div>
+          <div className="text-center">
+            <span className="text-slate-700 font-semibold text-lg">Chargement du tableau de bord...</span>
+            <p className="text-slate-500 text-sm mt-2">Préparation de votre espace de travail</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 relative overflow-hidden">
+      {/* Animated Background Elements */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-1/4 -left-10 w-72 h-72 bg-blue-500/5 rounded-full blur-3xl animate-float"></div>
+        <div className="absolute top-1/2 -right-10 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute bottom-1/4 left-1/3 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl animate-float" style={{ animationDelay: '4s' }}></div>
+      </div>
+
       {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white shadow-md p-4 flex items-center justify-between">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl shadow-2xl border-b border-white/20 p-4 flex items-center justify-between">
         <div className="flex items-center">
-          <button onClick={() => setMobileMenuOpen(true)} className="mr-3 p-1">
-            <Menu size={24} className="text-gray-700" />
+          <button 
+            onClick={() => setMobileMenuOpen(true)} 
+            className="mr-3 p-2 rounded-2xl hover:bg-white/50 transition-colors duration-200 backdrop-blur-sm"
+          >
+            <Menu size={24} className="text-slate-700" />
           </button>
           <div className="flex items-center">
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mr-2">
-              <span className="text-white font-bold">LT</span>
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center mr-3 shadow-lg">
+              <Building2 className="text-white" size={20} />
             </div>
-            <h1 className="text-lg font-bold text-gray-800">LanfiaTech</h1>
+            <div>
+              <h1 className="text-lg font-bold text-slate-800 font-sans">LanfiaLink</h1>
+              <p className="text-xs text-slate-500">Dashboard</p>
+            </div>
           </div>
         </div>
         
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2">
           <button 
             onClick={() => setNotificationsOpen(!notificationsOpen)}
-            className="p-2 text-gray-600 hover:text-gray-800 rounded-lg transition-colors relative"
+            className="p-2 text-slate-600 hover:text-slate-800 rounded-2xl transition-colors duration-200 relative hover:bg-white/50 backdrop-blur-sm"
           >
             <Bell size={20} />
             {unreadNotifications > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-semibold shadow-lg">
                 {unreadNotifications}
               </span>
             )}
           </button>
           
-          <div className="w-8 h-8 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center text-white font-semibold shadow-lg">
             {getUserInitials()}
           </div>
         </div>
       </div>
 
-      {/* Mobile Menu Overlay */}
-      {mobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50">
-          <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-lg">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <div className="flex items-center">
-                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mr-2">
-                  <span className="text-white font-bold">LT</span>
-                </div>
-                <div>
-                  <h1 className="text-lg font-bold text-gray-800">FrieslandCampina</h1>
-                  <p className="text-xs text-gray-500">Admin Panel</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setMobileMenuOpen(false)}
-                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <nav className="flex-1 p-4 space-y-1 overflow-y-auto h-[calc(100%-120px)]">
-              {menuItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setActiveTab(item.id);
-                    setMobileMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center space-x-3 p-3 rounded-lg transition-all ${
-                    activeTab === item.id ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  <item.icon size={20} className={`flex-shrink-0 ${activeTab === item.id ? item.color : 'text-gray-500'}`} />
-                  <span className={`${activeTab === item.id ? 'font-medium' : 'font-normal'}`}>
-                    {item.label}
-                  </span>
-                </button>
-              ))}
-            </nav>
-
-            <div className="p-4 border-t border-gray-200">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-medium">
-                  {getUserInitials()}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-800">{getUserDisplayName()}</p>
-                  <p className="text-xs text-gray-500">{currentUser?.email || 'admin@lanfiatech.com'}</p>
-                  <p className="text-xs text-indigo-600 font-medium">{getUserRoleDisplay()}</p>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                  title="Déconnexion"
-                >
-                  <LogOut size={20} className="text-gray-600" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Desktop Sidebar */}
-      <div className={`hidden lg:block fixed inset-y-0 left-0 z-40 bg-white shadow-lg transition-all duration-300 ease-in-out ${
-        sidebarOpen ? 'w-64' : 'w-20'
+      <div className={`hidden lg:block fixed inset-y-0 left-0 z-40 bg-white/95 backdrop-blur-xl shadow-2xl border-r border-white/20 transition-all duration-300 ease-in-out ${
+        sidebarOpen ? 'w-80' : 'w-20'
       }`}>
         <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between p-6 bg-gradient-to-r from-slate-900 to-slate-800 text-white">
             {sidebarOpen ? (
               <div className="flex items-center">
-                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mr-2">
-                  <span className="text-white font-bold">LT</span>
+                <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center mr-3 backdrop-blur-sm border border-white/30">
+                  <Building2 className="text-white" size={24} />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-gray-800">FrieslandCampina</h1>
-                  <p className="text-xs text-gray-500">Admin Panel</p>
+                  <h1 className="text-xl font-bold font-sans">LanfiaLink</h1>
+                  <p className="text-sm text-white/80">Panel d'administration</p>
                 </div>
               </div>
             ) : (
-              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mx-auto">
-                <span className="text-white font-bold">LT</span>
+              <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center mx-auto backdrop-blur-sm border border-white/30">
+                <Building2 className="text-white" size={24} />
               </div>
             )}
             <button 
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              className="p-2 rounded-2xl hover:bg-white/10 transition-colors duration-200"
             >
               <Menu size={20} />
             </button>
           </div>
 
-          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
             {menuItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center space-x-3 p-3 rounded-lg transition-all ${
-                  activeTab === item.id ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-100'
+                className={`w-full flex items-center space-x-4 p-4 rounded-2xl transition-all duration-200 group ${
+                  activeTab === item.id 
+                    ? 'bg-gradient-to-r from-blue-500/20 to-blue-600/20 text-blue-600 border border-blue-500/20 shadow-lg' 
+                    : 'text-slate-600 hover:bg-white/50 hover:text-slate-800 border border-transparent hover:border-white/20'
                 } ${sidebarOpen ? 'justify-start' : 'justify-center'}`}
               >
-                <item.icon size={20} className={`flex-shrink-0 ${activeTab === item.id ? item.color : 'text-gray-500'}`} />
+                <div className="relative">
+                  <item.icon size={22} className={`flex-shrink-0 ${activeTab === item.id ? item.color : 'text-slate-500 group-hover:text-slate-700'}`} />
+                  {item.badge && (
+                    <span className={`absolute -top-2 -right-2 text-xs px-1.5 py-0.5 rounded-full ${
+                      item.badge === 'PRO' 
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white' 
+                        : 'bg-red-500 text-white'
+                    }`}>
+                      {item.badge}
+                    </span>
+                  )}
+                </div>
                 {sidebarOpen && (
-                  <span className={`${activeTab === item.id ? 'font-medium' : 'font-normal'}`}>
-                    {item.label}
-                  </span>
+                  <div className="flex-1 flex items-center justify-between">
+                    <span className={`font-semibold ${activeTab === item.id ? 'text-blue-600' : 'text-slate-700'}`}>
+                      {item.label}
+                    </span>
+                    {item.badge && item.badge !== 'PRO' && (
+                      <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
                 )}
               </button>
             ))}
           </nav>
 
-          <div className="p-4 border-t border-gray-200">
-            <div className={`flex items-center ${sidebarOpen ? 'space-x-3' : 'justify-center'}`}>
-              <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-medium">
-                {getUserInitials()}
+          <div className="p-4 border-t border-white/20 bg-white/50 backdrop-blur-sm">
+            <div className={`flex items-center ${sidebarOpen ? 'space-x-3' : 'justify-center'} p-3 rounded-2xl bg-white/80 border border-white/20 backdrop-blur-sm`}>
+              <div className="relative">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center text-white font-semibold shadow-lg">
+                  {getUserInitials()}
+                </div>
+                {userRole === 'SuperU' && (
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-gradient-to-r from-amber-500 to-orange-500 rounded-full border-2 border-white"></div>
+                )}
               </div>
               {sidebarOpen && (
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-800">{getUserDisplayName()}</p>
-                  <p className="text-xs text-gray-500">{currentUser?.email || 'admin@lanfiatech.com'}</p>
-                  <p className="text-xs text-indigo-600 font-medium">{getUserRoleDisplay()}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">{getUserDisplayName()}</p>
+                  <p className="text-xs text-slate-500 truncate">{currentUser?.email || 'admin@lanfiatech.com'}</p>
+                  <p className="text-xs text-blue-600 font-semibold">{getUserRoleDisplay()}</p>
                 </div>
               )}
               {sidebarOpen && (
                 <button
                   onClick={handleLogout}
-                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="p-2 rounded-2xl hover:bg-white transition-colors duration-200 flex-shrink-0"
                   title="Déconnexion"
                 >
-                  <LogOut size={20} className="text-gray-600" />
+                  <LogOut size={20} className="text-slate-600" />
                 </button>
               )}
             </div>
@@ -733,15 +906,15 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      <div className={`transition-all duration-300 ease-in-out ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-20'} lg:pt-0 pt-16`}>
-        <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10 hidden lg:block">
-          <div className="flex items-center justify-between p-4">
+      <div className={`transition-all duration-300 ease-in-out ${sidebarOpen ? 'lg:ml-80' : 'lg:ml-20'} lg:pt-0 pt-16`}>
+        <header className="bg-white/95 backdrop-blur-xl shadow-lg border-b border-white/20 sticky top-0 z-10 hidden lg:block">
+          <div className="flex items-center justify-between p-6">
             <div>
-              <h2 className="text-xl font-bold text-gray-800">
-                {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
+              <h2 className="text-2xl font-bold text-slate-800 font-sans">
+                {menuItems.find(item => item.id === activeTab)?.label || 'Tableau de bord'}
               </h2>
-              <p className="text-sm text-gray-600">
-                {activeTab === 'dashboard' ? 'Vue d\'ensemble de votre activité' : 
+              <p className="text-slate-600 text-lg">
+                {activeTab === 'dashboard' ? 'Aperçu global de votre activité' : 
                  `Gestion des ${menuItems.find(item => item.id === activeTab)?.label.toLowerCase()}`}
               </p>
             </div>
@@ -750,26 +923,26 @@ const AdminDashboard = () => {
               <div className="relative">
                 <button 
                   onClick={() => setPosDropdownOpen(!posDropdownOpen)}
-                  className="flex items-center space-x-2 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg transition-colors"
+                  className="flex items-center space-x-3 bg-white/80 backdrop-blur-sm hover:bg-white px-4 py-3 rounded-2xl transition-all duration-200 font-semibold border border-white/20 hover:border-white/40 shadow-sm"
                 >
-                  <MapPin size={16} />
-                  <span>{selectedPOS?.pos_name || 'Sélectionner POS'}</span>
-                  <ChevronsUpDown size={16} />
+                  <MapPin size={18} className="text-slate-600" />
+                  <span className="text-slate-700">{selectedPOS?.pos_name || 'Sélectionner POS'}</span>
+                  <ChevronsUpDown size={16} className="text-slate-500" />
                 </button>
                 
                 {posDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-20">
+                  <div className="absolute right-0 mt-2 w-72 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 z-20 overflow-hidden">
                     <div className="p-2 max-h-60 overflow-y-auto">
                       <button
                         onClick={() => {
                           setSelectedPOS(dashboardData.cumulative);
                           setPosDropdownOpen(false);
                         }}
-                        className={`w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md ${
-                          selectedPOS?.pos_id === null ? 'bg-indigo-50 text-indigo-600' : ''
+                        className={`w-full text-left px-4 py-3 hover:bg-white/50 rounded-xl transition-colors duration-200 ${
+                          selectedPOS?.pos_id === null ? 'bg-blue-500/10 text-blue-600 font-semibold border border-blue-500/20' : 'text-slate-700'
                         }`}
                       >
-                        Total Général
+                        Vue d'ensemble
                       </button>
                       {dashboardData.pos_data.map(pos => (
                         <button
@@ -778,8 +951,8 @@ const AdminDashboard = () => {
                             setSelectedPOS(pos);
                             setPosDropdownOpen(false);
                           }}
-                          className={`w-full text-left px-4 py-2 hover:bg-gray-100 rounded-md ${
-                            selectedPOS?.pos_id === pos.pos_id ? 'bg-indigo-50 text-indigo-600' : ''
+                          className={`w-full text-left px-4 py-3 hover:bg-white/50 rounded-xl transition-colors duration-200 ${
+                            selectedPOS?.pos_id === pos.pos_id ? 'bg-blue-500/10 text-blue-600 font-semibold border border-blue-500/20' : 'text-slate-700'
                           }`}
                         >
                           {pos.pos_name}
@@ -791,91 +964,191 @@ const AdminDashboard = () => {
               </div>
               
               <div className="relative hidden md:block">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
                 <input 
                   type="text" 
                   placeholder="Rechercher..." 
-                  className="pl-10 pr-4 py-2 w-64 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  className="pl-12 pr-4 py-3 w-80 border border-white/20 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 font-medium bg-white/50 backdrop-blur-sm placeholder-slate-400"
                 />
               </div>
               
               <div className="relative">
                 <button 
                   onClick={() => setNotificationsOpen(!notificationsOpen)}
-                  className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors relative"
+                  className="p-3 text-slate-600 hover:text-slate-800 hover:bg-white/50 rounded-2xl transition-all duration-200 relative border border-transparent hover:border-white/20 backdrop-blur-sm"
                 >
                   <Bell size={20} />
                   {unreadNotifications > 0 && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                    <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-semibold shadow-lg">
                       {unreadNotifications}
                     </span>
                   )}
                 </button>
                 
                 {notificationsOpen && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-20">
-                    <div className="p-3 border-b border-gray-200 flex justify-between items-center">
-                      <h3 className="font-medium">Notifications</h3>
-                      <button className="text-indigo-600 text-sm">Marquer tout comme lu</button>
+                  <div className="absolute right-0 mt-2 w-96 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 z-20 overflow-hidden">
+                    <div className="p-4 border-b border-white/20 flex justify-between items-center bg-gradient-to-r from-slate-50 to-slate-100">
+                      <h3 className="font-semibold text-slate-800 font-sans text-lg">Notifications</h3>
+                      <button className="text-blue-600 text-sm font-semibold hover:text-blue-700 transition-colors">
+                        Marquer tout comme lu
+                      </button>
                     </div>
                     <div className="max-h-96 overflow-y-auto">
                       {notifications.length > 0 ? (
                         notifications.map(notification => (
-                          <div key={notification.id} className={`p-3 border-b border-gray-100 hover:bg-gray-50 ${!notification.is_read ? 'bg-indigo-50' : ''}`}>
-                            <div className="flex justify-between">
-                              <p className="font-medium text-sm">{notification.type}</p>
-                              <p className="text-xs text-gray-500 flex items-center">
+                          <div key={notification.id} className={`p-4 border-b border-white/20 hover:bg-white/50 transition-colors duration-200 ${
+                            !notification.is_read ? 'bg-blue-500/10 border-l-4 border-l-blue-500' : ''
+                          }`}>
+                            <div className="flex justify-between items-start mb-2">
+                              <p className="font-semibold text-slate-800 text-sm">{notification.type}</p>
+                              <p className="text-xs text-slate-500 flex items-center bg-white/50 px-2 py-1 rounded-full backdrop-blur-sm">
                                 <Clock size={12} className="mr-1" />
                                 {formatTimeAgo(new Date(notification.created_at))}
                               </p>
                             </div>
-                            <p className="text-sm text-gray-600">{notification.message}</p>
+                            <p className="text-sm text-slate-600 leading-relaxed">{notification.message}</p>
                           </div>
                         ))
                       ) : (
-                        <p className="p-3 text-sm text-gray-600">Aucune notification</p>
+                        <div className="p-8 text-center">
+                          <Bell className="text-slate-400 mx-auto mb-3" size={32} />
+                          <p className="text-slate-600 font-medium">Aucune notification</p>
+                          <p className="text-slate-500 text-sm mt-1">Tout est à jour</p>
+                        </div>
                       )}
                     </div>
-                    <div className="p-3 text-center border-t border-gray-200">
-                      <button className="text-indigo-600 text-sm font-medium">Voir toutes les notifications</button>
+                    <div className="p-4 text-center border-t border-white/20 bg-white/50">
+                      <button className="text-blue-600 text-sm font-semibold hover:text-blue-700 transition-colors">
+                        Voir toutes les notifications
+                      </button>
                     </div>
                   </div>
                 )}
               </div>
               
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-3">
                 <div className="text-right hidden sm:block">
-                  <p className="text-sm font-medium text-gray-800">{getUserDisplayName()}</p>
-                  <p className="text-xs text-gray-500">{getUserRoleDisplay()}</p>
+                  <p className="text-sm font-semibold text-slate-800">{getUserDisplayName()}</p>
+                  <p className="text-xs text-slate-500">{getUserRoleDisplay()}</p>
                 </div>
-                <div className="w-8 h-8 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center text-white font-semibold shadow-lg">
                   {getUserInitials()}
                 </div>
                 <button 
                   onClick={handleLogout}
-                  className="flex items-center text-gray-600 hover:text-gray-800"
+                  className="flex items-center text-slate-600 hover:text-slate-800 transition-colors duration-200 p-2 rounded-2xl hover:bg-white/50 backdrop-blur-sm"
                   title="Déconnexion"
                 >
-                  <LogOut size={16} />
+                  <LogOut size={18} />
                 </button>
               </div>
             </div>
           </div>
         </header>
 
-        <main className="p-4 lg:p-6">
+        <main className="p-6 lg:p-8">
           {renderActiveContent()}
         </main>
       </div>
 
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)}>
+          <div className="fixed inset-y-0 left-0 w-80 bg-white/95 backdrop-blur-xl shadow-2xl border-r border-white/20" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 bg-gradient-to-r from-slate-900 to-slate-800 text-white">
+              <div className="flex items-center">
+                <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center mr-3 backdrop-blur-sm border border-white/30">
+                  <Building2 className="text-white" size={24} />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold font-sans">LanfiaLink</h1>
+                  <p className="text-sm text-white/80">Panel d'administration</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2 rounded-2xl hover:bg-white/10 transition-colors duration-200"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <nav className="flex-1 p-4 space-y-2 overflow-y-auto h-[calc(100%-140px)]">
+              {menuItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center space-x-4 p-4 rounded-2xl transition-all duration-200 ${
+                    activeTab === item.id 
+                      ? 'bg-gradient-to-r from-blue-500/20 to-blue-600/20 text-blue-600 border border-blue-500/20 shadow-lg' 
+                      : 'text-slate-600 hover:bg-white/50 hover:text-slate-800 border border-transparent hover:border-white/20'
+                  }`}
+                >
+                  <div className="relative">
+                    <item.icon size={22} className={`flex-shrink-0 ${activeTab === item.id ? item.color : 'text-slate-500'}`} />
+                    {item.badge && (
+                      <span className={`absolute -top-2 -right-2 text-xs px-1.5 py-0.5 rounded-full ${
+                        item.badge === 'PRO' 
+                          ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white' 
+                          : 'bg-red-500 text-white'
+                      }`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex-1 flex items-center justify-between">
+                    <span className={`font-semibold ${activeTab === item.id ? 'text-blue-600' : 'text-slate-700'}`}>
+                      {item.label}
+                    </span>
+                    {item.badge && item.badge !== 'PRO' && (
+                      <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </nav>
+
+            <div className="p-4 border-t border-white/20 bg-white/50 backdrop-blur-sm">
+              <div className="flex items-center space-x-3 p-3 rounded-2xl bg-white/80 border border-white/20 backdrop-blur-sm">
+                <div className="relative">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center text-white font-semibold shadow-lg">
+                    {getUserInitials()}
+                  </div>
+                  {userRole === 'SuperU' && (
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-gradient-to-r from-amber-500 to-orange-500 rounded-full border-2 border-white"></div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">{getUserDisplayName()}</p>
+                  <p className="text-xs text-slate-500 truncate">{currentUser?.email || 'admin@lanfiatech.com'}</p>
+                  <p className="text-xs text-blue-600 font-semibold">{getUserRoleDisplay()}</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="p-2 rounded-2xl hover:bg-white transition-colors duration-200"
+                  title="Déconnexion"
+                >
+                  <LogOut size={20} className="text-slate-600" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Mobile Notifications Panel */}
       {notificationsOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50" onClick={() => setNotificationsOpen(false)}>
-          <div className="absolute right-0 top-0 h-full w-80 bg-white" onClick={e => e.stopPropagation()}>
-            <div className="p-3 border-b border-gray-200 flex justify-between items-center">
-              <h3 className="font-medium">Notifications</h3>
+        <div className="lg:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" onClick={() => setNotificationsOpen(false)}>
+          <div className="absolute right-0 top-0 h-full w-96 bg-white/95 backdrop-blur-xl" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-white/20 flex justify-between items-center bg-gradient-to-r from-slate-900 to-slate-800 text-white">
+              <h3 className="font-semibold font-sans text-lg">Notifications</h3>
               <button 
-                className="p-1 rounded-full hover:bg-gray-100"
+                className="p-2 rounded-2xl hover:bg-white/10 transition-colors duration-200"
                 onClick={() => setNotificationsOpen(false)}
               >
                 <X size={20} />
@@ -884,24 +1157,45 @@ const AdminDashboard = () => {
             <div className="h-full overflow-y-auto">
               {notifications.length > 0 ? (
                 notifications.map(notification => (
-                  <div key={notification.id} className={`p-3 border-b border-gray-100 hover:bg-gray-50 ${!notification.is_read ? 'bg-indigo-50' : ''}`}>
-                    <div className="flex justify-between">
-                      <p className="font-medium text-sm">{notification.type}</p>
-                      <p className="text-xs text-gray-500 flex items-center">
+                  <div key={notification.id} className={`p-4 border-b border-white/20 hover:bg-white/50 transition-colors duration-200 ${
+                    !notification.is_read ? 'bg-blue-500/10 border-l-4 border-l-blue-500' : ''
+                  }`}>
+                    <div className="flex justify-between items-start mb-2">
+                      <p className="font-semibold text-slate-800 text-sm">{notification.type}</p>
+                      <p className="text-xs text-slate-500 flex items-center bg-white/50 px-2 py-1 rounded-full backdrop-blur-sm">
                         <Clock size={12} className="mr-1" />
                         {formatTimeAgo(new Date(notification.created_at))}
                       </p>
                     </div>
-                    <p className="text-sm text-gray-600">{notification.message}</p>
+                    <p className="text-sm text-slate-600 leading-relaxed">{notification.message}</p>
                   </div>
                 ))
               ) : (
-                <p className="p-3 text-sm text-gray-600">Aucune notification</p>
+                <div className="p-8 text-center h-full flex flex-col items-center justify-center">
+                  <Bell className="text-slate-400 mb-4" size={48} />
+                  <p className="text-slate-600 font-medium text-lg mb-2">Aucune notification</p>
+                  <p className="text-slate-500">Tout est à jour dans votre espace</p>
+                </div>
               )}
             </div>
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        @keyframes float {
+          0%, 100% {
+            transform: translateY(0px) rotate(0deg);
+          }
+          50% {
+            transform: translateY(-20px) rotate(180deg);
+          }
+        }
+        
+        .animate-float {
+          animation: float 6s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   );
 };

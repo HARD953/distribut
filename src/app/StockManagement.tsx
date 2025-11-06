@@ -6,7 +6,8 @@ import {
   Eye, Download, Upload, RefreshCw, Settings,
   BarChart3, ShoppingCart, Truck, Clock, X,
   Save, User, MapPin, Calendar, DollarSign, Image as ImageIcon,
-  List
+  List, CheckCircle, ArrowUpRight, ArrowDownRight, Users,
+  Tag, Layers, FolderOpen, Box, Database, AlertCircle
 } from 'lucide-react';
 import { apiService } from './ApiService';
 
@@ -115,7 +116,6 @@ interface OverviewData {
   critical_products: Product[];
 }
 
-
 const StockManagement = () => {
   const [activeView, setActiveView] = useState<'overview' | 'products' | 'movements' | 'analytics'>('overview');
   const [activeProductTab, setActiveProductTab] = useState<'list' | 'variants' | 'formats' | 'categories'>('list');
@@ -180,6 +180,47 @@ const StockManagement = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Thème moderne avec couleurs professionnelles
+  const theme = {
+    primary: { 
+      light: '#EEF2FF', 
+      DEFAULT: '#4F46E5', 
+      dark: '#4338CA', 
+      text: '#3730A3',
+      gradient: 'linear-gradient(135deg, #4F46E5 0%, #7C73E6 100%)'
+    },
+    success: { 
+      light: '#ECFDF5', 
+      DEFAULT: '#10B981', 
+      dark: '#059669', 
+      text: '#065F46' 
+    },
+    warning: { 
+      light: '#FFFBEB', 
+      DEFAULT: '#F59E0B', 
+      dark: '#D97706', 
+      text: '#92400E' 
+    },
+    error: { 
+      light: '#FEF2F2', 
+      DEFAULT: '#EF4444', 
+      dark: '#DC2626', 
+      text: '#991B1B' 
+    },
+    gray: { 
+      50: '#F9FAFB',
+      100: '#F3F4F6',
+      200: '#E5E7EB',
+      300: '#D1D5DB',
+      400: '#9CA3AF',
+      500: '#6B7280',
+      600: '#4B5563',
+      700: '#374151',
+      800: '#1F2937',
+      900: '#111827'
+    }
+  };
+
   const fetchData = async () => {
     try {
       setIsLoading(true);
@@ -243,7 +284,7 @@ const StockManagement = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'en_stock': return 'bg-green-100 text-green-800 border-green-200';
+      case 'en_stock': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
       case 'stock_faible': return 'bg-amber-100 text-amber-800 border-amber-200';
       case 'rupture': return 'bg-red-100 text-red-800 border-red-200';
       case 'surstockage': return 'bg-blue-100 text-blue-800 border-blue-200';
@@ -253,7 +294,7 @@ const StockManagement = () => {
 
   const getMovementIcon = (type: string) => {
     switch (type) {
-      case 'entree': return <TrendingUp className="text-green-600" size={16} />;
+      case 'entree': return <TrendingUp className="text-emerald-600" size={16} />;
       case 'sortie': return <TrendingDown className="text-red-600" size={16} />;
       case 'ajustement': return <RefreshCw className="text-blue-600" size={16} />;
       default: return <Package size={16} />;
@@ -593,15 +634,19 @@ const StockManagement = () => {
     if (!isOpen) return null;
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <h2 className="text-2xl font-bold text-gray-800">{title}</h2>
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
-              <X size={24} />
+        <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-white">
+            <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+              <X size={24} className="text-gray-500" />
             </button>
           </div>
           <div className="p-6">
-            {error && <div className="mb-4 p-4 bg-red-100 text-red-800 rounded-lg">{error}</div>}
+            {error && (
+              <div className="mb-4 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 font-medium">
+                {error}
+              </div>
+            )}
             {children}
           </div>
         </div>
@@ -611,60 +656,78 @@ const StockManagement = () => {
 
   const OverviewView = () => (
     <div className="space-y-8">
+      {/* Cartes de métriques */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-2xl border border-blue-200 shadow-lg">
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-blue-700">Total Produits</p>
-              <p className="text-3xl font-bold text-blue-900">{overviewData.total_products}</p>
+              <p className="text-sm font-semibold text-gray-600 mb-1">Total Produits</p>
+              <p className="text-3xl font-bold text-gray-900">{overviewData.total_products}</p>
             </div>
-            <div className="bg-blue-500 p-3 rounded-xl">
-              <Package className="text-white" size={32} />
+            <div className="p-3 bg-indigo-100 rounded-xl">
+              <Package className="text-indigo-600" size={24} />
             </div>
+          </div>
+          <div className="mt-4 flex items-center text-sm text-emerald-600">
+            <TrendingUp size={14} className="mr-1" />
+            <span>+12% ce mois</span>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-2xl border border-green-200 shadow-lg">
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-green-700">Valeur Stock</p>
-              <p className="text-3xl font-bold text-green-900">₣ {(overviewData.stock_value / 1000).toFixed(1)}K</p>
+              <p className="text-sm font-semibold text-gray-600 mb-1">Valeur Stock</p>
+              <p className="text-3xl font-bold text-gray-900">₣ {(overviewData.stock_value / 1000).toFixed(1)}K</p>
             </div>
-            <div className="bg-green-500 p-3 rounded-xl">
-              <DollarSign className="text-white" size={32} />
+            <div className="p-3 bg-emerald-100 rounded-xl">
+              <DollarSign className="text-emerald-600" size={24} />
             </div>
+          </div>
+          <div className="mt-4 flex items-center text-sm text-emerald-600">
+            <ArrowUpRight size={14} className="mr-1" />
+            <span>Croissance stable</span>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-red-50 to-red-100 p-6 rounded-2xl border border-red-200 shadow-lg">
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-red-700">Alertes Stock</p>
-              <p className="text-3xl font-bold text-red-900">{overviewData.alert_count}</p>
+              <p className="text-sm font-semibold text-gray-600 mb-1">Alertes Stock</p>
+              <p className="text-3xl font-bold text-gray-900">{overviewData.alert_count}</p>
             </div>
-            <div className="bg-red-500 p-3 rounded-xl">
-              <AlertTriangle className="text-white" size={32} />
+            <div className="p-3 bg-red-100 rounded-xl">
+              <AlertTriangle className="text-red-600" size={24} />
             </div>
+          </div>
+          <div className="mt-4 flex items-center text-sm text-red-600">
+            <AlertCircle size={14} className="mr-1" />
+            <span>Nécessite attention</span>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-2xl border border-purple-200 shadow-lg">
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-purple-700">Mouvements Jour</p>
-              <p className="text-3xl font-bold text-purple-900">{overviewData.today_movements}</p>
+              <p className="text-sm font-semibold text-gray-600 mb-1">Mouvements Jour</p>
+              <p className="text-3xl font-bold text-gray-900">{overviewData.today_movements}</p>
             </div>
-            <div className="bg-purple-500 p-3 rounded-xl">
-              <RefreshCw className="text-white" size={32} />
+            <div className="p-3 bg-purple-100 rounded-xl">
+              <RefreshCw className="text-purple-600" size={24} />
             </div>
+          </div>
+          <div className="mt-4 flex items-center text-sm text-purple-600">
+            <BarChart3 size={14} className="mr-1" />
+            <span>Activité normale</span>
           </div>
         </div>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-8">
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
+        {/* Alertes Stock Critique */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-bold text-gray-800">Alertes Stock Critique</h3>
+            <h3 className="text-xl font-bold text-gray-900">Alertes Stock Critique</h3>
             <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-semibold">
               {overviewData.alert_count} alertes
             </span>
@@ -674,33 +737,34 @@ const StockManagement = () => {
               overviewData.critical_products.map((product, index) => (
                 <div key={`${product.id}-${index}`} className="flex items-center justify-between p-4 border-l-4 border-red-400 bg-red-50 rounded-lg">
                   <div className="flex items-center space-x-3">
-                    <AlertTriangle className={product.status === 'rupture' ? 'text-red-500' : 'text-amber-500'} size={24} />
+                    <AlertTriangle className={product.status === 'rupture' ? 'text-red-500' : 'text-amber-500'} size={20} />
                     <div>
-                      <p className="font-semibold text-gray-800">{product.name || 'Unnamed Product'}</p>
+                      <p className="font-semibold text-gray-900">{product.name || 'Produit sans nom'}</p>
                       <p className="text-sm text-gray-600">SKU: {product.sku || 'N/A'}</p>
                     </div>
                   </div>
-                  <button
-                    className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors font-medium"
-                  >
+                  <button className="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700 transition-colors font-medium">
                     Voir détails
                   </button>
                 </div>
               ))
             ) : (
-              <div className="text-center py-4 text-gray-500">
-                Aucune alerte de stock critique
+              <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
+                <CheckCircle size={32} className="mx-auto text-gray-400 mb-3" />
+                <p className="font-medium">Aucune alerte de stock critique</p>
+                <p className="text-sm mt-1">Tous les produits sont en stock optimal</p>
               </div>
             )}
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
+        {/* Mouvements Récents */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-bold text-gray-800">Mouvements Récents</h3>
+            <h3 className="text-xl font-bold text-gray-900">Mouvements Récents</h3>
             <button 
               onClick={() => setActiveView('movements')}
-              className="text-blue-600 hover:text-blue-800 font-medium"
+              className="text-indigo-600 hover:text-indigo-800 font-medium text-sm"
             >
               Voir tous
             </button>
@@ -709,21 +773,30 @@ const StockManagement = () => {
             {movements.slice(0, 4).map((movement) => (
               <div key={movement.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                 <div className="flex items-center space-x-3">
-                  {getMovementIcon(movement.type)}
+                  <div className={`p-2 rounded-full ${
+                    movement.type === 'entree' ? 'bg-emerald-100' :
+                    movement.type === 'sortie' ? 'bg-red-100' : 'bg-blue-100'
+                  }`}>
+                    {getMovementIcon(movement.type)}
+                  </div>
                   <div>
-                    <p className="font-semibold text-gray-800">{movement.product?.name || 'Unknown Product'}</p>
+                    <p className="font-semibold text-gray-900">{movement.product?.name || 'Produit inconnu'}</p>
                     <p className="text-sm text-gray-600">{movement.reason}</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="text-xs text-gray-500">{new Date(movement.date).toLocaleTimeString()}</span>
-                  <p className="text-xs text-gray-400">{movement.user?.username || 'Unknown User'}</p>
+                  <span className="text-xs text-gray-500 font-medium">
+                    {new Date(movement.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <p className="text-xs text-gray-400 mt-1">{movement.user?.username || 'Utilisateur inconnu'}</p>
                 </div>
               </div>
             ))}
             {movements.length === 0 && (
-              <div className="text-center py-4 text-gray-500">
-                Aucun mouvement récent
+              <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
+                <Package size={32} className="mx-auto text-gray-400 mb-3" />
+                <p className="font-medium">Aucun mouvement récent</p>
+                <p className="text-sm mt-1">Les mouvements de stock apparaîtront ici</p>
               </div>
             )}
           </div>
@@ -734,21 +807,22 @@ const StockManagement = () => {
 
   const ProductsView = () => (
     <div className="space-y-6">
-      <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-lg">
-        <div className="flex space-x-2 mb-4">
+      <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+        {/* Navigation par onglets */}
+        <div className="flex space-x-1 mb-6 p-1 bg-gray-100 rounded-xl">
           {[
-            { id: 'list', label: 'Liste des Produits', icon: Package },
-            { id: 'variants', label: 'Variantes', icon: Package },
-            { id: 'formats', label: 'Formats', icon: Package },
-            { id: 'categories', label: 'Catégories', icon: List }
+            { id: 'list', label: 'Produits', icon: Package },
+            { id: 'variants', label: 'Variantes', icon: Box },
+            { id: 'formats', label: 'Formats', icon: Tag },
+            { id: 'categories', label: 'Catégories', icon: FolderOpen }
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveProductTab(tab.id as any)}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-xl transition-all font-medium ${
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all font-medium flex-1 justify-center ${
                 activeProductTab === tab.id 
-                  ? 'bg-blue-500 text-white shadow-lg' 
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+                  ? 'bg-white text-indigo-600 shadow-sm' 
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-white/50'
               }`}
             >
               <tab.icon size={18} />
@@ -757,6 +831,7 @@ const StockManagement = () => {
           ))}
         </div>
 
+        {/* Barre de recherche et filtres */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
           <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
             <div className="relative">
@@ -764,14 +839,14 @@ const StockManagement = () => {
               <input
                 type="text"
                 placeholder="Rechercher..."
-                className="pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-80"
+                className="pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-80 transition-colors"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             {activeProductTab === 'list' && (
               <select
-                className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]"
+                className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-w-[180px] transition-colors"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
               >
@@ -790,7 +865,7 @@ const StockManagement = () => {
                 if (activeProductTab === 'formats') setShowAddFormatModal(true);
                 if (activeProductTab === 'categories') setShowCategoryModal(true);
               }}
-              className="flex items-center space-x-2 px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-medium shadow-lg"
+              className="flex items-center space-x-2 px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm"
             >
               <Plus size={18} />
               <span>
@@ -803,18 +878,19 @@ const StockManagement = () => {
         </div>
       </div>
 
+      {/* Contenu des onglets */}
       {activeProductTab === 'list' && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Produit</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Image</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Catégorie</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Statut</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Fournisseur</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Produit</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Image</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Catégorie</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Statut</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Fournisseur</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -828,7 +904,7 @@ const StockManagement = () => {
                     </td>
                     <td className="px-6 py-4">
                       {product.main_image ? (
-                        <div className="w-12 h-12 rounded-lg overflow-hidden">
+                        <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200">
                           <img 
                             src={product.main_image} 
                             alt={product.name}
@@ -836,34 +912,36 @@ const StockManagement = () => {
                           />
                         </div>
                       ) : (
-                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center border border-gray-200">
                           <ImageIcon className="text-gray-400" size={20} />
                         </div>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {product.category?.name || 'Unknown'}
+                    <td className="px-6 py-4 text-sm text-gray-900 font-medium">
+                      {product.category?.name || 'Non spécifié'}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex px-3 py-1 text-xs font-bold rounded-full border ${getStatusColor(product.status)}`}>
+                      <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full border ${getStatusColor(product.status)}`}>
                         {product.status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900">{product.supplier?.name || 'Unknown'}</div>
-                      <div className="text-sm text-gray-500">{product.point_of_sale?.name || 'Unknown'}</div>
+                      <div className="text-sm font-medium text-gray-900">{product.supplier?.name || 'Non spécifié'}</div>
+                      <div className="text-sm text-gray-500">{product.point_of_sale?.name || 'Non spécifié'}</div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-2">
                         <button 
                           onClick={() => handleEditProduct(product)}
-                          className="text-green-600 hover:text-green-900 p-2 hover:bg-green-50 rounded-lg transition-colors"
+                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          title="Modifier"
                         >
                           <Edit size={16} />
                         </button>
                         <button 
                           onClick={() => handleDeleteProduct(product.id)}
-                          className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Supprimer"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -873,8 +951,18 @@ const StockManagement = () => {
                 ))}
                 {filteredProducts.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
-                      {products.length === 0 ? 'Aucun produit disponible' : 'Aucun produit correspondant à votre recherche'}
+                    <td colSpan={6} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center justify-center">
+                        <Package className="text-gray-300 mb-3" size={48} />
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                          {products.length === 0 ? 'Aucun produit disponible' : 'Aucun produit correspondant'}
+                        </h3>
+                        <p className="text-gray-600 max-w-md">
+                          {products.length === 0 
+                            ? 'Commencez par ajouter votre premier produit à votre inventaire.'
+                            : 'Aucun produit ne correspond à vos critères de recherche.'}
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -885,17 +973,17 @@ const StockManagement = () => {
       )}
 
       {activeProductTab === 'variants' && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Produit</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Format</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Stock</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Prix</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Image</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Produit</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Format</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Stock</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Prix</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Image</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -903,15 +991,29 @@ const StockManagement = () => {
                   <tr key={variant.id} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
                     <td className="px-6 py-4">
                       <div className="text-sm font-semibold text-gray-900">
-                        {variant.product?.name || 'Unknown'}
+                        {variant.product?.name || 'Produit inconnu'}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{variant.format?.name || 'Unknown'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900 font-medium">{variant.format?.name || 'Non spécifié'}</td>
                     <td className="px-6 py-4">
-                      <div className="text-sm">
-                        <div>Actuel: {variant.current_stock}</div>
-                        <div>Min: {variant.min_stock}</div>
-                        <div>Max: {variant.max_stock}</div>
+                      <div className="text-sm space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">Actuel:</span>
+                          <span className={`font-semibold ${
+                            variant.current_stock <= variant.min_stock ? 'text-red-600' : 
+                            variant.current_stock >= variant.max_stock ? 'text-emerald-600' : 'text-gray-900'
+                          }`}>
+                            {variant.current_stock}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">Min:</span>
+                          <span className="font-medium text-gray-900">{variant.min_stock}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">Max:</span>
+                          <span className="font-medium text-gray-900">{variant.max_stock}</span>
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-gray-900">
@@ -919,30 +1021,32 @@ const StockManagement = () => {
                     </td>
                     <td className="px-6 py-4">
                       {variant.image ? (
-                        <div className="w-12 h-12 rounded-lg overflow-hidden">
+                        <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200">
                           <img 
-                            src={variant.image} 
-                            alt={variant.format?.name || 'Variant'}
+                            src={typeof variant.image === 'string' ? variant.image : URL.createObjectURL(variant.image)} 
+                            alt={variant.format?.name || 'Variante'}
                             className="w-full h-full object-cover"
                           />
                         </div>
                       ) : (
-                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center border border-gray-200">
                           <ImageIcon className="text-gray-400" size={20} />
                         </div>
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-2">
                         <button 
                           onClick={() => handleEditVariant(variant)}
-                          className="text-green-600 hover:text-green-900 p-2 hover:bg-green-50 rounded-lg transition-colors"
+                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          title="Modifier"
                         >
                           <Edit size={16} />
                         </button>
                         <button 
                           onClick={() => handleDeleteVariant(variant.id)}
-                          className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Supprimer"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -952,8 +1056,18 @@ const StockManagement = () => {
                 ))}
                 {filteredVariants.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
-                      {variants.length === 0 ? 'Aucune variante disponible' : 'Aucune variante correspondant à votre recherche'}
+                    <td colSpan={6} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center justify-center">
+                        <Box className="text-gray-300 mb-3" size={48} />
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                          {variants.length === 0 ? 'Aucune variante disponible' : 'Aucune variante correspondante'}
+                        </h3>
+                        <p className="text-gray-600">
+                          {variants.length === 0 
+                            ? 'Ajoutez des variantes pour gérer différents formats de produits.'
+                            : 'Aucune variante ne correspond à vos critères de recherche.'}
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -964,37 +1078,48 @@ const StockManagement = () => {
       )}
 
       {activeProductTab === 'formats' && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Nom</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Description</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Nom</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Description</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredFormats.map((format, index) => (
                   <tr key={format.id} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">{format.name}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{format.description || 'N/A'}</td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center space-x-3">
-                        <button 
-                          onClick={() => handleDeleteFormat(format.id)}
-                          className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
+                      <div className="text-sm font-semibold text-gray-900">{format.name}</div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{format.description || 'Aucune description'}</td>
+                    <td className="px-6 py-4">
+                      <button 
+                        onClick={() => handleDeleteFormat(format.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Supprimer"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </td>
                   </tr>
                 ))}
                 {filteredFormats.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="px-6 py-4 text-center text-gray-500">
-                      {formats.length === 0 ? 'Aucun format disponible' : 'Aucun format correspondant à votre recherche'}
+                    <td colSpan={3} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center justify-center">
+                        <Tag className="text-gray-300 mb-3" size={48} />
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                          {formats.length === 0 ? 'Aucun format disponible' : 'Aucun format correspondant'}
+                        </h3>
+                        <p className="text-gray-600">
+                          {formats.length === 0 
+                            ? 'Créez des formats pour organiser vos variantes de produits.'
+                            : 'Aucun format ne correspond à vos critères de recherche.'}
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -1005,35 +1130,39 @@ const StockManagement = () => {
       )}
 
       {activeProductTab === 'categories' && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
-          <div className="p-6 flex justify-between items-center">
-            <h3 className="text-xl font-bold text-gray-800">Gestion des Catégories</h3>
-            <button 
-              onClick={() => setShowCategoryModal(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              <Plus size={16} />
-              <span>Nouvelle Catégorie</span>
-            </button>
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-bold text-gray-900">Gestion des Catégories</h3>
+              <button 
+                onClick={() => setShowCategoryModal(true)}
+                className="flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm"
+              >
+                <Plus size={16} />
+                <span>Nouvelle Catégorie</span>
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Nom</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Description</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Image</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Nom</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Description</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Image</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredCategories.map((category, index) => (
                   <tr key={category.id} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-900">{category.name}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{category.description || 'N/A'}</td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-semibold text-gray-900">{category.name}</div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{category.description || 'Aucune description'}</td>
                     <td className="px-6 py-4">
                       {category.image ? (
-                        <div className="w-12 h-12 rounded-lg overflow-hidden">
+                        <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200">
                           <img 
                             src={category.image} 
                             alt={category.name}
@@ -1041,27 +1170,36 @@ const StockManagement = () => {
                           />
                         </div>
                       ) : (
-                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center border border-gray-200">
                           <ImageIcon className="text-gray-400" size={20} />
                         </div>
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center space-x-3">
-                        <button 
-                          onClick={() => handleDeleteCategory(category.id)}
-                          className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
+                      <button 
+                        onClick={() => handleDeleteCategory(category.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Supprimer"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </td>
                   </tr>
                 ))}
                 {filteredCategories.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
-                      {categories.length === 0 ? 'Aucune catégorie disponible' : 'Aucune catégorie correspondant à votre recherche'}
+                    <td colSpan={4} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center justify-center">
+                        <FolderOpen className="text-gray-300 mb-3" size={48} />
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                          {categories.length === 0 ? 'Aucune catégorie disponible' : 'Aucune catégorie correspondante'}
+                        </h3>
+                        <p className="text-gray-600">
+                          {categories.length === 0 
+                            ? 'Organisez vos produits en créant des catégories.'
+                            : 'Aucune catégorie ne correspond à vos critères de recherche.'}
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -1075,13 +1213,16 @@ const StockManagement = () => {
 
   const MovementsView = () => (
     <div className="space-y-6">
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-6">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-2xl font-bold text-gray-800">Mouvements de Stock</h3>
+          <div>
+            <h3 className="text-2xl font-bold text-gray-900">Mouvements de Stock</h3>
+            <p className="text-gray-600 mt-1">Historique complet des entrées, sorties et ajustements</p>
+          </div>
           <div className="flex space-x-3">
             <button 
               onClick={() => setShowMovementModal(true)}
-              className="flex items-center space-x-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+              className="flex items-center space-x-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors font-medium shadow-sm"
             >
               <Plus size={16} />
               <span>Nouveau Mouvement</span>
@@ -1090,29 +1231,42 @@ const StockManagement = () => {
         </div>
         <div className="space-y-4">
           {movements.map((movement) => (
-            <div key={movement.id} className="flex items-center justify-between p-6 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+            <div key={movement.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
               <div className="flex items-center space-x-4">
                 <div className={`p-3 rounded-full ${
-                  movement.type === 'entree' ? 'bg-green-100' :
+                  movement.type === 'entree' ? 'bg-emerald-100' :
                   movement.type === 'sortie' ? 'bg-red-100' : 'bg-blue-100'
                 }`}>
                   {getMovementIcon(movement.type)}
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-800 text-lg">{movement.product?.name || 'Unknown Product'}</p>
+                  <p className="font-semibold text-gray-900">{movement.product?.name || 'Produit inconnu'}</p>
                   <p className="text-sm text-gray-600">{movement.reason}</p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="font-bold text-gray-800 text-lg">{movement.type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}: {movement.quantity}</p>
-                <p className="text-sm text-gray-500">{new Date(movement.date).toLocaleString()}</p>
-                <p className="text-xs text-blue-600 font-medium">{movement.user?.username || 'Unknown User'}</p>
+                <p className={`font-bold text-lg ${
+                  movement.type === 'entree' ? 'text-emerald-600' :
+                  movement.type === 'sortie' ? 'text-red-600' : 'text-blue-600'
+                }`}>
+                  {movement.type === 'entree' ? '+' : movement.type === 'sortie' ? '-' : '±'} {movement.quantity}
+                </p>
+                <p className="text-sm text-gray-500">{new Date(movement.date).toLocaleString('fr-FR')}</p>
+                <p className="text-xs text-indigo-600 font-medium">{movement.user?.username || 'Utilisateur inconnu'}</p>
               </div>
             </div>
           ))}
           {movements.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              Aucun mouvement de stock enregistré
+            <div className="text-center py-12">
+              <RefreshCw className="mx-auto text-gray-300 mb-3" size={48} />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Aucun mouvement de stock</h3>
+              <p className="text-gray-600 mb-4">Les mouvements de stock apparaîtront ici lorsqu'ils seront enregistrés.</p>
+              <button 
+                onClick={() => setShowMovementModal(true)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+              >
+                Créer le premier mouvement
+              </button>
             </div>
           )}
         </div>
@@ -1121,11 +1275,25 @@ const StockManagement = () => {
   );
 
   const AnalyticsView = () => (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-12 text-center">
-      <div className="bg-gradient-to-br from-purple-100 to-blue-100 p-8 rounded-2xl">
-        <TrendingUp className="mx-auto text-purple-600 mb-6" size={64} />
-        <h3 className="text-3xl font-bold text-gray-800 mb-4">Analyses Avancées</h3>
-        <p className="text-gray-600 text-lg">Les rapports et analyses détaillées seront développés prochainement.</p>
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center">
+      <div className="bg-gradient-to-br from-indigo-50 to-purple-50 p-8 rounded-2xl border border-indigo-100">
+        <TrendingUp className="mx-auto text-indigo-600 mb-4" size={64} />
+        <h3 className="text-2xl font-bold text-gray-900 mb-3">Analyses Avancées</h3>
+        <p className="text-gray-600 text-lg mb-6">Les rapports et analyses détaillées seront développés prochainement.</p>
+        <div className="flex justify-center space-x-4">
+          <div className="bg-white p-4 rounded-xl border border-gray-200">
+            <BarChart3 className="mx-auto text-indigo-600 mb-2" size={24} />
+            <p className="text-sm font-medium text-gray-900">Rapports de Performance</p>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-gray-200">
+            <Database className="mx-auto text-indigo-600 mb-2" size={24} />
+            <p className="text-sm font-medium text-gray-900">Analyses Prédictives</p>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-gray-200">
+            <Users className="mx-auto text-indigo-600 mb-2" size={24} />
+            <p className="text-sm font-medium text-gray-900">Tableaux de Bord</p>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1133,19 +1301,21 @@ const StockManagement = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto space-y-8">
+        {/* En-tête */}
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">Gestion de Stock</h1>
-          <p className="text-gray-600">Système de gestion intelligent pour votre inventaire</p>
+          <h1 className="text-4xl font-bold text-gray-900 mb-3">Gestion de Stock Intelligente</h1>
+          <p className="text-gray-600 text-lg">Système complet de gestion d'inventaire pour votre entreprise</p>
         </div>
         
         {error && (
-          <div className="p-4 bg-red-100 text-red-800 rounded-lg">
+          <div className="p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 font-medium">
             {error}
           </div>
         )}
 
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-lg p-2">
-          <div className="flex space-x-2">
+        {/* Navigation principale */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-2">
+          <div className="flex space-x-1">
             {[
               { id: 'overview', label: 'Vue d\'ensemble', icon: BarChart3 },
               { id: 'products', label: 'Produits', icon: Package },
@@ -1158,10 +1328,10 @@ const StockManagement = () => {
                   setActiveView(view.id as any);
                   if (view.id === 'products') setActiveProductTab('list');
                 }}
-                className={`flex items-center space-x-2 px-6 py-3 rounded-xl transition-all font-medium ${
+                className={`flex items-center space-x-2 px-6 py-3 rounded-xl transition-all font-medium flex-1 justify-center ${
                   activeView === view.id 
-                    ? 'bg-blue-500 text-white shadow-lg' 
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+                    ? 'bg-indigo-600 text-white shadow-sm' 
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
                 }`}
               >
                 <view.icon size={18} />
@@ -1173,7 +1343,7 @@ const StockManagement = () => {
 
         {isLoading ? (
           <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
           </div>
         ) : (
           <>
@@ -1184,25 +1354,25 @@ const StockManagement = () => {
           </>
         )}
 
-        {/* Add Product Modal */}
+        {/* Modals */}
         <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="Ajouter un nouveau produit">
           <form onSubmit={handleAddProduct} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Nom du produit *</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-3">Nom du produit *</label>
                 <input
                   type="text"
                   required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
                   value={newProduct.name}
                   onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Catégorie *</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-3">Catégorie *</label>
                 <select
                   required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
                   value={newProduct.category_id}
                   onChange={(e) => setNewProduct({...newProduct, category_id: Number(e.target.value) || ''})}
                 >
@@ -1213,20 +1383,20 @@ const StockManagement = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Code SKU *</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-3">Code SKU *</label>
                 <input
                   type="text"
                   required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
                   value={newProduct.sku}
                   onChange={(e) => setNewProduct({...newProduct, sku: e.target.value.toUpperCase()})}
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Fournisseur *</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-3">Fournisseur *</label>
                 <select
                   required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
                   value={newProduct.supplier_id}
                   onChange={(e) => setNewProduct({...newProduct, supplier_id: Number(e.target.value) || ''})}
                 >
@@ -1237,10 +1407,10 @@ const StockManagement = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Point de vente *</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-3">Point de vente *</label>
                 <select
                   required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
                   value={newProduct.point_of_sale_id}
                   onChange={(e) => setNewProduct({...newProduct, point_of_sale_id: e.target.value})}
                 >
@@ -1251,23 +1421,23 @@ const StockManagement = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Statut *</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-3">Statut *</label>
                 <select
                   required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
                   value={newProduct.status}
                   onChange={(e) => setNewProduct({...newProduct, status: e.target.value as any})}
                 >
                   <option value="en_stock">En stock</option>
                   <option value="stock_faible">Stock faible</option>
-                  <option value="rupture">Rupture</option>
+                  <option value="rupture">Rupture de stock</option>
                   <option value="surstockage">Surstockage</option>
                 </select>
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Image principale</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-3">Image principale</label>
                 <div className="flex items-center space-x-4">
-                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100">
+                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
                       <Upload className="w-8 h-8 mb-3 text-gray-400" />
                       <p className="mb-2 text-sm text-gray-500">Cliquez pour télécharger</p>
@@ -1281,7 +1451,7 @@ const StockManagement = () => {
                     />
                   </label>
                   {newProduct.main_image && (
-                    <div className="relative w-16 h-16 rounded-lg overflow-hidden">
+                    <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-200">
                       <img
                         src={URL.createObjectURL(newProduct.main_image)}
                         alt="Preview"
@@ -1290,7 +1460,7 @@ const StockManagement = () => {
                       <button
                         type="button"
                         onClick={() => setNewProduct({...newProduct, main_image: undefined})}
-                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
                       >
                         <X size={12} />
                       </button>
@@ -1300,9 +1470,9 @@ const StockManagement = () => {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+              <label className="block text-sm font-semibold text-gray-900 mb-3">Description</label>
               <textarea
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors resize-none"
                 rows={3}
                 value={newProduct.description}
                 onChange={(e) => setNewProduct({...newProduct, description: e.target.value})}
@@ -1312,13 +1482,13 @@ const StockManagement = () => {
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium"
+                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium"
               >
                 Annuler
               </button>
               <button
                 type="submit"
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm"
               >
                 Ajouter le produit
               </button>

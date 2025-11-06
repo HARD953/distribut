@@ -4,7 +4,9 @@ import {
   Filter, Search, MapPin, Calendar, User, Phone, 
   DollarSign, Package, BarChart3, ChevronDown, ChevronUp,
   Download, Eye, MoreVertical, X, Plus, Loader2,
-  ArrowLeft, ShoppingCart, Bike, RefreshCw
+  ArrowLeft, ShoppingCart, Bike, RefreshCw, TrendingUp,
+  Users, Target, ArrowUpRight, ArrowDownRight, CheckCircle,
+  FileText, Database, AlertCircle
 } from 'lucide-react';
 
 import { useAuth } from './AuthContext';
@@ -111,6 +113,47 @@ const PushcartManagement = () => {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [zones, setZones] = useState<string[]>([]);
   const [pushcardTypes, setPushcardTypes] = useState<string[]>([]);
+
+  // Thème moderne avec couleurs professionnelles
+  const theme = {
+    primary: { 
+      light: '#EEF2FF', 
+      DEFAULT: '#4F46E5', 
+      dark: '#4338CA', 
+      text: '#3730A3',
+      gradient: 'linear-gradient(135deg, #4F46E5 0%, #7C73E6 100%)'
+    },
+    success: { 
+      light: '#ECFDF5', 
+      DEFAULT: '#10B981', 
+      dark: '#059669', 
+      text: '#065F46' 
+    },
+    warning: { 
+      light: '#FFFBEB', 
+      DEFAULT: '#F59E0B', 
+      dark: '#D97706', 
+      text: '#92400E' 
+    },
+    error: { 
+      light: '#FEF2F2', 
+      DEFAULT: '#EF4444', 
+      dark: '#DC2626', 
+      text: '#991B1B' 
+    },
+    gray: { 
+      50: '#F9FAFB',
+      100: '#F3F4F6',
+      200: '#E5E7EB',
+      300: '#D1D5DB',
+      400: '#9CA3AF',
+      500: '#6B7280',
+      600: '#4B5563',
+      700: '#374151',
+      800: '#1F2937',
+      900: '#111827'
+    }
+  };
 
   // Calculs pour la pagination
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -336,533 +379,552 @@ const PushcartManagement = () => {
   };
 
   return (
-    <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 min-h-screen">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 flex items-center">
-          <div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg mr-3">
-            <Bike className="text-white" size={28} />
-          </div>
-          Gestion des Pushcarts
-        </h1>
-        <p className="text-gray-600 mt-2">Suivi et gestion des ventes par pushcart</p>
-      </div>
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto space-y-8">
+        {/* En-tête */}
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-gray-900 mb-3">Gestion des Pushcarts</h1>
+          <p className="text-gray-600 text-lg">Suivi et analyse des ventes ambulantes</p>
+        </div>
 
-      {/* Cartes de statistiques */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-5 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm opacity-90">Total des ventes (₣)</p>
-              <p className="text-2xl font-bold mt-1">
-                {formatCurrency(purchases.reduce((sum, p) => sum + Number(p.total_sales_amount), 0))}
-              </p>
+        {/* Cartes de statistiques */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-600 mb-1">Total des ventes</p>
+                <p className="text-3xl font-bold text-gray-900">
+                  {formatCurrency(purchases.reduce((sum, p) => sum + Number(p.total_sales_amount), 0))}
+                </p>
+              </div>
+              <div className="p-3 bg-indigo-100 rounded-xl">
+                <DollarSign className="text-indigo-600" size={24} />
+              </div>
             </div>
-            <div className="p-3 bg-blue-400 bg-opacity-30 rounded-full">
-              <DollarSign size={24} />
+            <div className="mt-4 flex items-center text-sm text-emerald-600">
+              <TrendingUp size={14} className="mr-1" />
+              <span>+12% ce mois</span>
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-blue-400 border-opacity-30 flex items-center">
-            <span className="text-sm">+12% ce mois</span>
+
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-600 mb-1">Nombre de ventes</p>
+                <p className="text-3xl font-bold text-gray-900">
+                  {purchases.length}
+                </p>
+              </div>
+              <div className="p-3 bg-emerald-100 rounded-xl">
+                <ShoppingCart className="text-emerald-600" size={24} />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center text-sm text-emerald-600">
+              <ArrowUpRight size={14} className="mr-1" />
+              <span>+8% ce mois</span>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-600 mb-1">Zones couvertes</p>
+                <p className="text-3xl font-bold text-gray-900">
+                  {zones.length}
+                </p>
+              </div>
+              <div className="p-3 bg-purple-100 rounded-xl">
+                <MapPin className="text-purple-600" size={24} />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center text-sm text-purple-600">
+              <Target size={14} className="mr-1" />
+              <span>+2 nouvelles zones</span>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-600 mb-1">Types de pushcarts</p>
+                <p className="text-3xl font-bold text-gray-900">
+                  {pushcardTypes.length}
+                </p>
+              </div>
+              <div className="p-3 bg-orange-100 rounded-xl">
+                <Bike className="text-orange-600" size={24} />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center text-sm text-orange-600">
+              <Users size={14} className="mr-1" />
+              <span>Stable ce mois</span>
+            </div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-5 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm opacity-90">Nombre de ventes</p>
-              <p className="text-2xl font-bold mt-1">
-                {purchases.length}
-              </p>
-            </div>
-            <div className="p-3 bg-green-400 bg-opacity-30 rounded-full">
-              <ShoppingCart size={24} />
-            </div>
-          </div>
-          <div className="mt-3 pt-3 border-t border-green-400 border-opacity-30 flex items-center">
-            <span className="text-sm">+8% ce mois</span>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-5 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm opacity-90">Zones couvertes</p>
-              <p className="text-2xl font-bold mt-1">
-                {zones.length}
-              </p>
-            </div>
-            <div className="p-3 bg-purple-400 bg-opacity-30 rounded-full">
-              <MapPin size={24} />
-            </div>
-          </div>
-          <div className="mt-3 pt-3 border-t border-purple-400 border-opacity-30 flex items-center">
-            <span className="text-sm">+2 nouvelles zones</span>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-5 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm opacity-90">Types de pushcarts</p>
-              <p className="text-2xl font-bold mt-1">
-                {pushcardTypes.length}
-              </p>
-            </div>
-            <div className="p-3 bg-orange-400 bg-opacity-30 rounded-full">
-              <Bike size={24} />
-            </div>
-          </div>
-          <div className="mt-3 pt-3 border-t border-orange-400 border-opacity-30 flex items-center">
-            <span className="text-sm">Stable ce mois</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Barre de recherche et filtres */}
-      <div className="bg-white rounded-xl shadow-lg mb-8 overflow-hidden">
-        <div className="p-5 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="relative w-full md:w-72">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-            <input
-              type="text"
-              placeholder="Rechercher un client, zone, base..."
-              className="pl-10 pr-4 py-3 w-full border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              value={filters.search}
-              onChange={(e) => setFilters({...filters, search: e.target.value})}
-            />
-          </div>
-          
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center px-4 py-2.5 bg-blue-50 text-blue-700 rounded-xl hover:bg-blue-100 transition-colors font-medium"
-            >
-              <Filter size={18} className="mr-2" />
-              Filtres
-              {showFilters ? <ChevronUp size={16} className="ml-1" /> : <ChevronDown size={16} className="ml-1" />}
-            </button>
-            
-            <button
-              onClick={exportData}
-              className="flex items-center px-4 py-2.5 bg-green-50 text-green-700 rounded-xl hover:bg-green-100 transition-colors font-medium"
-            >
-              <Download size={18} className="mr-2" />
-              Exporter
-            </button>
-            
-            <button
-              onClick={fetchPurchases}
-              className="p-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors"
-              title="Actualiser"
-            >
-              <RefreshCw size={18} />
-            </button>
-          </div>
-        </div>
-        
-        {/* Panneau de filtres avancés */}
-        {showFilters && (
-          <div className="p-5 border-b border-gray-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 bg-blue-50 bg-opacity-30">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Zone</label>
-              <select
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                value={filters.zone}
-                onChange={(e) => setFilters({...filters, zone: e.target.value})}
-              >
-                <option value="">Toutes les zones</option>
-                {zones.map(zone => (
-                  <option key={zone} value={zone}>{zone}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Type de pushcart</label>
-              <select
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                value={filters.pushcard_type}
-                onChange={(e) => setFilters({...filters, pushcard_type: e.target.value})}
-              >
-                <option value="">Tous les types</option>
-                {pushcardTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Vendeur</label>
+        {/* Barre de recherche et filtres */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="relative w-full md:w-80">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
               <input
                 type="text"
-                placeholder="ID du vendeur"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                value={filters.vendor}
-                onChange={(e) => setFilters({...filters, vendor: e.target.value})}
+                placeholder="Rechercher un client, zone, base..."
+                className="pl-12 pr-4 py-3 w-full border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                value={filters.search}
+                onChange={(e) => setFilters({...filters, search: e.target.value})}
               />
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date de début</label>
-              <input
-                type="date"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                value={filters.start_date}
-                onChange={(e) => setFilters({...filters, start_date: e.target.value})}
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date de fin</label>
-              <input
-                type="date"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                value={filters.end_date}
-                onChange={(e) => setFilters({...filters, end_date: e.target.value})}
-              />
-            </div>
-            
-            <div className="flex items-end">
+            <div className="flex flex-wrap gap-3">
               <button
-                onClick={resetFilters}
-                className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium"
+                onClick={() => setShowFilters(!showFilters)}
+                className="flex items-center px-4 py-2.5 bg-indigo-50 text-indigo-700 rounded-xl hover:bg-indigo-100 transition-colors font-medium"
               >
-                Réinitialiser
+                <Filter size={18} className="mr-2" />
+                Filtres
+                {showFilters ? <ChevronUp size={16} className="ml-1" /> : <ChevronDown size={16} className="ml-1" />}
+              </button>
+              
+              <button
+                onClick={exportData}
+                className="flex items-center px-4 py-2.5 bg-emerald-50 text-emerald-700 rounded-xl hover:bg-emerald-100 transition-colors font-medium"
+              >
+                <Download size={18} className="mr-2" />
+                Exporter
+              </button>
+              
+              <button
+                onClick={fetchPurchases}
+                className="p-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors"
+                title="Actualiser"
+              >
+                <RefreshCw size={18} />
               </button>
             </div>
           </div>
-        )}
-      </div>
-
-      {/* Tableau des données */}
-      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-        {loading ? (
-          <div className="flex justify-center items-center py-16">
-            <Loader2 className="animate-spin text-blue-600 mr-3" size={28} />
-            <span className="text-gray-600">Chargement des données...</span>
-          </div>
-        ) : error ? (
-          <div className="p-8 text-center">
-            <div className="mx-auto w-16 h-16 flex items-center justify-center bg-red-100 rounded-full mb-4">
-              <X className="text-red-600" size={28} />
-            </div>
-            <div className="text-red-600 font-medium mb-2">Erreur lors du chargement des données</div>
-            <div className="text-gray-600 mb-6">{error}</div>
-            <button
-              onClick={fetchPurchases}
-              className="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-colors shadow-md"
-            >
-              Réessayer
-            </button>
-          </div>
-        ) : filteredPurchases.length === 0 ? (
-          <div className="p-8 text-center">
-            <div className="mx-auto w-16 h-16 flex items-center justify-center bg-gray-100 rounded-full mb-4">
-              <Search className="text-gray-500" size={28} />
-            </div>
-            <div className="text-gray-600 font-medium mb-4">Aucune donnée à afficher</div>
-            {Object.values(filters).some(value => value) && (
-              <button
-                onClick={resetFilters}
-                className="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-colors shadow-md"
-              >
-                Réinitialiser les filtres
-              </button>
-            )}
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Client
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Zone & Base
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Type & Vendeur
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Contact
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Montant & Quantité
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Date
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {currentItems.map((purchase) => (
-                    <tr key={purchase.id} className="hover:bg-blue-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="font-medium text-gray-900">{purchase.full_name}</div>
-                        <div className="text-sm text-gray-500">{purchase.pushcard_type}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <MapPin size={14} className="text-blue-500 mr-1" />
-                          <span className="text-gray-900 font-medium">{purchase.zone}</span>
-                        </div>
-                        <div className="text-sm text-gray-500">{purchase.base}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-gray-900 font-medium">Vendeur #{purchase.vendor}</div>
-                        <div className="text-sm text-gray-500">{purchase.pushcard_type}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <Phone size={14} className="text-green-500 mr-1" />
-                          <span className="text-gray-900">{purchase.phone}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="font-medium text-green-600">
-                          {formatCurrency(purchase.total_sales_amount)}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {purchase.total_sales_quantity} unités
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-gray-900 font-medium">
-                          {formatDate(purchase.purchase_date).split(' ')[0]}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {formatDate(purchase.purchase_date).split(' ')[1]}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <button
-                          onClick={() => fetchPurchaseDetails(purchase.id)}
-                          className="flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors font-medium"
-                        >
-                          <Eye size={16} className="mr-1.5" />
-                          Détails
-                        </button>
-                      </td>
-                    </tr>
+          
+          {/* Panneau de filtres avancés */}
+          {showFilters && (
+            <div className="p-6 border-b border-gray-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 bg-gray-50">
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Zone</label>
+                <select
+                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                  value={filters.zone}
+                  onChange={(e) => setFilters({...filters, zone: e.target.value})}
+                >
+                  <option value="">Toutes les zones</option>
+                  {zones.map(zone => (
+                    <option key={zone} value={zone}>{zone}</option>
                   ))}
-                </tbody>
-              </table>
-            </div>
-            
-            {/* Pagination fonctionnelle */}
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="text-sm text-gray-700">
-                Affichage de <span className="font-medium">{indexOfFirstItem + 1}-{Math.min(indexOfLastItem, filteredPurchases.length)}</span> sur <span className="font-medium">{filteredPurchases.length}</span> résultats
+                </select>
               </div>
               
-              <div className="flex items-center space-x-2">
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Type de pushcart</label>
                 <select
-                  value={itemsPerPage}
-                  onChange={(e) => {
-                    setItemsPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                  value={filters.pushcard_type}
+                  onChange={(e) => setFilters({...filters, pushcard_type: e.target.value})}
                 >
-                  <option value="5">5 par page</option>
-                  <option value="10">10 par page</option>
-                  <option value="20">20 par page</option>
-                  <option value="50">50 par page</option>
-                </select>
-                
-                <button
-                  onClick={prevPage}
-                  disabled={currentPage === 1}
-                  className={`px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium ${
-                    currentPage === 1 
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  Précédent
-                </button>
-                
-                {/* Numéros de page */}
-                <div className="flex space-x-1">
-                  {getPageNumbers().map(pageNumber => (
-                    <button
-                      key={pageNumber}
-                      onClick={() => goToPage(pageNumber)}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium min-w-[40px] ${
-                        currentPage === pageNumber
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
-                      }`}
-                    >
-                      {pageNumber}
-                    </button>
+                  <option value="">Tous les types</option>
+                  {pushcardTypes.map(type => (
+                    <option key={type} value={type}>{type}</option>
                   ))}
-                </div>
-                
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Vendeur</label>
+                <input
+                  type="text"
+                  placeholder="ID du vendeur"
+                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                  value={filters.vendor}
+                  onChange={(e) => setFilters({...filters, vendor: e.target.value})}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Date de début</label>
+                <input
+                  type="date"
+                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                  value={filters.start_date}
+                  onChange={(e) => setFilters({...filters, start_date: e.target.value})}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Date de fin</label>
+                <input
+                  type="date"
+                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                  value={filters.end_date}
+                  onChange={(e) => setFilters({...filters, end_date: e.target.value})}
+                />
+              </div>
+              
+              <div className="flex items-end">
                 <button
-                  onClick={nextPage}
-                  disabled={currentPage === totalPages}
-                  className={`px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium ${
-                    currentPage === totalPages 
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
+                  onClick={resetFilters}
+                  className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium"
                 >
-                  Suivant
+                  Réinitialiser
                 </button>
               </div>
             </div>
-          </>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* Modal de détails */}
-      {showDetailsModal && purchaseDetails && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-screen overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-t-2xl">
-              <h2 className="text-xl font-bold">Détails de la vente</h2>
+        {/* Tableau des données */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          {loading ? (
+            <div className="flex justify-center items-center py-16">
+              <Loader2 className="animate-spin text-indigo-600 mr-3" size={28} />
+              <span className="text-gray-600">Chargement des données...</span>
+            </div>
+          ) : error ? (
+            <div className="p-8 text-center">
+              <div className="mx-auto w-16 h-16 flex items-center justify-center bg-red-100 rounded-full mb-4">
+                <X className="text-red-600" size={28} />
+              </div>
+              <div className="text-red-700 font-semibold mb-2">Erreur lors du chargement des données</div>
+              <div className="text-gray-600 mb-6">{error}</div>
               <button
-                onClick={() => setShowDetailsModal(false)}
-                className="text-white hover:text-blue-100"
+                onClick={fetchPurchases}
+                className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm"
               >
-                <X size={24} />
+                Réessayer
               </button>
             </div>
-            
-            {detailsLoading ? (
-              <div className="flex justify-center items-center py-16">
-                <Loader2 className="animate-spin text-blue-600 mr-3" size={28} />
-                <span className="text-gray-600">Chargement des détails...</span>
+          ) : filteredPurchases.length === 0 ? (
+            <div className="p-8 text-center">
+              <div className="mx-auto w-16 h-16 flex items-center justify-center bg-gray-100 rounded-full mb-4">
+                <Search className="text-gray-500" size={28} />
               </div>
-            ) : (
-              <div className="p-6">
-                {/* Informations sur l'achat */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                  <div className="bg-blue-50 p-5 rounded-xl border border-blue-100">
-                    <h3 className="font-medium text-blue-800 mb-3 flex items-center">
-                      <User size={18} className="mr-2" />
-                      Informations client
-                    </h3>
-                    <p className="text-gray-900 font-medium">{purchaseDetails.purchase.full_name}</p>
-                    <p className="text-gray-600 mt-1">{purchaseDetails.purchase.zone}</p>
-                    <p className="text-gray-600">Vendeur: {purchaseDetails.purchase.vendor}</p>
+              <div className="text-gray-900 font-semibold mb-2">Aucune donnée à afficher</div>
+              <div className="text-gray-600 mb-6">
+                {Object.values(filters).some(value => value) 
+                  ? "Aucune vente ne correspond à vos critères de recherche."
+                  : "Aucune vente enregistrée pour le moment."
+                }
+              </div>
+              {Object.values(filters).some(value => value) && (
+                <button
+                  onClick={resetFilters}
+                  className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm"
+                >
+                  Réinitialiser les filtres
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Client
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Zone & Base
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Type & Vendeur
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Contact
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Montant & Quantité
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {currentItems.map((purchase) => (
+                      <tr key={purchase.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="font-semibold text-gray-900">{purchase.full_name}</div>
+                          <div className="text-sm text-gray-500">{purchase.pushcard_type}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <MapPin size={14} className="text-indigo-500 mr-1" />
+                            <span className="text-gray-900 font-medium">{purchase.zone}</span>
+                          </div>
+                          <div className="text-sm text-gray-500">{purchase.base}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-gray-900 font-medium">Vendeur #{purchase.vendor}</div>
+                          <div className="text-sm text-gray-500">{purchase.pushcard_type}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <Phone size={14} className="text-emerald-500 mr-1" />
+                            <span className="text-gray-900">{purchase.phone}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="font-semibold text-emerald-600">
+                            {formatCurrency(purchase.total_sales_amount)}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {purchase.total_sales_quantity} unités
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-gray-900 font-medium">
+                            {formatDate(purchase.purchase_date).split(' ')[0]}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {formatDate(purchase.purchase_date).split(' ')[1]}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <button
+                            onClick={() => fetchPurchaseDetails(purchase.id)}
+                            className="flex items-center px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors font-medium"
+                          >
+                            <Eye size={16} className="mr-1.5" />
+                            Détails
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Pagination fonctionnelle */}
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-sm text-gray-700 font-medium">
+                  Affichage de <span className="text-gray-900">{indexOfFirstItem + 1}-{Math.min(indexOfLastItem, filteredPurchases.length)}</span> sur <span className="text-gray-900">{filteredPurchases.length}</span> résultats
+                </div>
+                
+                <div className="flex items-center space-x-3">
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => {
+                      setItemsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
+                  >
+                    <option value="5">5 par page</option>
+                    <option value="10">10 par page</option>
+                    <option value="20">20 par page</option>
+                    <option value="50">50 par page</option>
+                  </select>
+                  
+                  <button
+                    onClick={prevPage}
+                    disabled={currentPage === 1}
+                    className={`px-4 py-2 border border-gray-300 rounded-xl text-sm font-medium transition-colors ${
+                      currentPage === 1 
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Précédent
+                  </button>
+                  
+                  {/* Numéros de page */}
+                  <div className="flex space-x-1">
+                    {getPageNumbers().map(pageNumber => (
+                      <button
+                        key={pageNumber}
+                        onClick={() => goToPage(pageNumber)}
+                        className={`px-3 py-2 rounded-xl text-sm font-medium min-w-[40px] transition-colors ${
+                          currentPage === pageNumber
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    ))}
                   </div>
                   
-                  <div className="bg-green-50 p-5 rounded-xl border border-green-100">
-                    <h3 className="font-medium text-green-800 mb-3 flex items-center">
-                      <ShoppingCart size={18} className="mr-2" />
-                      Informations vente
-                    </h3>
-                    <p className="text-gray-900 font-medium">{formatDate(purchaseDetails.purchase.purchase_date)}</p>
-                    <p className="text-green-600 font-bold mt-2 text-lg">{formatCurrency(purchaseDetails.statistics.grand_total_amount)}</p>
-                    <p className="text-gray-600">Quantité: {purchaseDetails.statistics.grand_total_quantity} unités</p>
-                  </div>
-                </div>
-                
-                {/* Détails des produits vendus */}
-                <h3 className="font-medium text-gray-700 mb-4 flex items-center">
-                  <Package size={18} className="mr-2 text-blue-500" />
-                  Produits vendus
-                </h3>
-                <div className="overflow-x-auto rounded-lg border border-gray-200">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Produit
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Format
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Prix unitaire
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Quantité
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Total
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Date
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {purchaseDetails.sales.map((sale) => (
-                        <tr key={sale.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-4 whitespace-nowrap">
-                            <div className="font-medium text-gray-900">{sale.product_variant.product.name}</div>
-                            <div className="text-sm text-gray-500">SKU: {sale.product_variant.product.sku}</div>
-                          </td>
-                          <td className="px-4 py-4 whitespace-nowrap">
-                            {sale.product_variant.format.name}
-                          </td>
-                          <td className="px-4 py-4 whitespace-nowrap">
-                            {formatCurrency(sale.unit_price)}
-                          </td>
-                          <td className="px-4 py-4 whitespace-nowrap">
-                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                              {sale.quantity}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4 whitespace-nowrap font-medium text-green-600">
-                            {formatCurrency(sale.total_amount)}
-                          </td>
-                          <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {formatDate(sale.created_at)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                
-                {/* Résumé */}
-                <div className="mt-8 p-5 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl text-white">
-                  <h3 className="font-medium mb-4 flex items-center">
-                    <BarChart3 size={18} className="mr-2" />
-                    Résumé de la vente
-                  </h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-white/20 p-3 rounded-lg">
-                      <p className="text-sm opacity-90">Montant total</p>
-                      <p className="font-bold text-lg">{formatCurrency(purchaseDetails.statistics.grand_total_amount)}</p>
-                    </div>
-                    <div className="bg-white/20 p-3 rounded-lg">
-                      <p className="text-sm opacity-90">Quantité totale</p>
-                      <p className="font-bold text-lg">{purchaseDetails.statistics.grand_total_quantity}</p>
-                    </div>
-                    <div className="bg-white/20 p-3 rounded-lg">
-                      <p className="text-sm opacity-90">Produits différents</p>
-                      <p className="font-bold text-lg">{purchaseDetails.statistics.total_products}</p>
-                    </div>
-                    <div className="bg-white/20 p-3 rounded-lg">
-                      <p className="text-sm opacity-90">Variantes différentes</p>
-                      <p className="font-bold text-lg">{purchaseDetails.statistics.total_variants}</p>
-                    </div>
-                  </div>
+                  <button
+                    onClick={nextPage}
+                    disabled={currentPage === totalPages}
+                    className={`px-4 py-2 border border-gray-300 rounded-xl text-sm font-medium transition-colors ${
+                      currentPage === totalPages 
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Suivant
+                  </button>
                 </div>
               </div>
-            )}
-            
-            <div className="p-6 border-t border-gray-200 flex justify-end bg-gray-50 rounded-b-2xl">
-              <button
-                onClick={() => setShowDetailsModal(false)}
-                className="px-5 py-2.5 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors font-medium"
-              >
-                Fermer
-              </button>
+            </>
+          )}
+        </div>
+
+        {/* Modal de détails */}
+        {showDetailsModal && purchaseDetails && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-screen overflow-y-auto">
+              <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-t-2xl">
+                <div>
+                  <h2 className="text-xl font-bold">Détails de la vente</h2>
+                  <p className="text-indigo-100 text-sm mt-1">Vente #{purchaseDetails.purchase.id}</p>
+                </div>
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="text-white hover:text-indigo-100 p-2 rounded-lg hover:bg-indigo-400 transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              {detailsLoading ? (
+                <div className="flex justify-center items-center py-16">
+                  <Loader2 className="animate-spin text-indigo-600 mr-3" size={28} />
+                  <span className="text-gray-600">Chargement des détails...</span>
+                </div>
+              ) : (
+                <div className="p-6">
+                  {/* Informations sur l'achat */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <div className="bg-indigo-50 p-5 rounded-xl border border-indigo-100">
+                      <h3 className="font-semibold text-indigo-800 mb-3 flex items-center">
+                        <User size={18} className="mr-2" />
+                        Informations client
+                      </h3>
+                      <p className="text-gray-900 font-medium">{purchaseDetails.purchase.full_name}</p>
+                      <div className="flex items-center mt-2 text-gray-600">
+                        <MapPin size={14} className="mr-1" />
+                        <span>{purchaseDetails.purchase.zone}</span>
+                      </div>
+                      <div className="flex items-center mt-1 text-gray-600">
+                        <Users size={14} className="mr-1" />
+                        <span>Vendeur: {purchaseDetails.purchase.vendor}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-emerald-50 p-5 rounded-xl border border-emerald-100">
+                      <h3 className="font-semibold text-emerald-800 mb-3 flex items-center">
+                        <ShoppingCart size={18} className="mr-2" />
+                        Informations vente
+                      </h3>
+                      <p className="text-gray-900 font-medium">{formatDate(purchaseDetails.purchase.purchase_date)}</p>
+                      <p className="text-emerald-600 font-bold mt-2 text-xl">{formatCurrency(purchaseDetails.statistics.grand_total_amount)}</p>
+                      <p className="text-gray-600">Quantité: {purchaseDetails.statistics.grand_total_quantity} unités</p>
+                    </div>
+                  </div>
+                  
+                  {/* Détails des produits vendus */}
+                  <div className="mb-6">
+                    <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
+                      <Package size={18} className="mr-2 text-indigo-500" />
+                      Produits vendus
+                    </h3>
+                    <div className="overflow-x-auto rounded-xl border border-gray-200">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                              Produit
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                              Format
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                              Prix unitaire
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                              Quantité
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                              Total
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                              Date
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {purchaseDetails.sales.map((sale) => (
+                            <tr key={sale.id} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-4 whitespace-nowrap">
+                                <div className="font-medium text-gray-900">{sale.product_variant.product.name}</div>
+                                <div className="text-sm text-gray-500">SKU: {sale.product_variant.product.sku}</div>
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-gray-900 font-medium">
+                                {sale.product_variant.format.name}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-gray-900">
+                                {formatCurrency(sale.unit_price)}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap">
+                                <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm font-medium">
+                                  {sale.quantity}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap font-semibold text-emerald-600">
+                                {formatCurrency(sale.total_amount)}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {formatDate(sale.created_at)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  
+                  {/* Résumé */}
+                  <div className="mt-8 p-5 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-xl text-white">
+                    <h3 className="font-semibold mb-4 flex items-center">
+                      <BarChart3 size={18} className="mr-2" />
+                      Résumé de la vente
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-white/20 p-3 rounded-lg">
+                        <p className="text-sm opacity-90">Montant total</p>
+                        <p className="font-bold text-lg">{formatCurrency(purchaseDetails.statistics.grand_total_amount)}</p>
+                      </div>
+                      <div className="bg-white/20 p-3 rounded-lg">
+                        <p className="text-sm opacity-90">Quantité totale</p>
+                        <p className="font-bold text-lg">{purchaseDetails.statistics.grand_total_quantity}</p>
+                      </div>
+                      <div className="bg-white/20 p-3 rounded-lg">
+                        <p className="text-sm opacity-90">Produits différents</p>
+                        <p className="font-bold text-lg">{purchaseDetails.statistics.total_products}</p>
+                      </div>
+                      <div className="bg-white/20 p-3 rounded-lg">
+                        <p className="text-sm opacity-90">Variantes différentes</p>
+                        <p className="font-bold text-lg">{purchaseDetails.statistics.total_variants}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div className="p-6 border-t border-gray-200 flex justify-end bg-gray-50 rounded-b-2xl">
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="px-5 py-2.5 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors font-medium"
+                >
+                  Fermer
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
