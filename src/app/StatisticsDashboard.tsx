@@ -697,7 +697,7 @@ const ChartComponent: React.FC<{
     if (!data || data.length === 0) {
       return (
         <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Top Vendeurs</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">Top Commercial</h3>
           <div className="text-center py-8 text-gray-500">
             <Users size={48} className="mx-auto mb-2 opacity-50" />
             <p>Aucun vendeur disponible</p>
@@ -711,7 +711,7 @@ const ChartComponent: React.FC<{
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-800">Top Vendeurs</h3>
+          <h3 className="text-lg font-semibold text-gray-800">Top Commercial</h3>
           <button
             onClick={() => handleExport('vendors')}
             className="flex items-center text-sm text-blue-600 hover:text-blue-800 transition-colors font-medium"
@@ -822,7 +822,7 @@ const ChartComponent: React.FC<{
           color="blue"
         />
         <StatCard
-          title="Vendeurs Actifs"
+          title="Commerciaux Actifs"
           value={stats.summary ? (stats.summary.total_mobile_vendors || 0).toLocaleString('fr-FR') : '0'}
           icon={Users}
           color="purple"
@@ -875,7 +875,7 @@ const ChartComponent: React.FC<{
             }}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
           >
-            <option value="vendors">Vendeurs</option>
+            <option value="vendors">Commerciaux</option>
             <option value="products">Produits</option>
             <option value="pos">Points de vente</option>
           </select>
@@ -964,9 +964,9 @@ const ChartComponent: React.FC<{
     <div className="space-y-6">
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-800">Performance des Vendeurs Ambulants</h3>
+          <h3 className="text-lg font-semibold text-gray-800">Performance des Commerciaux Ambulants</h3>
           <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-500">{stats.vendorStats.length} vendeurs</span>
+            <span className="text-sm text-gray-500">{stats.vendorStats.length} Commerciaux</span>
             <button
               onClick={() => handleExport('vendors')}
               className="flex items-center text-sm text-blue-600 hover:text-blue-800 transition-colors font-medium"
@@ -1107,9 +1107,9 @@ const ChartComponent: React.FC<{
       {/* Statistiques des vendeurs par achats */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-800">Performance des Vendeurs par Achats</h3>
+          <h3 className="text-lg font-semibold text-gray-800">Performance des Commerciaux par Achats</h3>
           <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-500">{stats.topPurchaseVendors.length} vendeurs</span>
+            <span className="text-sm text-gray-500">{stats.topPurchaseVendors.length} Commerciaux</span>
             <button
               onClick={() => handleExport('pushcart')}
               className="flex items-center text-sm text-blue-600 hover:text-blue-800 transition-colors font-medium"
@@ -1268,7 +1268,7 @@ const ChartComponent: React.FC<{
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Acheteur</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Zone</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Base</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Type Pushcart</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-gray-600">Type Prospect</th>
                     <th className="text-right py-3 px-4 text-sm font-medium text-gray-600">Montant Achat</th>
                     <th className="text-right py-3 px-4 text-sm font-medium text-gray-600">Ventes Générées</th>
                     <th className="text-right py-3 px-4 text-sm font-medium text-gray-600">Efficacité</th>
@@ -1458,9 +1458,9 @@ const ChartComponent: React.FC<{
   const tabs = [
     { id: 'overview', label: 'Vue d\'ensemble', icon: BarChart3 },
     { id: 'points-of-sale', label: 'Points de Vente', icon: MapPin },
-    { id: 'vendors', label: 'Vendeurs', icon: Users },
+    { id: 'vendors', label: 'Commerciaux', icon: Users },
     { id: 'products', label: 'Produits', icon: Package },
-    { id: 'pushcart', label: 'Pushcart', icon: ShoppingBag },
+    { id: 'pushcart', label: 'Prospects', icon: ShoppingBag },
     { id: 'analytics', label: 'Analytiques', icon: TrendingUp }
   ];
 

@@ -48,6 +48,7 @@ interface PointOfSale {
   avatar: string;
   brander: boolean;
   marque_brander: string | null;
+  branding_image: string | null; // Ajout de l'image de branding
 }
 
 const PointsVenteManagement = () => {
@@ -76,7 +77,8 @@ const PointsVenteManagement = () => {
     registration_date: new Date().toISOString().split('T')[0],
     avatar: '',
     brander: false,
-    marque_brander: ''
+    marque_brander: '',
+    branding_image: '' // Ajout
   });
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -87,7 +89,7 @@ const PointsVenteManagement = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  // Types de points de vente
+  // Types de Distributeurs
   const pointTypes = [
     { value: 'boutique', label: 'Boutique', icon: Store },
     { value: 'supermarche', label: 'Supermarché', icon: Building2 },
@@ -176,7 +178,7 @@ const PointsVenteManagement = () => {
     }
   };
 
-  // Charger les points de vente
+  // Charger les Distributeurs
   useEffect(() => {
     const fetchPointsVente = async () => {
       const token = localStorage.getItem('access');
@@ -197,20 +199,21 @@ const PointsVenteManagement = () => {
         });
 
         if (!response.ok) {
-          throw new Error('Erreur lors du chargement des points de vente');
+          throw new Error('Erreur lors du chargement des Distributeurs');
         }
 
         const data = await response.json();
         // Validation des coordonnées
-        const validatedData = data.map((point: PointOfSale) => ({
-          ...point,
-          avatar: point.avatar || '/default-avatar.png',
-          latitude: isValidCoordinate(point.latitude) ? point.latitude : 5.3197,
-          longitude: isValidCoordinate(point.longitude) ? point.longitude : -4.0267,
-          registration_date: point.registration_date || new Date().toISOString().split('T')[0],
-          brander: point.brander || false,
-          marque_brander: point.marque_brander || null
-        }));
+      const validatedData = data.map((point: PointOfSale) => ({
+        ...point,
+        avatar: point.avatar || '/default-avatar.png',
+        latitude: isValidCoordinate(point.latitude) ? point.latitude : 5.3197,
+        longitude: isValidCoordinate(point.longitude) ? point.longitude : -4.0267,
+        registration_date: point.registration_date || new Date().toISOString().split('T')[0],
+        brander: point.brander || false,
+        marque_brander: point.marque_brander || null,
+        branding_image: point.branding_image || null // Ajout
+      }));
         setPointsVente(validatedData);
       } catch (err: any) {
         setError(err.message);
@@ -227,7 +230,7 @@ const PointsVenteManagement = () => {
     return typeof coord === 'number' && !isNaN(coord) && coord !== 0;
   };
 
-  // Filtrer les points de vente
+  // Filtrer les Distributeurs
   const filteredPoints = pointsVente.filter(point => {
     const matchesSearch = 
       point.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -301,152 +304,203 @@ const PointsVenteManagement = () => {
     }
   };
 
-  // Ajouter un nouveau point de vente
-  const handleAddPoint = async () => {
-    const token = localStorage.getItem('access');
-    if (!token) {
-      setError('Veuillez vous connecter.');
-      return;
-    }
+  const [brandingImageFile, setBrandingImageFile] = useState<File | null>(null);
 
-    try {
-      setLoading(true);
+  const handleBrandingImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setBrandingImageFile(e.target.files[0]);
       
-      const formData = new FormData();
-      formData.append('name', newPoint.name);
-      formData.append('owner', newPoint.owner);
-      formData.append('phone', newPoint.phone);
-      formData.append('email', newPoint.email);
-      formData.append('address', newPoint.address);
-      formData.append('type', newPoint.type);
-      formData.append('district', newPoint.district);
-      formData.append('region', newPoint.region);
-      formData.append('commune', newPoint.commune);
-      formData.append('latitude', newPoint.latitude.toString());
-      formData.append('longitude', newPoint.longitude.toString());
-      formData.append('registration_date', newPoint.registration_date);
-      formData.append('brander', newPoint.brander.toString());
-      if (newPoint.brander && newPoint.marque_brander) {
-        formData.append('marque_brander', newPoint.marque_brander);
+      // Prévisualisation pour l'ajout
+      if (showAddModal) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setNewPoint({
+            ...newPoint,
+            branding_image: event.target?.result as string
+          });
+        };
+        reader.readAsDataURL(e.target.files[0]);
       }
-      if (avatarFile) {
-        formData.append('avatar', avatarFile);
+      
+      // Prévisualisation pour l'édition
+      if (editingPoint) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setEditingPoint({
+            ...editingPoint,
+            branding_image: event.target?.result as string
+          });
+        };
+        reader.readAsDataURL(e.target.files[0]);
       }
-
-      const response = await fetch(`${API_BASE_URL}/points-vente/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData
-      });
-
-      if (!response.ok) {
-        throw new Error('Erreur lors de l\'ajout du point de vente');
-      }
-
-      const createdPoint = await response.json();
-      setPointsVente([...pointsVente, {
-        ...createdPoint,
-        brander: createdPoint.brander || false,
-        marque_brander: createdPoint.marque_brander || null
-      }]);
-      setShowAddModal(false);
-      setNewPoint({
-        name: '',
-        owner: '',
-        phone: '',
-        email: '',
-        address: '',
-        type: 'boutique',
-        district: '',
-        region: '',
-        commune: '',
-        latitude: 0,
-        longitude: 0,
-        registration_date: new Date().toISOString().split('T')[0],
-        avatar: '',
-        brander: false,
-        marque_brander: ''
-      });
-      setAvatarFile(null);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Mettre à jour un point de vente
-  const updatePoint = async () => {
-    if (!editingPoint) return;
+  // Ajouter un nouveau Distributeur
+const handleAddPoint = async () => {
+  const token = localStorage.getItem('access');
+  if (!token) {
+    setError('Veuillez vous connecter.');
+    return;
+  }
+
+  try {
+    setLoading(true);
     
-    const token = localStorage.getItem('access');
-    if (!token) {
-      setError('Veuillez vous connecter.');
-      return;
+    const formData = new FormData();
+    formData.append('name', newPoint.name);
+    formData.append('owner', newPoint.owner);
+    formData.append('phone', newPoint.phone);
+    formData.append('email', newPoint.email);
+    formData.append('address', newPoint.address);
+    formData.append('type', newPoint.type);
+    formData.append('district', newPoint.district);
+    formData.append('region', newPoint.region);
+    formData.append('commune', newPoint.commune);
+    formData.append('latitude', newPoint.latitude.toString());
+    formData.append('longitude', newPoint.longitude.toString());
+    formData.append('registration_date', newPoint.registration_date);
+    formData.append('brander', newPoint.brander.toString());
+    
+    if (newPoint.brander && newPoint.marque_brander) {
+      formData.append('marque_brander', newPoint.marque_brander);
+    }
+    
+    if (avatarFile) {
+      formData.append('avatar', avatarFile);
+    }
+    
+    // Ajout de l'image de branding
+    if (brandingImageFile) {
+      formData.append('branding_image', brandingImageFile);
     }
 
-    try {
-      setLoading(true);
-      
-      const formData = new FormData();
-      formData.append('name', editingPoint.name);
-      formData.append('owner', editingPoint.owner);
-      formData.append('phone', editingPoint.phone);
-      formData.append('email', editingPoint.email);
-      formData.append('address', editingPoint.address);
-      formData.append('type', editingPoint.type);
-      formData.append('status', editingPoint.status);
-      formData.append('district', editingPoint.district);
-      formData.append('region', editingPoint.region);
-      formData.append('commune', editingPoint.commune);
-      formData.append('latitude', editingPoint.latitude.toString());
-      formData.append('longitude', editingPoint.longitude.toString());
-      formData.append('registration_date', editingPoint.registration_date);
-      formData.append('brander', editingPoint.brander.toString());
-      if (editingPoint.brander && editingPoint.marque_brander) {
-        formData.append('marque_brander', editingPoint.marque_brander);
-      } else {
-        formData.append('marque_brander', '');
-      }
-      if (avatarFile) {
-        formData.append('avatar', avatarFile);
-      }
+    const response = await fetch(`${API_BASE_URL}/points-vente/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData
+    });
 
-      const response = await fetch(`${API_BASE_URL}/points-vente/${editingPoint.id}/`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Erreur lors de la mise à jour du point de vente');
-      }
-
-      const updatedPoint = await response.json();
-      setPointsVente(pointsVente.map(point => 
-        point.id === updatedPoint.id ? {
-          ...updatedPoint,
-          brander: updatedPoint.brander || false,
-          marque_brander: updatedPoint.marque_brander || null
-        } : point
-      ));
-      setEditingPoint(null);
-      setAvatarFile(null);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+    if (!response.ok) {
+      throw new Error('Erreur lors de l\'ajout du Distributeur');
     }
-  };
 
-  // Supprimer un point de vente
+    const createdPoint = await response.json();
+    setPointsVente([...pointsVente, {
+      ...createdPoint,
+      brander: createdPoint.brander || false,
+      marque_brander: createdPoint.marque_brander || null,
+      branding_image: createdPoint.branding_image || null
+    }]);
+    setShowAddModal(false);
+    setNewPoint({
+      name: '',
+      owner: '',
+      phone: '',
+      email: '',
+      address: '',
+      type: 'boutique',
+      district: '',
+      region: '',
+      commune: '',
+      latitude: 0,
+      longitude: 0,
+      registration_date: new Date().toISOString().split('T')[0],
+      avatar: '',
+      brander: false,
+      marque_brander: '',
+      branding_image: ''
+    });
+    setAvatarFile(null);
+    setBrandingImageFile(null); // Reset du fichier branding
+  } catch (err: any) {
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  // Mettre à jour un Distributeur
+const updatePoint = async () => {
+  if (!editingPoint) return;
+  
+  const token = localStorage.getItem('access');
+  if (!token) {
+    setError('Veuillez vous connecter.');
+    return;
+  }
+
+  try {
+    setLoading(true);
+    
+    const formData = new FormData();
+    formData.append('name', editingPoint.name);
+    formData.append('owner', editingPoint.owner);
+    formData.append('phone', editingPoint.phone);
+    formData.append('email', editingPoint.email);
+    formData.append('address', editingPoint.address);
+    formData.append('type', editingPoint.type);
+    formData.append('status', editingPoint.status);
+    formData.append('district', editingPoint.district);
+    formData.append('region', editingPoint.region);
+    formData.append('commune', editingPoint.commune);
+    formData.append('latitude', editingPoint.latitude.toString());
+    formData.append('longitude', editingPoint.longitude.toString());
+    formData.append('registration_date', editingPoint.registration_date);
+    formData.append('brander', editingPoint.brander.toString());
+    
+    if (editingPoint.brander && editingPoint.marque_brander) {
+      formData.append('marque_brander', editingPoint.marque_brander);
+    } else {
+      formData.append('marque_brander', '');
+    }
+    
+    if (avatarFile) {
+      formData.append('avatar', avatarFile);
+    }
+    
+    // Ajout de l'image de branding
+    if (brandingImageFile) {
+      formData.append('branding_image', brandingImageFile);
+    }
+
+    const response = await fetch(`${API_BASE_URL}/points-vente/${editingPoint.id}/`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Erreur lors de la mise à jour du Distributeur');
+    }
+
+    const updatedPoint = await response.json();
+    setPointsVente(pointsVente.map(point => 
+      point.id === updatedPoint.id ? {
+        ...updatedPoint,
+        brander: updatedPoint.brander || false,
+        marque_brander: updatedPoint.marque_brander || null,
+        branding_image: updatedPoint.branding_image || null
+      } : point
+    ));
+    setEditingPoint(null);
+    setAvatarFile(null);
+    setBrandingImageFile(null); // Reset du fichier branding
+  } catch (err: any) {
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  // Supprimer un Distributeur
   const deletePoint = async (id: string) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce point de vente ?')) return;
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce Distributeur ?')) return;
     
     const token = localStorage.getItem('access');
     if (!token) {
@@ -464,7 +518,7 @@ const PointsVenteManagement = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Erreur lors de la suppression du point de vente');
+        throw new Error('Erreur lors de la suppression du Distributeur');
       }
 
       setPointsVente(pointsVente.filter(point => point.id !== id));
@@ -478,7 +532,7 @@ const PointsVenteManagement = () => {
   // Statistiques améliorées
   const stats = [
     {
-      title: 'Total Points de Vente',
+      title: 'Total Distributeurs',
       value: pointsVente.length.toString(),
       icon: Building2,
       bg: 'bg-gradient-to-br from-indigo-600 to-blue-500',
@@ -517,7 +571,7 @@ const PointsVenteManagement = () => {
       {/* En-tête avec titre et actions */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 font-sans">Gestion des Points de Vente</h1>
+          <h1 className="text-2xl font-bold text-gray-800 font-sans">Gestion des Distributeurs</h1>
           <p className="text-gray-600 mt-1">Gérez l'ensemble de votre réseau commercial</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -533,7 +587,7 @@ const PointsVenteManagement = () => {
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl ${colors.primary} font-medium`}
           >
             <Plus size={16} />
-            <span>Nouveau Point</span>
+            <span>Nouveau Distributeur</span>
           </button>
           <button 
             onClick={downloadData}
@@ -574,7 +628,7 @@ const PointsVenteManagement = () => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
               <input 
                 type="text" 
-                placeholder="Rechercher un point de vente..." 
+                placeholder="Rechercher un Distributeur..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 pr-4 py-2.5 w-full border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium"
@@ -611,12 +665,12 @@ const PointsVenteManagement = () => {
         </div>
       </div>
 
-      {/* Tableau des points de vente amélioré */}
+      {/* Tableau des Distributeurs amélioré */}
       {loading ? (
         <div className="flex items-center justify-center h-64 bg-white rounded-xl border border-gray-200">
           <div className="text-center space-y-3">
             <Loader2 className="animate-spin text-blue-600 mx-auto" size={32} />
-            <p className="text-gray-600 font-medium">Chargement des points de vente...</p>
+            <p className="text-gray-600 font-medium">Chargement des Distributeurs...</p>
           </div>
         </div>
       ) : error ? (
@@ -630,7 +684,7 @@ const PointsVenteManagement = () => {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider font-sans">Point de Vente</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider font-sans">Distributeur</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider font-sans">Contact</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider font-sans">Type</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider font-sans">Statut</th>
@@ -827,8 +881,8 @@ const PointsVenteManagement = () => {
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Store className="text-gray-400" size={24} />
               </div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2 font-sans">Aucun point de vente trouvé</h3>
-              <p className="text-gray-600 mb-4">Aucun point de vente ne correspond à vos critères de recherche.</p>
+              <h3 className="text-lg font-semibold text-gray-800 mb-2 font-sans">Aucun Distributeur trouvé</h3>
+              <p className="text-gray-600 mb-4">Aucun Distributeur ne correspond à vos critères de recherche.</p>
               <button 
                 onClick={() => {
                   setSearchTerm('');
@@ -851,7 +905,7 @@ const PointsVenteManagement = () => {
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 font-sans">Carte des Points de Vente</h1>
+          <h1 className="text-2xl font-bold text-gray-800 font-sans">Carte des Distributeurs</h1>
           <p className="text-gray-600 mt-1">Visualisez votre réseau commercial sur la carte</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -898,7 +952,7 @@ const PointsVenteManagement = () => {
                   <Plus size={20} className="text-white" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-semibold text-white font-sans">Nouveau Point de Vente</h3>
+                  <h3 className="text-xl font-semibold text-white font-sans">Nouveau Distributeur</h3>
                   <p className="text-white/80 text-sm">Ajoutez un nouveau point à votre réseau commercial</p>
                 </div>
               </div>
@@ -912,32 +966,38 @@ const PointsVenteManagement = () => {
             
             <div className="p-6 space-y-6">
               {/* Upload d'image */}
-              <div className="flex flex-col items-center">
-                <div className="relative w-32 h-32 mb-4 rounded-2xl overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 group hover:border-blue-500 transition-colors duration-200">
-                  {newPoint.avatar ? (
-                    <img 
-                      src={newPoint.avatar} 
-                      alt="Avatar preview" 
-                      className="w-full h-full object-cover"
+                {/* Upload d'image - CORRIGÉ */}
+                <div className="flex flex-col items-center">
+                  <div className="relative w-32 h-32 mb-4 rounded-2xl overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 group hover:border-blue-500 transition-colors duration-200">
+                    {newPoint.avatar ? (
+                      <img 
+                        src={newPoint.avatar} 
+                        alt="Avatar preview" 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                        <ImageIcon size={32} />
+                        <span className="text-xs mt-2">Ajouter une image</span>
+                      </div>
+                    )}
+                    {/* CORRECTION : Ajout d'un ID unique et liaison correcte avec le label */}
+                    <input 
+                      id="avatar-upload-add"
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleAvatarChange}
+                      className="hidden"
                     />
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                      <ImageIcon size={32} />
-                      <span className="text-xs mt-2">Ajouter une image</span>
-                    </div>
-                  )}
-                  <label className="absolute inset-0 cursor-pointer flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <Upload size={20} className="text-white" />
-                  </label>
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    onChange={handleAvatarChange}
-                    className="hidden"
-                  />
+                    <label 
+                      htmlFor="avatar-upload-add"
+                      className="absolute inset-0 cursor-pointer flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                    >
+                      <Upload size={20} className="text-white" />
+                    </label>
+                  </div>
+                  <p className="text-sm text-gray-500 text-center">Format recommandé: JPG, PNG • Max 2MB</p>
                 </div>
-                <p className="text-sm text-gray-500 text-center">Format recommandé: JPG, PNG • Max 2MB</p>
-              </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Colonne gauche */}
@@ -949,7 +1009,7 @@ const PointsVenteManagement = () => {
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Nom du Point de Vente *
+                      Nom du Distributeur *
                     </label>
                     <input 
                       type="text"
@@ -1086,6 +1146,7 @@ const PointsVenteManagement = () => {
                   </div>
 
                   {/* Section Branding */}
+                  {/* Section Branding avec image */}
                   <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
                     <h4 className="font-semibold text-gray-800 font-sans flex items-center gap-2 mb-3">
                       <Award size={16} />
@@ -1101,31 +1162,71 @@ const PointsVenteManagement = () => {
                             setNewPoint({
                               ...newPoint, 
                               brander: e.target.checked,
-                              marque_brander: e.target.checked ? newPoint.marque_brander : ''
+                              marque_brander: e.target.checked ? newPoint.marque_brander : '',
+                              branding_image: e.target.checked ? newPoint.branding_image : ''
                             })
                           }}
                           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
                         <div>
-                          <span className="font-medium text-gray-800">Point de vente brandé</span>
-                          <p className="text-sm text-gray-600">Ce point de vente représente une marque spécifique</p>
+                          <span className="font-medium text-gray-800">Distributeur brandé</span>
+                          <p className="text-sm text-gray-600">Ce Distributeur représente une marque spécifique</p>
                         </div>
                       </label>
 
                       {newPoint.brander && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Marque du brander *
-                          </label>
-                          <input 
-                            type="text"
-                            value={newPoint.marque_brander}
-                            onChange={(e) => setNewPoint({...newPoint, marque_brander: e.target.value})}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium"
-                            placeholder="Ex: Coca-Cola, Nestlé, etc."
-                            required={newPoint.brander}
-                          />
-                        </div>
+                        <>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Marque du brander *
+                            </label>
+                            <input 
+                              type="text"
+                              value={newPoint.marque_brander}
+                              onChange={(e) => setNewPoint({...newPoint, marque_brander: e.target.value})}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium"
+                              placeholder="Ex: Coca-Cola, Nestlé, etc."
+                              required={newPoint.brander}
+                            />
+                          </div>
+
+                          {/* Upload de l'image de branding */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Image de la marque
+                            </label>
+                            <div className="relative border-2 border-dashed border-gray-300 rounded-xl p-4 hover:border-blue-500 transition-colors duration-200 bg-white">
+                              <input 
+                                id="branding-image-upload-add"
+                                type="file" 
+                                accept="image/*" 
+                                onChange={handleBrandingImageChange}
+                                className="hidden"
+                              />
+                              <label 
+                                htmlFor="branding-image-upload-add"
+                                className="cursor-pointer flex flex-col items-center justify-center"
+                              >
+                                {newPoint.branding_image ? (
+                                  <div className="text-center">
+                                    <img 
+                                      src={newPoint.branding_image} 
+                                      alt="Branding preview" 
+                                      className="w-32 h-32 object-cover rounded-lg mx-auto mb-2"
+                                    />
+                                    <span className="text-sm text-blue-600 font-medium">Modifier l'image de branding</span>
+                                  </div>
+                                ) : (
+                                  <div className="text-center py-4">
+                                    <Upload size={24} className="text-gray-400 mx-auto mb-2" />
+                                    <span className="text-sm text-gray-600 font-medium">Cliquer pour ajouter une image de branding</span>
+                                    <p className="text-xs text-gray-500 mt-1">Format recommandé: JPG, PNG • Max 2MB</p>
+                                  </div>
+                                )}
+                              </label>
+                            </div>
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
@@ -1235,7 +1336,7 @@ const PointsVenteManagement = () => {
                 ) : (
                   <div className="flex items-center gap-2">
                     <Plus size={16} />
-                    <span>Créer le point de vente</span>
+                    <span>Créer le Distributeur</span>
                   </div>
                 )}
               </button>
@@ -1254,8 +1355,8 @@ const PointsVenteManagement = () => {
                   <Edit size={20} className="text-white" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-semibold text-white font-sans">Modifier le Point de Vente</h3>
-                  <p className="text-white/80 text-sm">Mettez à jour les informations du point de vente</p>
+                  <h3 className="text-xl font-semibold text-white font-sans">Modifier le Distributeur</h3>
+                  <p className="text-white/80 text-sm">Mettez à jour les informations du Distributeur</p>
                 </div>
               </div>
               <button 
@@ -1268,32 +1369,38 @@ const PointsVenteManagement = () => {
             
             <div className="p-6 space-y-6">
               {/* Upload d'image */}
-              <div className="flex flex-col items-center">
-                <div className="relative w-32 h-32 mb-4 rounded-2xl overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 group hover:border-blue-500 transition-colors duration-200">
-                  {editingPoint.avatar ? (
-                    <img 
-                      src={editingPoint.avatar} 
-                      alt="Avatar preview" 
-                      className="w-full h-full object-cover"
+                {/* Upload d'image - CORRIGÉ */}
+                <div className="flex flex-col items-center">
+                  <div className="relative w-32 h-32 mb-4 rounded-2xl overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 group hover:border-blue-500 transition-colors duration-200">
+                    {editingPoint.avatar ? (
+                      <img 
+                        src={editingPoint.avatar} 
+                        alt="Avatar preview" 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                        <ImageIcon size={32} />
+                        <span className="text-xs mt-2">Modifier l'image</span>
+                      </div>
+                    )}
+                    {/* CORRECTION : Ajout d'un ID unique pour l'édition */}
+                    <input 
+                      id="avatar-upload-edit"
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleAvatarChange}
+                      className="hidden"
                     />
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                      <ImageIcon size={32} />
-                      <span className="text-xs mt-2">Modifier l'image</span>
-                    </div>
-                  )}
-                  <label className="absolute inset-0 cursor-pointer flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <Upload size={20} className="text-white" />
-                  </label>
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    onChange={handleAvatarChange}
-                    className="hidden"
-                  />
+                    <label 
+                      htmlFor="avatar-upload-edit"
+                      className="absolute inset-0 cursor-pointer flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                    >
+                      <Upload size={20} className="text-white" />
+                    </label>
+                  </div>
+                  <p className="text-sm text-gray-500 text-center">Cliquez sur l'image pour la modifier</p>
                 </div>
-                <p className="text-sm text-gray-500 text-center">Cliquez sur l'image pour la modifier</p>
-              </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Colonne gauche */}
@@ -1305,7 +1412,7 @@ const PointsVenteManagement = () => {
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Nom du Point de Vente *
+                      Nom du Distributeur *
                     </label>
                     <input 
                       type="text"
@@ -1441,6 +1548,7 @@ const PointsVenteManagement = () => {
                   </div>
 
                   {/* Section Branding */}
+                  {/* Section Branding avec image - Modal d'édition */}
                   <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
                     <h4 className="font-semibold text-gray-800 font-sans flex items-center gap-2 mb-3">
                       <Award size={16} />
@@ -1456,31 +1564,71 @@ const PointsVenteManagement = () => {
                             setEditingPoint({
                               ...editingPoint, 
                               brander: e.target.checked,
-                              marque_brander: e.target.checked ? editingPoint.marque_brander : ''
+                              marque_brander: e.target.checked ? editingPoint.marque_brander : '',
+                              branding_image: e.target.checked ? editingPoint.branding_image : ''
                             })
                           }}
                           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
                         <div>
-                          <span className="font-medium text-gray-800">Point de vente brandé</span>
-                          <p className="text-sm text-gray-600">Ce point de vente représente une marque spécifique</p>
+                          <span className="font-medium text-gray-800">Distributeur brandé</span>
+                          <p className="text-sm text-gray-600">Ce Distributeur représente une marque spécifique</p>
                         </div>
                       </label>
 
                       {editingPoint.brander && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Marque du brander *
-                          </label>
-                          <input 
-                            type="text"
-                            value={editingPoint.marque_brander || ''}
-                            onChange={(e) => setEditingPoint({...editingPoint, marque_brander: e.target.value})}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium"
-                            placeholder="Ex: Coca-Cola, Nestlé, etc."
-                            required={editingPoint.brander}
-                          />
-                        </div>
+                        <>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Marque du brander *
+                            </label>
+                            <input 
+                              type="text"
+                              value={editingPoint.marque_brander || ''}
+                              onChange={(e) => setEditingPoint({...editingPoint, marque_brander: e.target.value})}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium"
+                              placeholder="Ex: Coca-Cola, Nestlé, etc."
+                              required={editingPoint.brander}
+                            />
+                          </div>
+
+                          {/* Upload de l'image de branding */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Image de la marque
+                            </label>
+                            <div className="relative border-2 border-dashed border-gray-300 rounded-xl p-4 hover:border-blue-500 transition-colors duration-200 bg-white">
+                              <input 
+                                id="branding-image-upload-edit"
+                                type="file" 
+                                accept="image/*" 
+                                onChange={handleBrandingImageChange}
+                                className="hidden"
+                              />
+                              <label 
+                                htmlFor="branding-image-upload-edit"
+                                className="cursor-pointer flex flex-col items-center justify-center"
+                              >
+                                {editingPoint.branding_image ? (
+                                  <div className="text-center">
+                                    <img 
+                                      src={editingPoint.branding_image} 
+                                      alt="Branding preview" 
+                                      className="w-32 h-32 object-cover rounded-lg mx-auto mb-2"
+                                    />
+                                    <span className="text-sm text-blue-600 font-medium">Modifier l'image de branding</span>
+                                  </div>
+                                ) : (
+                                  <div className="text-center py-4">
+                                    <Upload size={24} className="text-gray-400 mx-auto mb-2" />
+                                    <span className="text-sm text-gray-600 font-medium">Cliquer pour ajouter une image de branding</span>
+                                    <p className="text-xs text-gray-500 mt-1">Format recommandé: JPG, PNG • Max 2MB</p>
+                                  </div>
+                                )}
+                              </label>
+                            </div>
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
@@ -1744,6 +1892,7 @@ const PointsVenteManagement = () => {
                   </div>
                   
                   {/* Information Branding */}
+                  {/* Information Branding avec image dans le modal de détails */}
                   <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                     <h4 className="font-semibold text-gray-800 font-sans text-lg mb-4 flex items-center gap-2">
                       <Award size={18} />
@@ -1764,6 +1913,16 @@ const PointsVenteManagement = () => {
                         <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
                           <p className="text-sm text-gray-600 font-medium">Marque du brander</p>
                           <p className="font-semibold text-purple-700">{selectedPoint.marque_brander}</p>
+                        </div>
+                      )}
+                      {selectedPoint.brander && selectedPoint.branding_image && (
+                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <p className="text-sm text-gray-600 font-medium mb-2">Image de la marque</p>
+                          <img 
+                            src={selectedPoint.branding_image} 
+                            alt={`Branding ${selectedPoint.marque_brander}`}
+                            className="w-full max-w-xs h-auto rounded-lg mx-auto"
+                          />
                         </div>
                       )}
                     </div>

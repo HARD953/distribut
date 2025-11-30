@@ -398,7 +398,7 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
   const fetchVendorSales = async (vendorId: number) => {
     try {
       setLoadingSales(true);
-      const response = await apiService.get(`/sales/?vendor=${vendorId}`);
+      const response = await apiService.get(`/salespos/?vendor=${vendorId}`);
       if (!response.ok) throw new Error('Failed to fetch vendor sales');
       const data: Sale[] = await response.json();
       setSales(data);

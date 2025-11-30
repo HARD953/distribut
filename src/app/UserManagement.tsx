@@ -19,7 +19,20 @@ interface Role {
   color?: string;
   permissions: Permission[];
   users: number;
+  // Nouveaux attributs
+  tableau?: boolean;
+  distributeurs?: boolean;
+  commerciaux?: boolean;
+  prospects?: boolean;
+  inventaire?: boolean;
+  commande?: boolean;
+  utilisateur?: boolean;
+  analytique?: boolean;
+  geolocalisation?: boolean;
+  configuration?: boolean;
+  positions?: boolean;
 }
+
 
 interface Permission {
   id: string;
@@ -59,6 +72,7 @@ interface User {
   points_of_sale: (PointOfSale | number)[];
   establishment_registration_date?: string;
   role_name?: string;
+
 }
 
 interface NewUser {
@@ -87,6 +101,19 @@ interface NewRole {
   name: string;
   description?: string;
   permissions: string[];
+  // Nouveaux attributs
+  color?: string;
+  tableau?: boolean;
+  distributeurs?: boolean;
+  commerciaux?: boolean;
+  prospects?: boolean;
+  inventaire?: boolean;
+  commande?: boolean;
+  utilisateur?: boolean;
+  analytique?: boolean;
+  geolocalisation?: boolean;
+  configuration?: boolean;
+  positions?: boolean;
 }
 
 interface Supplier {
@@ -1167,70 +1194,110 @@ const RoleModal: React.FC<RoleModalProps> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (show) {
-      if (selectedRole) {
-        setFormData({
-          id: selectedRole.id,
-          name: selectedRole.name,
-          description: selectedRole.description || '',
-          permissions: selectedRole.permissions.map(p => p.id)
-        });
-      } else {
-        setFormData({
-          id: '',
-          name: '',
-          description: '',
-          permissions: []
-        });
-      }
-      setFormError(null);
+useEffect(() => {
+  if (show) {
+    if (selectedRole) {
+      setFormData({
+        id: selectedRole.id,
+        name: selectedRole.name,
+        description: selectedRole.description || '',
+        permissions: selectedRole.permissions.map(p => p.id),
+        color: selectedRole.color || '',
+        tableau: selectedRole.tableau || false,
+        distributeurs: selectedRole.distributeurs || false,
+        commerciaux: selectedRole.commerciaux || false,
+        prospects: selectedRole.prospects || false,
+        inventaire: selectedRole.inventaire || false,
+        commande: selectedRole.commande || false,
+        utilisateur: selectedRole.utilisateur || false,
+        analytique: selectedRole.analytique || false,
+        geolocalisation: selectedRole.geolocalisation || false,
+        configuration: selectedRole.configuration || false,
+        positions: selectedRole.positions || false,
+      });
+    } else {
+      setFormData({
+        id: '',
+        name: '',
+        description: '',
+        permissions: [],
+        color: '#3B82F6',
+        tableau: false,
+        distributeurs: false,
+        commerciaux: false,
+        prospects: false,
+        inventaire: false,
+        commande: false,
+        utilisateur: false,
+        analytique: false,
+        geolocalisation: false,
+        configuration: false,
+        positions: false,
+      });
     }
-  }, [show, selectedRole]);
+    setFormError(null);
+  }
+}, [show, selectedRole]);
 
   const validateForm = () => {
-    if (!formData.id.trim()) return 'L\'ID du rôle est requis.';
     if (!formData.name.trim()) return 'Le nom du rôle est requis.';
     return null;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const validationError = validateForm();
-    if (validationError) {
-      setFormError(validationError);
-      return;
+// Dans handleSubmit
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  const validationError = validateForm();
+  if (validationError) {
+    setFormError(validationError);
+    return;
+  }
+  try {
+    setFormError(null);
+    setIsSubmitting(true);
+    
+    const data = {
+      id: formData.id,
+      name: formData.name,
+      description: formData.description,
+      permissions: formData.permissions,
+      color: formData.color,
+      tableau: formData.tableau,
+      distributeurs: formData.distributeurs,
+      commerciaux: formData.commerciaux,
+      prospects: formData.prospects,
+      inventaire: formData.inventaire,
+      commande: formData.commande,
+      utilisateur: formData.utilisateur,
+      analytique: formData.analytique,
+      geolocalisation: formData.geolocalisation,
+      configuration: formData.configuration,
+      positions: formData.positions,
+    };
+    
+    let res;
+    if (selectedRole) {
+      res = await apiService.updateResource('/roles', selectedRole.id, data);
+    } else {
+      res = await apiService.createRole(data);
     }
-    try {
-      setFormError(null);
-      setIsSubmitting(true);
-      const data = {
-        id: formData.id,
-        name: formData.name,
-        description: formData.description,
-        permissions: formData.permissions
-      };
-      let res;
-      if (selectedRole) {
-        res = await apiService.updateResource('roles', selectedRole.id, data);
-      } else {
-        res = await apiService.createRole(data);
-      }
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData?.detail || `Failed to ${selectedRole ? 'update' : 'create'} role`);
-      }
-      const updatedRole = await res.json();
-      onRoleUpdated(updatedRole, selectedRole ? 'edit' : 'add');
-      onClose();
-    } catch (err: any) {
-      if (err.message !== 'Session expired') {
-        setFormError(err.message || 'Une erreur est survenue');
-      }
-    } finally {
-      setIsSubmitting(false);
+    
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData?.detail || `Failed to ${selectedRole ? 'update' : 'create'} role`);
     }
-  };
+    
+    const updatedRole = await res.json();
+    onRoleUpdated(updatedRole, selectedRole ? 'edit' : 'add');
+    onClose();
+  } catch (err: any) {
+    if (err.message !== 'Session expired') {
+      setFormError(err.message || 'Une erreur est survenue');
+    }
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const toggleRolePermission = (permissionId: string) => {
     setFormData(prev => ({
@@ -1267,105 +1334,171 @@ const RoleModal: React.FC<RoleModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
-          {formError && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl">
-              <div className="flex items-center">
-                <AlertCircle size={16} className="text-rose-500 mr-2" />
-                <span className="text-rose-700 text-sm">{formError}</span>
+     {/* Dans le return du RoleModal, à l'intérieur du */}
+    <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto max-h-[70vh]">
+      {formError && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl">
+          <div className="flex items-center">
+            <AlertCircle size={16} className="text-rose-500 mr-2" />
+            <span className="text-rose-700 text-sm">{formError}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Section informations de base */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">ID du rôle *</label>
+          <input 
+            type="text"
+            value={formData.id}
+            onChange={(e) => setFormData({...formData, id: e.target.value})}
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            required 
+            disabled={!!selectedRole}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">Nom du rôle *</label>
+          <input 
+            type="text"
+            value={formData.name}
+            onChange={(e) => setFormData({...formData, name: e.target.value})}
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            required 
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
+          <input 
+            type="text"
+            value={formData.description}
+            onChange={(e) => setFormData({...formData, description: e.target.value})}
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            placeholder="Description du rôle..."
+          />
+        </div>
+      </div>
+
+      {/* Section permissions détaillées */}
+      <div className="pt-6 border-t border-slate-200">
+        <h5 className="font-semibold text-slate-800 mb-4 flex items-center">
+          <Shield size={16} className="mr-2 text-purple-500" />
+          Permissions du Rôle
+        </h5>
+        <div className="space-y-4">
+          {Object.entries(permissionsByCategory).map(([category, categoryPermissions]) => (
+            <div key={category} className="border border-slate-200 rounded-xl p-4 bg-slate-50">
+              <h6 className="font-semibold text-slate-800 mb-3 text-sm uppercase tracking-wide">{category}</h6>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {categoryPermissions.map(permission => (
+                  <label key={permission.id} className="flex items-center space-x-3 p-2 hover:bg-white rounded-lg cursor-pointer transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={formData.permissions.includes(permission.id)}
+                      onChange={() => toggleRolePermission(permission.id)}
+                      className="rounded-lg border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-slate-800">{permission.name}</span>
+                      {permission.description && (
+                        <p className="text-xs text-slate-500 mt-1">{permission.description}</p>
+                      )}
+                    </div>
+                  </label>
+                ))}
               </div>
             </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ⭐⭐⭐ AJOUTEZ ICI LES NOUVEAUX CHAMPS ⭐⭐⭐ */}
+      {/* Section accès aux modules */}
+      <div className="pt-6 border-t border-slate-200">
+        <h5 className="font-semibold text-slate-800 mb-4 flex items-center">
+          <Shield size={16} className="mr-2 text-purple-500" />
+          Accès aux Modules
+        </h5>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {[
+            { key: 'tableau', label: 'Tableau de bord' },
+            { key: 'distributeurs', label: 'Distributeurs' },
+            { key: 'commerciaux', label: 'Commerciaux' },
+            { key: 'prospects', label: 'Prospects' },
+            { key: 'inventaire', label: 'Inventaire' },
+            { key: 'commande', label: 'Commandes' },
+            { key: 'utilisateur', label: 'Utilisateurs' },
+            { key: 'analytique', label: 'Analytiques' },
+            { key: 'geolocalisation', label: 'Géolocalisation' },
+            { key: 'configuration', label: 'Configurations' },
+            { key: 'positions', label: 'Positions' },
+          ].map((module) => (
+            <label key={module.key} className="flex items-center space-x-3 p-3 border border-slate-200 rounded-xl hover:border-slate-300 cursor-pointer transition-colors">
+              <input
+                type="checkbox"
+                checked={formData[module.key as keyof NewRole] as boolean || false}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  [module.key]: e.target.checked
+                }))}
+                className="rounded-lg border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm font-medium text-slate-800">{module.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Section apparence */}
+      <div className="pt-6 border-t border-slate-200">
+        <h5 className="font-semibold text-slate-800 mb-4 flex items-center">
+          <Shield size={16} className="mr-2 text-purple-500" />
+          Apparence
+        </h5>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">Couleur du rôle</label>
+          <div className="flex items-center space-x-4">
+            <input 
+              type="color"
+              value={formData.color || '#3B82F6'}
+              onChange={(e) => setFormData({...formData, color: e.target.value})}
+              className="w-16 h-16 border border-slate-300 rounded-xl cursor-pointer"
+            />
+            <div className="text-sm text-slate-600">
+              <p>Couleur d'affichage du rôle</p>
+              <p className="text-slate-400">Utilisée dans les badges et indicateurs</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      {/* ⭐⭐⭐ FIN DES NOUVEAUX CHAMPS ⭐⭐⭐ */}
+
+      {/* Boutons d'action */}
+      <div className="flex justify-end space-x-3 pt-6 border-t border-slate-200">
+        <button 
+          type="button"
+          onClick={onClose}
+          className="px-6 py-3 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors font-medium"
+        >
+          Annuler
+        </button>
+        <button 
+          type="submit"
+          disabled={isSubmitting}
+          className="px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all font-medium shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+        >
+          {isSubmitting ? (
+            <>
+              <Loader size={16} className="animate-spin" />
+              <span>Enregistrement...</span>
+            </>
+          ) : (
+            <span>{selectedRole ? 'Modifier' : 'Créer le Rôle'}</span>
           )}
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">ID du rôle *</label>
-              <input 
-                type="text"
-                value={formData.id}
-                onChange={(e) => setFormData({...formData, id: e.target.value})}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                required 
-                disabled={!!selectedRole}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Nom du rôle *</label>
-              <input 
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                required 
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
-              <input 
-                type="text"
-                value={formData.description}
-                onChange={(e) => setFormData({...formData, description: e.target.value})}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                placeholder="Description du rôle..."
-              />
-            </div>
-          </div>
-
-          <div className="pt-6 border-t border-slate-200">
-            <h5 className="font-semibold text-slate-800 mb-4 flex items-center">
-              <Shield size={16} className="mr-2 text-purple-500" />
-              Permissions du Rôle
-            </h5>
-            <div className="space-y-4">
-              {Object.entries(permissionsByCategory).map(([category, categoryPermissions]) => (
-                <div key={category} className="border border-slate-200 rounded-xl p-4 bg-slate-50">
-                  <h6 className="font-semibold text-slate-800 mb-3 text-sm uppercase tracking-wide">{category}</h6>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {categoryPermissions.map(permission => (
-                      <label key={permission.id} className="flex items-center space-x-3 p-2 hover:bg-white rounded-lg cursor-pointer transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={formData.permissions.includes(permission.id)}
-                          onChange={() => toggleRolePermission(permission.id)}
-                          className="rounded-lg border-slate-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <div>
-                          <span className="text-sm font-medium text-slate-800">{permission.name}</span>
-                          {permission.description && (
-                            <p className="text-xs text-slate-500 mt-1">{permission.description}</p>
-                          )}
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex justify-end space-x-3 pt-6 border-t border-slate-200">
-            <button 
-              type="button"
-              onClick={onClose}
-              className="px-6 py-3 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors font-medium"
-            >
-              Annuler
-            </button>
-            <button 
-              type="submit"
-              disabled={isSubmitting}
-              className="px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all font-medium shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader size={16} className="animate-spin" />
-                  <span>Enregistrement...</span>
-                </>               ) : (
-                <span>{selectedRole ? 'Modifier' : 'Créer le Rôle'}</span>
-              )}
-            </button>
-          </div>
-        </form>
+        </button>
+      </div>
+    </form>
       </div>
     </div>
   );
@@ -1796,6 +1929,8 @@ const UserManagement: React.FC = () => {
                 </span>
               </div>
             </div>
+
+            
           ))}
         </div>
       </div>
