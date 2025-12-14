@@ -56,7 +56,7 @@ const LocalisationManagement = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('access');
-      const response = await fetch('https://backendsupply.onrender.com/api/districts/', {
+      const response = await fetch('https://api.lanfialink.com/api/districts/', {
         headers: {
           'Authorization': `Bearer ${token}`,
         }
@@ -75,7 +75,7 @@ const LocalisationManagement = () => {
   const loadVilles = async (districtId?: number) => {
     try {
       const token = localStorage.getItem('access');
-      let url = 'https://backendsupply.onrender.com/api/villes/';
+      let url = 'https://api.lanfialink.com/api/villes/';
       if (districtId) {
         url += `?district=${districtId}`;
       }
@@ -96,7 +96,7 @@ const LocalisationManagement = () => {
   const loadQuartiers = async (villeId?: number) => {
     try {
       const token = localStorage.getItem('access');
-      let url = 'https://backendsupply.onrender.com/api/quartiers/';
+      let url = 'https://api.lanfialink.com/api/quartiers/';
       if (villeId) {
         url += `?ville=${villeId}`;
       }
@@ -137,8 +137,8 @@ const LocalisationManagement = () => {
     try {
       const token = localStorage.getItem('access');
       const url = editingItem 
-        ? `https://backendsupply.onrender.com/api/${activeTab}/${editingItem.id}/`
-        : `https://backendsupply.onrender.com/api/${activeTab}/`;
+        ? `https://api.lanfialink.com/api/${activeTab}/${editingItem.id}/`
+        : `https://api.lanfialink.com/api/${activeTab}/`;
       
       const method = editingItem ? 'PUT' : 'POST';
       
@@ -177,7 +177,7 @@ const LocalisationManagement = () => {
     
     try {
       const token = localStorage.getItem('access');
-      const response = await fetch(`https://backendsupply.onrender.com/api/${activeTab}/${id}/`, {
+      const response = await fetch(`https://api.lanfialink.com/api/${activeTab}/${id}/`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

@@ -25,10 +25,16 @@ interface UserProfile {
   establishment_type?: string;
   phone?: string;
   location?: string;
-  role?: number;
+  role?: {
+    id: number;
+    name: string;
+    createcommande: boolean;
+    vuecommande: boolean;
+    // autres permissions
+  };
   status?: string;
   avatar?: string | null;
-  points_of_sale?: PointOfSale[];
+  points_of_sale?: string[];
 }
 
 interface PointOfSale {
@@ -153,6 +159,9 @@ const OrderManagement = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [ordersPerPage] = useState(10);
   const [error, setError] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  
   const [newOrder, setNewOrder] = useState<NewOrder>({
     point_of_sale_id: null,
     status: null,
@@ -261,12 +270,13 @@ const OrderManagement = () => {
     }
   };
 
-  // Fetch initial data
+  // Fetch user profile and initial data
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchUserProfile = async () => {
       const token = localStorage.getItem('access');
       if (!token) {
         setError('Veuillez vous connecter.');
+        setLoading(false);
         return;
       }
       const headers = {
@@ -276,36 +286,54 @@ const OrderManagement = () => {
 
       try {
         setError(null);
-        // Fetch Orders
-        const ordersRes = await fetch('https://backendsupply.onrender.com/api/orders/', { headers });
-        if (!ordersRes.ok) throw new Error('Échec de la récupération des commandes');
-        const ordersData = await ordersRes.json();
-        setOrders(ordersData);
-        setFilteredOrders(ordersData);
+        
+        // Fetch user profile
+        const profileRes = await fetch('https://api.lanfialink.com/api/me/', { headers });
+        if (!profileRes.ok) throw new Error('Échec de la récupération du profil utilisateur');
+        const profileData = await profileRes.json();
+        setUserProfile(profileData);
 
-        // Fetch Product Variants
-        const variantsRes = await fetch('https://backendsupply.onrender.com/api/product-variants/', { headers });
+        // Set default active tab based on permissions
+        if (profileData.profile?.role?.vuecommande && !profileData.profile?.role?.createcommande) {
+          setActiveTab('received');
+        } else if (!profileData.profile?.role?.vuecommande && profileData.profile?.role?.createcommande) {
+          setActiveTab('created');
+        }
+
+        // Fetch Orders only if user has permission to view
+        if (profileData.profile?.role?.vuecommande) {
+          const ordersRes = await fetch('https://api.lanfialink.com/api/orders/', { headers });
+          if (!ordersRes.ok) throw new Error('Échec de la récupération des commandes');
+          const ordersData = await ordersRes.json();
+          setOrders(ordersData);
+          setFilteredOrders(ordersData);
+        }
+
+        // Fetch Product Variants (both views need this)
+        const variantsRes = await fetch('https://api.lanfialink.com/api/product-variants/', { headers });
         if (!variantsRes.ok) throw new Error('Échec de la récupération des variantes de produits');
         const variantsData = await variantsRes.json();
         setProductVariants(variantsData);
 
-        // Fetch Points of Sale
-        const pointsOfSaleRes = await fetch('https://backendsupply.onrender.com/api/points-vente/', { headers });
+        // Fetch Points of Sale (both views need this)
+        const pointsOfSaleRes = await fetch('https://api.lanfialink.com/api/points-vente/', { headers });
         if (!pointsOfSaleRes.ok) throw new Error('Échec de la récupération des points de vente');
         const pointsOfSaleData = await pointsOfSaleRes.json();
         setPointsOfSale(pointsOfSaleData);
 
         // Fetch Mobile Vendors
-        const vendorsRes = await fetch('https://backendsupply.onrender.com/api/mobile-vendors/', { headers });
+        const vendorsRes = await fetch('https://api.lanfialink.com/api/mobile-vendors/', { headers });
         if (vendorsRes.ok) {
           const vendorsData = await vendorsRes.json();
           setMobileVendors(vendorsData);
         }
       } catch (error: any) {
         setError(error.message);
+      } finally {
+        setLoading(false);
       }
     };
-    fetchData();
+    fetchUserProfile();
   }, []);
 
   // Filter and sort orders
@@ -406,7 +434,7 @@ const OrderManagement = () => {
     }
     try {
       setError(null);
-      const res = await fetch(`https://backendsupply.onrender.com/api/orders/${orderId}/`, {
+      const res = await fetch(`https://api.lanfialink.com/api/orders/${orderId}/`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -426,6 +454,10 @@ const OrderManagement = () => {
   };
 
   const handleEditOrder = (order: Order) => {
+    if (!userProfile?.profile?.role?.createcommande) {
+      setError('Vous n\'avez pas la permission de modifier les commandes');
+      return;
+    }
     setEditingOrder(order);
     // Convertir les items existants en format NewOrderItem
     const convertedItems: NewOrderItem[] = order.items.map(item => ({
@@ -469,7 +501,7 @@ const OrderManagement = () => {
         }))
       };
 
-      const res = await fetch(`https://backendsupply.onrender.com/api/orders/${editingOrder.id}/`, {
+      const res = await fetch(`https://api.lanfialink.com/api/orders/${editingOrder.id}/`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -603,7 +635,7 @@ const OrderManagement = () => {
     }
     try {
       setError(null);
-      const res = await fetch(`https://backendsupply.onrender.com/api/orders/${orderId}/`, {
+      const res = await fetch(`https://api.lanfialink.com/api/orders/${orderId}/`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -627,7 +659,7 @@ const OrderManagement = () => {
     try {
       setError(null);
       const promises = selectedOrders.map(orderId => 
-        fetch(`https://backendsupply.onrender.com/api/orders/${orderId}/`, {
+        fetch(`https://api.lanfialink.com/api/orders/${orderId}/`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -687,7 +719,7 @@ const OrderManagement = () => {
         throw new Error("La quantité affectée ne peut pas dépasser la quantité commandée");
       }
 
-      const response = await fetch('https://backendsupply.onrender.com/api/vendor-activities/', {
+      const response = await fetch('https://api.lanfialink.com/api/vendor-activities/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -810,7 +842,7 @@ const OrderManagement = () => {
         items: preparedItems
       };
 
-      const response = await fetch('https://backendsupply.onrender.com/api/orders/', {
+      const response = await fetch('https://api.lanfialink.com/api/orders/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -994,13 +1026,15 @@ const OrderManagement = () => {
                 ))}
               </select>
               <div className="flex gap-3">
-                <button 
-                  onClick={() => handleEditOrder(selectedOrder)}
-                  className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
-                >
-                  <Edit size={16} />
-                  Modifier
-                </button>
+                {userProfile?.profile?.role?.createcommande && (
+                  <button 
+                    onClick={() => handleEditOrder(selectedOrder)}
+                    className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
+                  >
+                    <Edit size={16} />
+                    Modifier
+                  </button>
+                )}
                 <button 
                   onClick={() => handlePrintOrder(selectedOrder)}
                   className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
@@ -1008,13 +1042,15 @@ const OrderManagement = () => {
                   <Download size={16} />
                   Imprimer
                 </button>
-                <button 
-                  onClick={() => deleteOrder(selectedOrder.id)}
-                  className="px-5 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
-                >
-                  <Trash2 size={16} />
-                  Supprimer
-                </button>
+                {userProfile?.profile?.role?.createcommande && (
+                  <button 
+                    onClick={() => deleteOrder(selectedOrder.id)}
+                    className="px-5 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
+                  >
+                    <Trash2 size={16} />
+                    Supprimer
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1329,6 +1365,39 @@ const OrderManagement = () => {
     );
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Chargement des permissions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check permissions
+  const hasViewPermission = userProfile?.profile?.role?.vuecommande || false;
+  const hasCreatePermission = userProfile?.profile?.role?.createcommande || false;
+
+  if (!hasViewPermission && !hasCreatePermission) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 max-w-md text-center">
+          <div className="p-3 bg-red-100 rounded-xl inline-block mb-4">
+            <XCircle className="text-red-600" size={48} />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">Accès refusé</h2>
+          <p className="text-gray-600 mb-6">
+            Vous n'avez pas les permissions nécessaires pour accéder à la gestion des commandes.
+            Veuillez contacter votre administrateur.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       {error && (
@@ -1343,6 +1412,12 @@ const OrderManagement = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Gestion des Commandes</h1>
             <p className="text-gray-600">Suivez et gérez l'ensemble de vos commandes</p>
+            {userProfile && (
+              <p className="text-sm text-gray-500 mt-1">
+                Connecté en tant que: <span className="font-medium">{userProfile.user?.username}</span> 
+                - Rôle: <span className="font-medium">{userProfile.profile?.role?.name}</span>
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-3 mt-4 lg:mt-0">
             <button className="px-4 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium flex items-center gap-2">
@@ -1426,604 +1501,165 @@ const OrderManagement = () => {
         </div>
       </div>
       
-      {/* Navigation par onglets */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-6">
-        <div className="flex border-b border-gray-200">
-          <button
-            className={`px-6 py-4 font-semibold flex items-center gap-3 transition-colors ${
-              activeTab === 'received' 
-                ? 'text-indigo-600 border-b-2 border-indigo-600' 
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-            onClick={() => setActiveTab('received')}
-          >
-            <List size={20} />
-            Commandes Reçues
-            <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-sm font-medium">
-              {orders.length}
-            </span>
-          </button>
-          <button
-            className={`px-6 py-4 font-semibold flex items-center gap-3 transition-colors ${
-              activeTab === 'created' 
-                ? 'text-indigo-600 border-b-2 border-indigo-600' 
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-            onClick={() => setActiveTab('created')}
-          >
-            <ShoppingCart size={20} />
-            Créer une Commande
-          </button>
+      {/* Navigation par onglets - seulement si les deux permissions sont présentes */}
+      {(hasViewPermission && hasCreatePermission) ? (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-6">
+          <div className="flex border-b border-gray-200">
+            <button
+              className={`px-6 py-4 font-semibold flex items-center gap-3 transition-colors ${
+                activeTab === 'received' 
+                  ? 'text-indigo-600 border-b-2 border-indigo-600' 
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTab('received')}
+            >
+              <List size={20} />
+              Commandes Reçues
+              <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-sm font-medium">
+                {orders.length}
+              </span>
+            </button>
+            <button
+              className={`px-6 py-4 font-semibold flex items-center gap-3 transition-colors ${
+                activeTab === 'created' 
+                  ? 'text-indigo-600 border-b-2 border-indigo-600' 
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTab('created')}
+            >
+              <ShoppingCart size={20} />
+              Créer une Commande
+            </button>
+          </div>
+          
+          {activeTab === 'received' ? (
+            <OrdersReceivedView 
+              userProfile={userProfile}
+              orders={orders}
+              filteredOrders={filteredOrders}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              dateFilter={dateFilter}
+              setDateFilter={setDateFilter}
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+              setSortBy={setSortBy}
+              setSortOrder={setSortOrder}
+              selectedOrders={selectedOrders}
+              setSelectedOrders={setSelectedOrders}
+              handleSelectOrder={handleSelectOrder}
+              handleSelectAll={handleSelectAll}
+              setShowAddModal={setShowAddModal}
+              bulkStatusUpdate={bulkStatusUpdate}
+              setShowDetailsModal={setShowDetailsModal}
+              setSelectedOrder={setSelectedOrder}
+              handleEditOrder={handleEditOrder}
+              deleteOrder={deleteOrder}
+              formatCurrency={formatCurrency}
+              getPriorityColor={getPriorityColor}
+              orderStatuses={orderStatuses}
+              currentOrders={currentOrders}
+              indexOfFirstOrder={indexOfFirstOrder}
+              indexOfLastOrder={indexOfLastOrder}
+              filteredOrdersLength={filteredOrders.length}
+              totalPages={totalPages}
+              currentPage={currentPage}
+              setCurrentPage={setCurrentPage}
+              showAddModal={showAddModal}
+              error={error}
+              newOrder={newOrder}
+              setNewOrder={setNewOrder}
+              productVariants={productVariants}
+              pointsOfSale={pointsOfSale}
+              handleCreateOrder={handleCreateOrder}
+              resetOrderForm={resetOrderForm}
+              setShowEditModal={setShowEditModal}
+              handleAddOrderItem={handleAddOrderItem}
+              handleRemoveOrderItem={handleRemoveOrderItem}
+              handleOrderItemChange={handleOrderItemChange}
+            />
+          ) : (
+            <CreateOrderView 
+              productVariants={productVariants}
+              setShowAddModal={setShowAddModal}
+              formatCurrency={formatCurrency}
+            />
+          )}
         </div>
-        
-        {activeTab === 'received' ? (
-          <div className="p-6">
-            {/* Barre d'outils */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-              <div className="flex flex-col sm:flex-row gap-4 flex-1">
-                <div className="relative flex-1 max-w-md">
-                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                  <input 
-                    type="text"
-                    placeholder="Rechercher une commande, point de vente..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full transition-colors"
-                  />
-                </div>
-                <div className="flex gap-3">
-                  <select 
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors font-medium">
-                    <option value="all">Tous les statuts</option>
-                    {Object.entries(orderStatuses).map(([key, status]) => (
-                      <option key={key} value={key}>{status.label}</option>
-                    ))}
-                  </select>
-
-                  <select 
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value)}
-                    className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors font-medium">
-                    <option value="all">Toutes les dates</option>
-                    <option value="today">Aujourd'hui</option>
-                    <option value="week">Cette semaine</option>
-                    <option value="month">Ce mois</option>
-                  </select>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <select 
-                  value={`${sortBy}-${sortOrder}`}
-                  onChange={(e) => {
-                    const [field, order] = e.target.value.split('-');
-                    setSortBy(field as keyof Order);
-                    setSortOrder(order);
-                  }}
-                  className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors font-medium">
-                  <option value="date-desc">Plus récentes</option>
-                  <option value="date-asc">Plus anciennes</option>
-                  <option value="total-desc">Montant décroissant</option>
-                  <option value="total-asc">Montant croissant</option>
-                  <option value="point_of_sale-asc">Point de vente A-Z</option>
-                  <option value="point_of_sale-desc">Point de vente Z-A</option>
-                </select>
-                <button 
-                  onClick={() => setShowAddModal(true)}
-                  className="px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors flex items-center gap-2 font-medium shadow-sm"
-                >
-                  <Plus size={18} />
-                  Nouvelle Commande
-                </button>
-              </div>
-            </div>
-
-            {/* Actions groupées */}
-            {selectedOrders.length > 0 && (
-              <div className="mb-6 p-4 bg-indigo-50 rounded-xl border border-indigo-200">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between items-center gap-4">
-                  <div className="text-sm font-semibold text-indigo-800 flex items-center gap-2">
-                    <CheckCircle size={16} />
-                    <span>{selectedOrders.length} commande(s) sélectionnée(s)</span>
-                  </div>
-                  <div className="flex gap-3">
-                    <select 
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          bulkStatusUpdate(e.target.value as OrderStatus);
-                          e.target.value = '';
-                        }
-                      }}
-                      className="px-3 py-2 text-sm border border-indigo-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-medium">
-                      <option value="">Modifier statut</option>
-                      {Object.entries(orderStatuses).map(([key, status]) => (
-                        <option key={key} value={key}>{status.label}</option>
-                      ))}
-                    </select>
-                    <button 
-                      onClick={() => setSelectedOrders([])}
-                      className="px-3 py-2 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium"
-                    >
-                      Tout désélectionner
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Tableau des commandes */}
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-6 py-4 text-left">
-                        <input 
-                          type="checkbox"
-                          checked={selectedOrders.length === filteredOrders.length && filteredOrders.length > 0}
-                          onChange={() => handleSelectAll()}
-                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                        />
-                      </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Commande</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Point de Vente</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Date</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Statut</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Priorité</th>
-                      <th className="px-6 py-4 text-right text-sm font-semibold text-gray-900">Total</th>
-                      <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {currentOrders.length > 0 ? (
-                      currentOrders.map((order) => {
-                        const statusInfo = orderStatuses[order.status];
-                        const pointOfSaleName = order.point_of_sale_details?.name || 'Point de vente inconnu';
-                        
-                        return (
-                          <tr 
-                            key={order.id} 
-                            className={`hover:bg-gray-50 transition-colors ${
-                              selectedOrders.includes(order.id) ? 'bg-indigo-25' : ''
-                            }`}
-                          >
-                            <td className="px-6 py-4">
-                              <input 
-                                type="checkbox"
-                                checked={selectedOrders.includes(order.id)}
-                                onChange={() => handleSelectOrder(order.id)}
-                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                              />
-                            </td>
-                            <td className="px-6 py-4">
-                              <div>
-                                <div className="font-semibold text-gray-900">CMD-{order.id}</div>
-                                <div className="text-sm text-gray-500 mt-1">{order.items.length} article(s)</div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div>
-                                <div className="font-semibold text-gray-900">{pointOfSaleName}</div>
-                                <div className="text-sm text-gray-500 mt-1">{order.point_of_sale_details?.address || ''}</div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="text-sm font-medium text-gray-900">
-                                {order.date ? new Date(order.date).toLocaleDateString('fr-FR') : 'Non spécifiée'}
-                              </div>
-                              <div className="text-xs text-gray-500 mt-1">
-                                Livraison: {order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('fr-FR') : 'Non spécifiée'}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${statusInfo.color} bg-white border ${statusInfo.borderColor}`}>
-                                {React.createElement(statusInfo.icon, { size: 12, className: "mr-1" })}
-                                {statusInfo.label}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center">
-                                <Star className={getPriorityColor(order.priority)} size={16} />
-                                <span className="ml-2 text-sm font-medium text-gray-700">
-                                  {order.priority === 'high' ? 'Haute' : 
-                                   order.priority === 'medium' ? 'Moyenne' : 'Basse'}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <div className="font-semibold text-gray-900">{formatCurrency(order.total)}</div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center justify-center space-x-2">
-                                <button 
-                                  onClick={() => {
-                                    setSelectedOrder(order);
-                                    setShowDetailsModal(true);
-                                  }}
-                                  className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                  title="Voir détails"
-                                >
-                                  <Eye size={18} />
-                                </button>
-                                <button 
-                                  onClick={() => handleEditOrder(order)}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                                  title="Modifier"
-                                >
-                                  <Edit size={18} />
-                                </button>
-                                <button 
-                                  onClick={() => deleteOrder(order.id)}
-                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                  title="Supprimer"
-                                >
-                                  <Trash2 size={18} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan={8} className="py-16 text-center">
-                          <div className="flex flex-col items-center justify-center">
-                            <Package className="text-gray-300 mb-4" size={64} />
-                            <h3 className="text-lg font-semibold text-gray-900 mb-2">Aucune commande trouvée</h3>
-                            <p className="text-gray-600 mb-6 max-w-md text-center">
-                              {searchTerm || statusFilter !== 'all' || dateFilter !== 'all' 
-                                ? 'Aucune commande ne correspond aux critères de recherche.'
-                                : 'Commencez par créer votre première commande pour gérer votre activité.'}
-                            </p>
-                            {(!searchTerm && statusFilter === 'all' && dateFilter === 'all') && (
-                              <button 
-                                onClick={() => setShowAddModal(true)}
-                                className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors inline-flex items-center gap-2 font-medium shadow-sm"
-                              >
-                                <Plus size={18} />
-                                Créer une Commande
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 bg-gray-50">
-                  <div className="text-sm text-gray-600 font-medium">
-                    Affichage de <span className="text-gray-900">{indexOfFirstOrder + 1}</span> à <span className="text-gray-900">{Math.min(indexOfLastOrder, filteredOrders.length)}</span> sur <span className="text-gray-900">{filteredOrders.length}</span> commandes
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button 
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                      disabled={currentPage === 1}
-                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-                    >
-                      Précédent
-                    </button>
-                    {[...Array(totalPages)].map((_, index) => {
-                      const page = index + 1;
-                      if (page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)) {
-                        return (
-                          <button
-                            key={page}
-                            onClick={() => setCurrentPage(page)}
-                            className={`px-3 py-2 text-sm border rounded-lg font-medium transition-colors ${
-                              currentPage === page 
-                                ? 'bg-indigo-600 text-white border-indigo-600' 
-                                : 'border-gray-300 hover:bg-white text-gray-700'
-                            }`}
-                          >
-                            {page}
-                          </button>
-                        );
-                      } else if (page === currentPage - 2 || page === currentPage + 2) {
-                        return <span key={page} className="text-gray-500 px-2">...</span>;
-                      }
-                      return null;
-                    })}
-                    <button 
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                      disabled={currentPage === totalPages}
-                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-                    >
-                      Suivant
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="p-8">
-            <div className="flex justify-between items-center mb-8">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">Créer une nouvelle commande</h2>
-                <p className="text-gray-600 mt-2">Sélectionnez les produits à commander</p>
-              </div>
-              <button 
-                onClick={() => setShowAddModal(true)}
-                className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors flex items-center gap-2 font-medium shadow-sm"
-              >
-                <Plus size={18} />
-                Nouvelle Commande
-              </button>
-            </div>
-            
-            {/* Grille des produits */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {productVariants.map(variant => (
-                <div key={variant.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lg text-gray-900 mb-1">{variant.product?.name || 'Produit inconnu'}</h3>
-                      <p className="text-gray-600 text-sm">{variant.format?.name || 'Sans format'}</p>
-                    </div>
-                    {variant.image && (
-                      <img 
-                        src={variant.image} 
-                        alt={`${variant.product?.name || 'Produit'} ${variant.format?.name || ''}`}
-                        className="w-16 h-16 object-cover rounded-lg"
-                      />
-                    )}
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-3 text-sm mb-4">
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <span className="text-gray-600 block mb-1">Prix:</span>
-                      <span className="font-semibold text-gray-900">{formatCurrency(variant.price)}</span>
-                    </div>
-                    <div className={`p-3 rounded-lg ${
-                      (variant.current_stock || 0) <= (variant.min_stock || 0) ? 'bg-red-50' : 
-                      (variant.current_stock || 0) >= (variant.max_stock || 0) ? 'bg-emerald-50' : 'bg-gray-50'
-                    }`}>
-                      <span className="text-gray-600 block mb-1">Stock:</span>
-                      <span className={`font-semibold ${
-                        (variant.current_stock || 0) <= (variant.min_stock || 0) ? 'text-red-600' : 
-                        (variant.current_stock || 0) >= (variant.max_stock || 0) ? 'text-emerald-600' : 'text-gray-900'
-                      }`}>
-                        {variant.current_stock || 0}
-                      </span>
-                    </div>
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <span className="text-gray-600 block mb-1">Stock min:</span>
-                      <span className="font-semibold text-gray-900">{variant.min_stock || 0}</span>
-                    </div>
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <span className="text-gray-600 block mb-1">Stock max:</span>
-                      <span className="font-semibold text-gray-900">{variant.max_stock || 0}</span>
-                    </div>
-                  </div>
-                  
-                  <button 
-                    onClick={() => {
-                      setShowAddModal(true);
-                      setNewOrder(prev => ({
-                        ...prev,
-                        items: [...prev.items, { 
-                          product_variant_id: variant.id, 
-                          quantity: 1, 
-                          price: variant.price 
-                        }]
-                      }));
-                    }}
-                    className="w-full py-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors font-medium flex items-center justify-center gap-2"
-                  >
-                    <Plus size={16} />
-                    Ajouter à la commande
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      ) : hasViewPermission ? (
+        <OrdersReceivedView 
+          userProfile={userProfile}
+          orders={orders}
+          filteredOrders={filteredOrders}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
+          dateFilter={dateFilter}
+          setDateFilter={setDateFilter}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          setSortBy={setSortBy}
+          setSortOrder={setSortOrder}
+          selectedOrders={selectedOrders}
+          setSelectedOrders={setSelectedOrders}
+          handleSelectOrder={handleSelectOrder}
+          handleSelectAll={handleSelectAll}
+          setShowAddModal={setShowAddModal}
+          bulkStatusUpdate={bulkStatusUpdate}
+          setShowDetailsModal={setShowDetailsModal}
+          setSelectedOrder={setSelectedOrder}
+          handleEditOrder={handleEditOrder}
+          deleteOrder={deleteOrder}
+          formatCurrency={formatCurrency}
+          getPriorityColor={getPriorityColor}
+          orderStatuses={orderStatuses}
+          currentOrders={currentOrders}
+          indexOfFirstOrder={indexOfFirstOrder}
+          indexOfLastOrder={indexOfLastOrder}
+          filteredOrdersLength={filteredOrders.length}
+          totalPages={totalPages}
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          showAddModal={showAddModal}
+          error={error}
+          newOrder={newOrder}
+          setNewOrder={setNewOrder}
+          productVariants={productVariants}
+          pointsOfSale={pointsOfSale}
+          handleCreateOrder={handleCreateOrder}
+          resetOrderForm={resetOrderForm}
+          setShowEditModal={setShowEditModal}
+          handleAddOrderItem={handleAddOrderItem}
+          handleRemoveOrderItem={handleRemoveOrderItem}
+          handleOrderItemChange={handleOrderItemChange}
+        />
+      ) : (
+        <CreateOrderView 
+          productVariants={productVariants}
+          setShowAddModal={setShowAddModal}
+          formatCurrency={formatCurrency}
+        />
+      )}
 
       {/* Modals */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b bg-gradient-to-r from-indigo-50 to-white">
-              <div className="flex items-center justify-between">
-                <h3 className="text-2xl font-bold text-gray-900">Nouvelle Commande</h3>
-                <button 
-                  onClick={() => setShowAddModal(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
-                >
-                  <XCircle size={24} />
-                </button>
-              </div>
-            </div>
-            <div className="p-6">
-              <form onSubmit={handleCreateOrder} className="space-y-6">
-                {error && (
-                  <div className="text-red-700 bg-red-50 p-4 rounded-xl text-sm border border-red-200 font-medium">
-                    {error}
-                  </div>
-                )}
-                
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="col-span-full">
-                    <label className="block text-sm font-semibold text-gray-900 mb-3">
-                      <MapPin className="inline w-4 h-4 mr-2 text-indigo-600" />
-                      Point de vente *
-                    </label>
-                    <select
-                      required
-                      value={newOrder.point_of_sale_id || ''}
-                      onChange={(e) => setNewOrder({...newOrder, point_of_sale_id: parseInt(e.target.value) || null})}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
-                    >
-                      <option value="">Sélectionner un point de vente</option>
-                      {pointsOfSale.map(pos => (
-                        <option key={pos.id} value={pos.id}>
-                          {pos.name} - {pos.address || 'Adresse non spécifiée'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-            
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-3">
-                      <Star className="inline w-4 h-4 mr-2 text-indigo-600" />
-                      Priorité *
-                    </label>
-                    <select 
-                      value={newOrder.priority}
-                      onChange={(e) => setNewOrder({...newOrder, priority: e.target.value as 'low' | 'medium' | 'high'})}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors">
-                      <option value="low">Basse</option>
-                      <option value="medium">Moyenne</option>
-                      <option value="high">Haute</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-3">
-                      <Calendar className="inline w-4 h-4 mr-2 text-indigo-600" />
-                      Date de Commande *
-                    </label>
-                    <input 
-                      type="date"
-                      required
-                      value={newOrder.date}
-                      onChange={(e) => setNewOrder({...newOrder, date: e.target.value})}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-3">
-                      <Calendar className="inline w-4 h-4 mr-2 text-indigo-600" />
-                      Date de Livraison *
-                    </label>
-                    <input 
-                      type="date"
-                      required
-                      value={newOrder.delivery_date}
-                      onChange={(e) => setNewOrder({...newOrder, delivery_date: e.target.value})}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
-                    />
-                  </div>
-                </div>
-                
-                <div className="col-span-full">
-                  <label className="block text-sm font-semibold text-gray-900 mb-4">
-                    <Package className="inline w-4 h-4 mr-2 text-indigo-600" />
-                    Articles à commander
-                  </label>
-                  <div className="border border-gray-300 rounded-xl p-6 space-y-4 bg-gray-50">
-                    <div className="grid grid-cols-12 gap-3 text-sm font-semibold text-gray-900">
-                      <div className="col-span-5">Produit</div>
-                      <div className="col-span-2">Format</div>
-                      <div className="col-span-2">Quantité</div>
-                      <div className="col-span-2">Prix Unitaire</div>
-                      <div className="col-span-1">Total</div>
-                    </div>
-                    {newOrder.items.map((item, index) => {
-                      const variant = productVariants.find(v => v.id === item.product_variant_id);
-                      return (
-                        <div key={index} className="grid grid-cols-12 gap-3 items-center bg-white p-3 rounded-lg border border-gray-200">
-                          <div className="col-span-5">
-                            <select 
-                              required
-                              value={item.product_variant_id}
-                              onChange={(e) => handleOrderItemChange(index, 'product_variant_id', parseInt(e.target.value))}
-                              className="w-full text-sm border border-gray-300 px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors">
-                              <option value="0">Sélectionner un produit</option>
-                              {productVariants.map(v => (
-                                <option key={v.id} value={v.id}>
-                                  {v.product?.name || 'Produit inconnu'} - {v.format?.name || 'Sans format'}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="col-span-2 text-sm text-gray-600 font-medium">
-                            {variant?.format?.name || '-'}
-                          </div>
-                          <div className="col-span-2">
-                            <input 
-                              type="number"
-                              required
-                              min="1"
-                              max={variant?.current_stock || 1}
-                              value={item.quantity}
-                              onChange={(e) => handleOrderItemChange(index, 'quantity', parseInt(e.target.value))}
-                              className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
-                              placeholder="Qty"
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <input 
-                              type="text"
-                              readOnly
-                              value={formatCurrency(item.price)}
-                              className="w-full px-4 py-2.5 text-sm border text-gray-600 bg-gray-100 rounded-lg font-medium"
-                            />
-                          </div>
-                          <div className="col-span-1 flex items-center text-sm font-semibold text-gray-900">
-                            {formatCurrency((parseFloat(item.price) * item.quantity).toString())}
-                            <button 
-                              type="button"
-                              onClick={() => handleRemoveOrderItem(index)}
-                              className="ml-2 text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
-                            >
-                              <XCircle size={16} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <button 
-                      type="button"
-                      onClick={handleAddOrderItem}
-                      className="w-full py-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-600 hover:text-gray-700 hover:border-gray-400 transition-colors bg-white flex items-center justify-center gap-2 font-medium"
-                    >
-                      <Plus size={16} />
-                      Ajouter un article
-                    </button>
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-3">
-                    <FileText className="inline w-4 h-4 mr-2 text-indigo-600" />
-                    Notes
-                  </label>
-                  <textarea 
-                    value={newOrder.notes}
-                    onChange={(e) => setNewOrder({...newOrder, notes: e.target.value})}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors resize-none"
-                    rows={4}
-                    placeholder="Instructions spéciales, remarques..."
-                  />
-                </div>
-                
-                <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-                  <button 
-                    type="button"
-                    onClick={() => setShowAddModal(false)}
-                    className="px-6 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
-                  >
-                    Annuler
-                  </button>
-                  <button 
-                    type="submit"
-                    className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm"
-                  >
-                    Créer la Commande
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
+        <AddOrderModal 
+          showAddModal={showAddModal}
+          setShowAddModal={setShowAddModal}
+          error={error}
+          newOrder={newOrder}
+          setNewOrder={setNewOrder}
+          productVariants={productVariants}
+          pointsOfSale={pointsOfSale}
+          handleCreateOrder={handleCreateOrder}
+          formatCurrency={formatCurrency}
+          handleAddOrderItem={handleAddOrderItem}
+          handleRemoveOrderItem={handleRemoveOrderItem}
+          handleOrderItemChange={handleOrderItemChange}
+        />
       )}
       
       {showDetailsModal && <OrderDetailsModal />}
@@ -2032,5 +1668,635 @@ const OrderManagement = () => {
     </div>
   );
 };
+
+// Composant pour la vue "Commandes Reçues"
+const OrdersReceivedView = ({
+  userProfile,
+  orders,
+  filteredOrders,
+  searchTerm,
+  setSearchTerm,
+  statusFilter,
+  setStatusFilter,
+  dateFilter,
+  setDateFilter,
+  sortBy,
+  sortOrder,
+  setSortBy,
+  setSortOrder,
+  selectedOrders,
+  setSelectedOrders,
+  handleSelectOrder,
+  handleSelectAll,
+  setShowAddModal,
+  bulkStatusUpdate,
+  setShowDetailsModal,
+  setSelectedOrder,
+  handleEditOrder,
+  deleteOrder,
+  formatCurrency,
+  getPriorityColor,
+  orderStatuses,
+  currentOrders,
+  indexOfFirstOrder,
+  indexOfLastOrder,
+  filteredOrdersLength,
+  totalPages,
+  currentPage,
+  setCurrentPage,
+  showAddModal,
+  error,
+  newOrder,
+  setNewOrder,
+  productVariants,
+  pointsOfSale,
+  handleCreateOrder,
+  resetOrderForm,
+  setShowEditModal,
+  handleAddOrderItem,
+  handleRemoveOrderItem,
+  handleOrderItemChange
+}: any) => (
+  <div className="p-6">
+    {/* Barre d'outils */}
+    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row gap-4 flex-1">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+          <input 
+            type="text"
+            placeholder="Rechercher une commande, point de vente..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full transition-colors"
+          />
+        </div>
+        <div className="flex gap-3">
+          <select 
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors font-medium">
+            <option value="all">Tous les statuts</option>
+            {Object.entries(orderStatuses).map(([key, status]) => (
+              <option key={key} value={key}>{status.label}</option>
+            ))}
+          </select>
+
+          <select 
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors font-medium">
+            <option value="all">Toutes les dates</option>
+            <option value="today">Aujourd'hui</option>
+            <option value="week">Cette semaine</option>
+            <option value="month">Ce mois</option>
+          </select>
+        </div>
+      </div>
+      <div className="flex gap-3">
+        <select 
+          value={`${sortBy}-${sortOrder}`}
+          onChange={(e) => {
+            const [field, order] = e.target.value.split('-');
+            setSortBy(field as keyof any);
+            setSortOrder(order);
+          }}
+          className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors font-medium">
+          <option value="date-desc">Plus récentes</option>
+          <option value="date-asc">Plus anciennes</option>
+          <option value="total-desc">Montant décroissant</option>
+          <option value="total-asc">Montant croissant</option>
+          <option value="point_of_sale-asc">Point de vente A-Z</option>
+          <option value="point_of_sale-desc">Point de vente Z-A</option>
+        </select>
+        {userProfile?.profile?.role?.createcommande && (
+          <button 
+            onClick={() => setShowAddModal(true)}
+            className="px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors flex items-center gap-2 font-medium shadow-sm"
+          >
+            <Plus size={18} />
+            Nouvelle Commande
+          </button>
+        )}
+      </div>
+    </div>
+
+    {/* Actions groupées */}
+    {selectedOrders.length > 0 && (
+      <div className="mb-6 p-4 bg-indigo-50 rounded-xl border border-indigo-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between items-center gap-4">
+          <div className="text-sm font-semibold text-indigo-800 flex items-center gap-2">
+            <CheckCircle size={16} />
+            <span>{selectedOrders.length} commande(s) sélectionnée(s)</span>
+          </div>
+          <div className="flex gap-3">
+            <select 
+              onChange={(e) => {
+                if (e.target.value) {
+                  bulkStatusUpdate(e.target.value as any);
+                  e.target.value = '';
+                }
+              }}
+              className="px-3 py-2 text-sm border border-indigo-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-medium">
+              <option value="">Modifier statut</option>
+              {Object.entries(orderStatuses).map(([key, status]) => (
+                <option key={key} value={key}>{status.label}</option>
+              ))}
+            </select>
+            <button 
+              onClick={() => setSelectedOrders([])}
+              className="px-3 py-2 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium"
+            >
+              Tout désélectionner
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Tableau des commandes */}
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th className="px-6 py-4 text-left">
+                <input 
+                  type="checkbox"
+                  checked={selectedOrders.length === filteredOrders.length && filteredOrders.length > 0}
+                  onChange={() => handleSelectAll()}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+              </th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Commande</th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Point de Vente</th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Date</th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Statut</th>
+              <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Priorité</th>
+              <th className="px-6 py-4 text-right text-sm font-semibold text-gray-900">Total</th>
+              <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {currentOrders.length > 0 ? (
+              currentOrders.map((order: any) => {
+                const statusInfo = orderStatuses[order.status];
+                const pointOfSaleName = order.point_of_sale_details?.name || 'Point de vente inconnu';
+                
+                return (
+                  <tr 
+                    key={order.id} 
+                    className={`hover:bg-gray-50 transition-colors ${
+                      selectedOrders.includes(order.id) ? 'bg-indigo-25' : ''
+                    }`}
+                  >
+                    <td className="px-6 py-4">
+                      <input 
+                        type="checkbox"
+                        checked={selectedOrders.includes(order.id)}
+                        onChange={() => handleSelectOrder(order.id)}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                    </td>
+                    <td className="px-6 py-4">
+                      <div>
+                        <div className="font-semibold text-gray-900">CMD-{order.id}</div>
+                        <div className="text-sm text-gray-500 mt-1">{order.items.length} article(s)</div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div>
+                        <div className="font-semibold text-gray-900">{pointOfSaleName}</div>
+                        <div className="text-sm text-gray-500 mt-1">{order.point_of_sale_details?.address || ''}</div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900">
+                        {order.date ? new Date(order.date).toLocaleDateString('fr-FR') : 'Non spécifiée'}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        Livraison: {order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('fr-FR') : 'Non spécifiée'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${statusInfo.color} bg-white border ${statusInfo.borderColor}`}>
+                        {React.createElement(statusInfo.icon, { size: 12, className: "mr-1" })}
+                        {statusInfo.label}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center">
+                        <Star className={getPriorityColor(order.priority)} size={16} />
+                        <span className="ml-2 text-sm font-medium text-gray-700">
+                          {order.priority === 'high' ? 'Haute' : 
+                           order.priority === 'medium' ? 'Moyenne' : 'Basse'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="font-semibold text-gray-900">{formatCurrency(order.total)}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-center space-x-2">
+                        <button 
+                          onClick={() => {
+                            setSelectedOrder(order);
+                            setShowDetailsModal(true);
+                          }}
+                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          title="Voir détails"
+                        >
+                          <Eye size={18} />
+                        </button>
+                        {userProfile?.profile?.role?.createcommande && (
+                          <>
+                            <button 
+                              onClick={() => handleEditOrder(order)}
+                              className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                              title="Modifier"
+                            >
+                              <Edit size={18} />
+                            </button>
+                            <button 
+                              onClick={() => deleteOrder(order.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Supprimer"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td colSpan={8} className="py-16 text-center">
+                  <div className="flex flex-col items-center justify-center">
+                    <Package className="text-gray-300 mb-4" size={64} />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Aucune commande trouvée</h3>
+                    <p className="text-gray-600 mb-6 max-w-md text-center">
+                      {searchTerm || statusFilter !== 'all' || dateFilter !== 'all' 
+                        ? 'Aucune commande ne correspond aux critères de recherche.'
+                        : 'Aucune commande n\'a été trouvée.'}
+                    </p>
+                    {userProfile?.profile?.role?.createcommande && (!searchTerm && statusFilter === 'all' && dateFilter === 'all') && (
+                      <button 
+                        onClick={() => setShowAddModal(true)}
+                        className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors inline-flex items-center gap-2 font-medium shadow-sm"
+                      >
+                        <Plus size={18} />
+                        Créer une Commande
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 bg-gray-50">
+          <div className="text-sm text-gray-600 font-medium">
+            Affichage de <span className="text-gray-900">{indexOfFirstOrder + 1}</span> à <span className="text-gray-900">{Math.min(indexOfLastOrder, filteredOrdersLength)}</span> sur <span className="text-gray-900">{filteredOrdersLength}</span> commandes
+          </div>
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={() => setCurrentPage((prev: number) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+            >
+              Précédent
+            </button>
+            {[...Array(totalPages)].map((_, index) => {
+              const page = index + 1;
+              if (page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)) {
+                return (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-2 text-sm border rounded-lg font-medium transition-colors ${
+                      currentPage === page 
+                        ? 'bg-indigo-600 text-white border-indigo-600' 
+                        : 'border-gray-300 hover:bg-white text-gray-700'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                );
+              } else if (page === currentPage - 2 || page === currentPage + 2) {
+                return <span key={page} className="text-gray-500 px-2">...</span>;
+              }
+              return null;
+            })}
+            <button 
+              onClick={() => setCurrentPage((prev: number) => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+            >
+              Suivant
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+// Composant pour la vue "Créer une Commande"
+const CreateOrderView = ({ productVariants, setShowAddModal, formatCurrency }: any) => (
+  <div className="p-8">
+    <div className="flex justify-between items-center mb-8">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">Créer une nouvelle commande</h2>
+        <p className="text-gray-600 mt-2">Sélectionnez les produits à commander</p>
+      </div>
+      <button 
+        onClick={() => setShowAddModal(true)}
+        className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors flex items-center gap-2 font-medium shadow-sm"
+      >
+        <Plus size={18} />
+        Nouvelle Commande
+      </button>
+    </div>
+    
+    {/* Grille des produits */}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {productVariants.map((variant: any) => (
+        <div key={variant.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex-1">
+              <h3 className="font-semibold text-lg text-gray-900 mb-1">{variant.product?.name || 'Produit inconnu'}</h3>
+              <p className="text-gray-600 text-sm">{variant.format?.name || 'Sans format'}</p>
+            </div>
+            {variant.image && (
+              <img 
+                src={variant.image} 
+                alt={`${variant.product?.name || 'Produit'} ${variant.format?.name || ''}`}
+                className="w-16 h-16 object-cover rounded-lg"
+              />
+            )}
+          </div>
+          
+          <div className="grid grid-cols-2 gap-3 text-sm mb-4">
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <span className="text-gray-600 block mb-1">Prix:</span>
+              <span className="font-semibold text-gray-900">{formatCurrency(variant.price)}</span>
+            </div>
+            <div className={`p-3 rounded-lg ${
+              (variant.current_stock || 0) <= (variant.min_stock || 0) ? 'bg-red-50' : 
+              (variant.current_stock || 0) >= (variant.max_stock || 0) ? 'bg-emerald-50' : 'bg-gray-50'
+            }`}>
+              <span className="text-gray-600 block mb-1">Stock:</span>
+              <span className={`font-semibold ${
+                (variant.current_stock || 0) <= (variant.min_stock || 0) ? 'text-red-600' : 
+                (variant.current_stock || 0) >= (variant.max_stock || 0) ? 'text-emerald-600' : 'text-gray-900'
+              }`}>
+                {variant.current_stock || 0}
+              </span>
+            </div>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <span className="text-gray-600 block mb-1">Stock min:</span>
+              <span className="font-semibold text-gray-900">{variant.min_stock || 0}</span>
+            </div>
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <span className="text-gray-600 block mb-1">Stock max:</span>
+              <span className="font-semibold text-gray-900">{variant.max_stock || 0}</span>
+            </div>
+          </div>
+          
+          <button 
+            onClick={() => {
+              setShowAddModal(true);
+            }}
+            className="w-full py-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors font-medium flex items-center justify-center gap-2"
+          >
+            <Plus size={16} />
+            Ajouter à la commande
+          </button>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+// Composant pour le modal d'ajout de commande
+const AddOrderModal = ({
+  showAddModal,
+  setShowAddModal,
+  error,
+  newOrder,
+  setNewOrder,
+  productVariants,
+  pointsOfSale,
+  handleCreateOrder,
+  formatCurrency,
+  handleAddOrderItem,
+  handleRemoveOrderItem,
+  handleOrderItemChange
+}: any) => (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="p-6 border-b bg-gradient-to-r from-indigo-50 to-white">
+        <div className="flex items-center justify-between">
+          <h3 className="text-2xl font-bold text-gray-900">Nouvelle Commande</h3>
+          <button 
+            onClick={() => setShowAddModal(false)}
+            className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
+          >
+            <XCircle size={24} />
+          </button>
+        </div>
+      </div>
+      <div className="p-6">
+        <form onSubmit={handleCreateOrder} className="space-y-6">
+          {error && (
+            <div className="text-red-700 bg-red-50 p-4 rounded-xl text-sm border border-red-200 font-medium">
+              {error}
+            </div>
+          )}
+          
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="col-span-full">
+              <label className="block text-sm font-semibold text-gray-900 mb-3">
+                <MapPin className="inline w-4 h-4 mr-2 text-indigo-600" />
+                Point de vente *
+              </label>
+              <select
+                required
+                value={newOrder.point_of_sale_id || ''}
+                onChange={(e) => setNewOrder({...newOrder, point_of_sale_id: parseInt(e.target.value) || null})}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
+              >
+                <option value="">Sélectionner un point de vente</option>
+                {pointsOfSale.map((pos: any) => (
+                  <option key={pos.id} value={pos.id}>
+                    {pos.name} - {pos.address || 'Adresse non spécifiée'}
+                  </option>
+                ))}
+              </select>
+            </div>
+      
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-3">
+                <Star className="inline w-4 h-4 mr-2 text-indigo-600" />
+                Priorité *
+              </label>
+              <select 
+                value={newOrder.priority}
+                onChange={(e) => setNewOrder({...newOrder, priority: e.target.value as 'low' | 'medium' | 'high'})}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors">
+                <option value="low">Basse</option>
+                <option value="medium">Moyenne</option>
+                <option value="high">Haute</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-3">
+                <Calendar className="inline w-4 h-4 mr-2 text-indigo-600" />
+                Date de Commande *
+              </label>
+              <input 
+                type="date"
+                required
+                value={newOrder.date}
+                onChange={(e) => setNewOrder({...newOrder, date: e.target.value})}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-3">
+                <Calendar className="inline w-4 h-4 mr-2 text-indigo-600" />
+                Date de Livraison *
+              </label>
+              <input 
+                type="date"
+                required
+                value={newOrder.delivery_date}
+                onChange={(e) => setNewOrder({...newOrder, delivery_date: e.target.value})}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
+              />
+            </div>
+          </div>
+          
+          <div className="col-span-full">
+            <label className="block text-sm font-semibold text-gray-900 mb-4">
+              <Package className="inline w-4 h-4 mr-2 text-indigo-600" />
+              Articles à commander
+            </label>
+            <div className="border border-gray-300 rounded-xl p-6 space-y-4 bg-gray-50">
+              <div className="grid grid-cols-12 gap-3 text-sm font-semibold text-gray-900">
+                <div className="col-span-5">Produit</div>
+                <div className="col-span-2">Format</div>
+                <div className="col-span-2">Quantité</div>
+                <div className="col-span-2">Prix Unitaire</div>
+                <div className="col-span-1">Total</div>
+              </div>
+              {newOrder.items.map((item: any, index: number) => {
+                const variant = productVariants.find((v: any) => v.id === item.product_variant_id);
+                return (
+                  <div key={index} className="grid grid-cols-12 gap-3 items-center bg-white p-3 rounded-lg border border-gray-200">
+                    <div className="col-span-5">
+                      <select 
+                        required
+                        value={item.product_variant_id}
+                        onChange={(e) => handleOrderItemChange(index, 'product_variant_id', parseInt(e.target.value))}
+                        className="w-full text-sm border border-gray-300 px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors">
+                        <option value="0">Sélectionner un produit</option>
+                        {productVariants.map((v: any) => (
+                          <option key={v.id} value={v.id}>
+                            {v.product?.name || 'Produit inconnu'} - {v.format?.name || 'Sans format'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-2 text-sm text-gray-600 font-medium">
+                      {variant?.format?.name || '-'}
+                    </div>
+                    <div className="col-span-2">
+                      <input 
+                        type="number"
+                        required
+                        min="1"
+                        max={variant?.current_stock || 1}
+                        value={item.quantity}
+                        onChange={(e) => handleOrderItemChange(index, 'quantity', parseInt(e.target.value))}
+                        className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
+                        placeholder="Qty"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <input 
+                        type="text"
+                        readOnly
+                        value={formatCurrency(item.price)}
+                        className="w-full px-4 py-2.5 text-sm border text-gray-600 bg-gray-100 rounded-lg font-medium"
+                      />
+                    </div>
+                    <div className="col-span-1 flex items-center text-sm font-semibold text-gray-900">
+                      {formatCurrency((parseFloat(item.price) * item.quantity).toString())}
+                      <button 
+                        type="button"
+                        onClick={() => handleRemoveOrderItem(index)}
+                        className="ml-2 text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
+                      >
+                        <XCircle size={16} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              <button 
+                type="button"
+                onClick={handleAddOrderItem}
+                className="w-full py-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-600 hover:text-gray-700 hover:border-gray-400 transition-colors bg-white flex items-center justify-center gap-2 font-medium"
+              >
+                <Plus size={16} />
+                Ajouter un article
+              </button>
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-semibold text-gray-900 mb-3">
+              <FileText className="inline w-4 h-4 mr-2 text-indigo-600" />
+              Notes
+            </label>
+            <textarea 
+              value={newOrder.notes}
+              onChange={(e) => setNewOrder({...newOrder, notes: e.target.value})}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors resize-none"
+              rows={4}
+              placeholder="Instructions spéciales, remarques..."
+            />
+          </div>
+          
+          <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+            <button 
+              type="button"
+              onClick={() => setShowAddModal(false)}
+              className="px-6 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+            >
+              Annuler
+            </button>
+            <button 
+              type="submit"
+              className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm"
+            >
+              Créer la Commande
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+);
 
 export default OrderManagement;

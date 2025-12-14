@@ -1,5 +1,5 @@
 // ApiService.ts
-const API_BASE_URL = 'https://backendsupply.onrender.com/api';
+const API_BASE_URL = 'https://api.lanfialink.com/api';
 
 class ApiService {
   private baseURL: string;

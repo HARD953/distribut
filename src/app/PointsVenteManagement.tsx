@@ -52,7 +52,7 @@ interface PointOfSale {
 }
 
 const PointsVenteManagement = () => {
-  const API_BASE_URL = 'https://backendsupply.onrender.com/api';
+  const API_BASE_URL = 'https://api.lanfialink.com/api';
   const [pointsVente, setPointsVente] = useState<PointOfSale[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

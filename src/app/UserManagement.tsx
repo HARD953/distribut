@@ -31,8 +31,9 @@ interface Role {
   geolocalisation?: boolean;
   configuration?: boolean;
   positions?: boolean;
+  createcommande?: boolean;
+  vuecommande?: boolean;
 }
-
 
 interface Permission {
   id: string;
@@ -114,6 +115,8 @@ interface NewRole {
   geolocalisation?: boolean;
   configuration?: boolean;
   positions?: boolean;
+  createcommande?: boolean;
+  vuecommande?: boolean;
 }
 
 interface Supplier {
@@ -1214,6 +1217,10 @@ useEffect(() => {
         geolocalisation: selectedRole.geolocalisation || false,
         configuration: selectedRole.configuration || false,
         positions: selectedRole.positions || false,
+
+        createcommande: selectedRole.createcommande || false,
+        vuecommande: selectedRole.vuecommande || false,
+
       });
     } else {
       setFormData({
@@ -1233,6 +1240,9 @@ useEffect(() => {
         geolocalisation: false,
         configuration: false,
         positions: false,
+
+        createcommande: false,
+        vuecommande: false,
       });
     }
     setFormError(null);
@@ -1273,6 +1283,9 @@ const handleSubmit = async (e: React.FormEvent) => {
       geolocalisation: formData.geolocalisation,
       configuration: formData.configuration,
       positions: formData.positions,
+
+      createcommande: formData.createcommande,
+      vuecommande: formData.vuecommande,
     };
     
     let res;
@@ -1433,6 +1446,8 @@ const handleSubmit = async (e: React.FormEvent) => {
             { key: 'geolocalisation', label: 'Géolocalisation' },
             { key: 'configuration', label: 'Configurations' },
             { key: 'positions', label: 'Positions' },
+            { key: 'createcommande', label: 'Createcommande' },
+            { key: 'vuecommande', label: 'Vuecommande' },
           ].map((module) => (
             <label key={module.key} className="flex items-center space-x-3 p-3 border border-slate-200 rounded-xl hover:border-slate-300 cursor-pointer transition-colors">
               <input
