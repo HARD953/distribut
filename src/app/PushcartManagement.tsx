@@ -536,55 +536,61 @@ const PushcartManagement = () => {
   };
 
   // Exporter les données
-  const exportData = () => {
-    const dataToExport = activeTab === 'pushcart' ? filteredPurchases : filteredPurchasesPOS;
-    
-    const csvContent = activeTab === 'pushcart' 
-      ? [
-          ['Nom complet', 'Zone', 'Base', 'Type', 'Téléphone', 'Date', 'Montant total', 'Quantité'],
-          ...dataToExport.map(p => [
-            (p as Purchase).full_name,
-            p.zone,
-            (p as Purchase).base,
-            (p as Purchase).pushcard_type,
-            p.phone,
-            formatDate((p as Purchase).purchase_date),
-            p.total_sales_amount,
-            p.total_sales_quantity
-          ])
-        ]
-      : [
-          ['Nom', 'Propriétaire', 'Téléphone', 'Email', 'Adresse', 'District', 'Région', 'Commune', 'Type', 'Statut', 'Date d\'enregistrement', 'Chiffre d\'affaires'],
-          ...dataToExport.map(p => [
-            (p as PurchasePOS).name,
-            p.owner,
-            p.phone,
-            p.email,
-            p.address,
-            p.district,
-            p.region,
-            p.commune,
-            p.type,
-            p.status,
-            formatDate(p.registration_date),
-            p.turnover
-          ])
-        ];
+// Exporter les données
+const exportData = () => {
+  const dataToExport = activeTab === 'pushcart' ? filteredPurchases : filteredPurchasesPOS;
+  
+  const csvContent = activeTab === 'pushcart' 
+    ? [
+        ['Nom complet', 'Zone', 'Base', 'Type', 'Téléphone', 'Date', 'Montant total', 'Quantité'],
+        ...dataToExport.map(p => {
+          const purchase = p as Purchase;
+          return [
+            purchase.full_name,
+            purchase.zone,
+            purchase.base,
+            purchase.pushcard_type,
+            purchase.phone,
+            formatDate(purchase.purchase_date),
+            purchase.total_sales_amount,
+            purchase.total_sales_quantity
+          ];
+        })
+      ]
+    : [
+        ['Nom', 'Propriétaire', 'Téléphone', 'Email', 'Adresse', 'District', 'Région', 'Commune', 'Type', 'Statut', 'Date d\'enregistrement', 'Chiffre d\'affaires'],
+        ...dataToExport.map(p => {
+          const purchase = p as PurchasePOS;
+          return [
+            purchase.name,
+            purchase.owner,
+            purchase.phone,
+            purchase.email,
+            purchase.address,
+            purchase.district,
+            purchase.region,
+            purchase.commune,
+            purchase.type,
+            purchase.status,
+            formatDate(purchase.registration_date),
+            purchase.turnover
+          ];
+        })
+      ];
 
-    const content = csvContent.map(row => row.join(',')).join('\n');
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    
-    link.setAttribute('href', url);
-    link.setAttribute('download', `${activeTab === 'pushcart' ? 'pushcarts' : 'points_de_vente'}_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
+  const content = csvContent.map(row => row.join(',')).join('\n');
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  
+  link.setAttribute('href', url);
+  link.setAttribute('download', `${activeTab === 'pushcart' ? 'pushcarts' : 'points_de_vente'}_${new Date().toISOString().split('T')[0]}.csv`);
+  link.style.visibility = 'hidden';
+  
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
   // Générer les numéros de page à afficher
   const getPageNumbers = (currentPage: number, totalPages: number) => {
     const pageNumbers = [];

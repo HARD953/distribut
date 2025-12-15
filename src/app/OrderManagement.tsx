@@ -294,14 +294,14 @@ const OrderManagement = () => {
         setUserProfile(profileData);
 
         // Set default active tab based on permissions
-        if (profileData.profile?.role?.vuecommande && !profileData.profile?.role?.createcommande) {
+        if (profileData.role?.vuecommande && !profileData.role?.createcommande) {
           setActiveTab('received');
-        } else if (!profileData.profile?.role?.vuecommande && profileData.profile?.role?.createcommande) {
+        } else if (!profileData.role?.vuecommande && profileData.role?.createcommande) {
           setActiveTab('created');
         }
 
         // Fetch Orders only if user has permission to view
-        if (profileData.profile?.role?.vuecommande) {
+        if (profileData.role?.vuecommande) {
           const ordersRes = await fetch('https://api.lanfialink.com/api/orders/', { headers });
           if (!ordersRes.ok) throw new Error('Échec de la récupération des commandes');
           const ordersData = await ordersRes.json();
@@ -454,7 +454,7 @@ const OrderManagement = () => {
   };
 
   const handleEditOrder = (order: Order) => {
-    if (!userProfile?.profile?.role?.createcommande) {
+    if (!userProfile?.role?.createcommande) {
       setError('Vous n\'avez pas la permission de modifier les commandes');
       return;
     }
@@ -1026,7 +1026,7 @@ const OrderManagement = () => {
                 ))}
               </select>
               <div className="flex gap-3">
-                {userProfile?.profile?.role?.createcommande && (
+                {userProfile?.role?.createcommande && (
                   <button 
                     onClick={() => handleEditOrder(selectedOrder)}
                     className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
@@ -1042,7 +1042,7 @@ const OrderManagement = () => {
                   <Download size={16} />
                   Imprimer
                 </button>
-                {userProfile?.profile?.role?.createcommande && (
+                {userProfile?.role?.createcommande && (
                   <button 
                     onClick={() => deleteOrder(selectedOrder.id)}
                     className="px-5 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
@@ -1378,8 +1378,8 @@ const OrderManagement = () => {
   }
 
   // Check permissions
-  const hasViewPermission = userProfile?.profile?.role?.vuecommande || false;
-  const hasCreatePermission = userProfile?.profile?.role?.createcommande || false;
+  const hasViewPermission = userProfile?.role?.vuecommande || false;
+  const hasCreatePermission = userProfile?.role?.createcommande || false;
 
   if (!hasViewPermission && !hasCreatePermission) {
     return (
@@ -1415,7 +1415,7 @@ const OrderManagement = () => {
             {userProfile && (
               <p className="text-sm text-gray-500 mt-1">
                 Connecté en tant que: <span className="font-medium">{userProfile.user?.username}</span> 
-                - Rôle: <span className="font-medium">{userProfile.profile?.role?.name}</span>
+                - Rôle: <span className="font-medium">{userProfile.role?.name}</span>
               </p>
             )}
           </div>
@@ -1737,7 +1737,7 @@ const OrdersReceivedView = ({
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors font-medium">
             <option value="all">Tous les statuts</option>
-            {Object.entries(orderStatuses).map(([key, status]) => (
+            {Object.entries(orderStatuses).map(([key, status]: [string, any]) => (
               <option key={key} value={key}>{status.label}</option>
             ))}
           </select>
@@ -1769,7 +1769,7 @@ const OrdersReceivedView = ({
           <option value="point_of_sale-asc">Point de vente A-Z</option>
           <option value="point_of_sale-desc">Point de vente Z-A</option>
         </select>
-        {userProfile?.profile?.role?.createcommande && (
+        {userProfile?.role?.createcommande && (
           <button 
             onClick={() => setShowAddModal(true)}
             className="px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors flex items-center gap-2 font-medium shadow-sm"
@@ -1799,7 +1799,7 @@ const OrdersReceivedView = ({
               }}
               className="px-3 py-2 text-sm border border-indigo-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-medium">
               <option value="">Modifier statut</option>
-              {Object.entries(orderStatuses).map(([key, status]) => (
+              {Object.entries(orderStatuses).map(([key, status]: [string, any]) => (
                 <option key={key} value={key}>{status.label}</option>
               ))}
             </select>
@@ -1908,7 +1908,7 @@ const OrdersReceivedView = ({
                         >
                           <Eye size={18} />
                         </button>
-                        {userProfile?.profile?.role?.createcommande && (
+                        {userProfile?.role?.createcommande && (
                           <>
                             <button 
                               onClick={() => handleEditOrder(order)}
@@ -1942,7 +1942,7 @@ const OrdersReceivedView = ({
                         ? 'Aucune commande ne correspond aux critères de recherche.'
                         : 'Aucune commande n\'a été trouvée.'}
                     </p>
-                    {userProfile?.profile?.role?.createcommande && (!searchTerm && statusFilter === 'all' && dateFilter === 'all') && (
+                    {userProfile?.role?.createcommande && (!searchTerm && statusFilter === 'all' && dateFilter === 'all') && (
                       <button 
                         onClick={() => setShowAddModal(true)}
                         className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors inline-flex items-center gap-2 font-medium shadow-sm"
