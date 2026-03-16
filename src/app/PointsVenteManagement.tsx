@@ -48,7 +48,7 @@ interface PointOfSale {
   avatar: string;
   brander: boolean;
   marque_brander: string | null;
-  branding_image: string | null; // Ajout de l'image de branding
+  branding_image: string | null;
 }
 
 const PointsVenteManagement = () => {
@@ -78,12 +78,13 @@ const PointsVenteManagement = () => {
     avatar: '',
     brander: false,
     marque_brander: '',
-    branding_image: '' // Ajout
+    branding_image: ''
   });
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [editingPoint, setEditingPoint] = useState<PointOfSale | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [brandingImageFile, setBrandingImageFile] = useState<File | null>(null);
   
   // États pour la pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -150,31 +151,56 @@ const PointsVenteManagement = () => {
   // Gestion du fichier avatar
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setAvatarFile(e.target.files[0]);
+      const file = e.target.files[0];
+      setAvatarFile(file);
       
-      // Prévisualisation pour l'ajout
-      if (showAddModal) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        // Pour l'ajout
+        if (showAddModal) {
           setNewPoint({
             ...newPoint,
             avatar: event.target?.result as string
           });
-        };
-        reader.readAsDataURL(e.target.files[0]);
-      }
-      
-      // Prévisualisation pour l'édition
-      if (editingPoint) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
+        }
+        
+        // Pour l'édition
+        if (editingPoint) {
           setEditingPoint({
             ...editingPoint,
             avatar: event.target?.result as string
           });
-        };
-        reader.readAsDataURL(e.target.files[0]);
-      }
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Gestion du fichier branding
+  const handleBrandingImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setBrandingImageFile(file);
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        // Pour l'ajout
+        if (showAddModal) {
+          setNewPoint({
+            ...newPoint,
+            branding_image: event.target?.result as string
+          });
+        }
+        
+        // Pour l'édition
+        if (editingPoint) {
+          setEditingPoint({
+            ...editingPoint,
+            branding_image: event.target?.result as string
+          });
+        }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -204,16 +230,16 @@ const PointsVenteManagement = () => {
 
         const data = await response.json();
         // Validation des coordonnées
-      const validatedData = data.map((point: PointOfSale) => ({
-        ...point,
-        avatar: point.avatar || '/default-avatar.png',
-        latitude: isValidCoordinate(point.latitude) ? point.latitude : 5.3197,
-        longitude: isValidCoordinate(point.longitude) ? point.longitude : -4.0267,
-        registration_date: point.registration_date || new Date().toISOString().split('T')[0],
-        brander: point.brander || false,
-        marque_brander: point.marque_brander || null,
-        branding_image: point.branding_image || null // Ajout
-      }));
+        const validatedData = data.map((point: PointOfSale) => ({
+          ...point,
+          avatar: point.avatar || '/default-avatar.png',
+          latitude: isValidCoordinate(point.latitude) ? point.latitude : 5.3197,
+          longitude: isValidCoordinate(point.longitude) ? point.longitude : -4.0267,
+          registration_date: point.registration_date || new Date().toISOString().split('T')[0],
+          brander: point.brander || false,
+          marque_brander: point.marque_brander || null,
+          branding_image: point.branding_image || null
+        }));
         setPointsVente(validatedData);
       } catch (err: any) {
         setError(err.message);
@@ -304,199 +330,165 @@ const PointsVenteManagement = () => {
     }
   };
 
-  const [brandingImageFile, setBrandingImageFile] = useState<File | null>(null);
+  // Ajouter un nouveau Distributeur
+  const handleAddPoint = async () => {
+    const token = localStorage.getItem('access');
+    if (!token) {
+      setError('Veuillez vous connecter.');
+      return;
+    }
 
-  const handleBrandingImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setBrandingImageFile(e.target.files[0]);
+    try {
+      setLoading(true);
       
-      // Prévisualisation pour l'ajout
-      if (showAddModal) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          setNewPoint({
-            ...newPoint,
-            branding_image: event.target?.result as string
-          });
-        };
-        reader.readAsDataURL(e.target.files[0]);
+      const formData = new FormData();
+      formData.append('name', newPoint.name);
+      formData.append('owner', newPoint.owner);
+      formData.append('phone', newPoint.phone);
+      formData.append('email', newPoint.email);
+      formData.append('address', newPoint.address);
+      formData.append('type', newPoint.type);
+      formData.append('district', newPoint.district);
+      formData.append('region', newPoint.region);
+      formData.append('commune', newPoint.commune);
+      formData.append('latitude', newPoint.latitude.toString());
+      formData.append('longitude', newPoint.longitude.toString());
+      formData.append('registration_date', newPoint.registration_date);
+      formData.append('brander', newPoint.brander.toString());
+      
+      if (newPoint.brander && newPoint.marque_brander) {
+        formData.append('marque_brander', newPoint.marque_brander);
       }
       
-      // Prévisualisation pour l'édition
-      if (editingPoint) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          setEditingPoint({
-            ...editingPoint,
-            branding_image: event.target?.result as string
-          });
-        };
-        reader.readAsDataURL(e.target.files[0]);
+      if (avatarFile) {
+        formData.append('avatar', avatarFile);
       }
+      
+      if (brandingImageFile) {
+        formData.append('branding_image', brandingImageFile);
+      }
+
+      const response = await fetch(`${API_BASE_URL}/points-vente/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Erreur lors de l\'ajout du Distributeur');
+      }
+
+      const createdPoint = await response.json();
+      setPointsVente([...pointsVente, {
+        ...createdPoint,
+        brander: createdPoint.brander || false,
+        marque_brander: createdPoint.marque_brander || null,
+        branding_image: createdPoint.branding_image || null
+      }]);
+      setShowAddModal(false);
+      setNewPoint({
+        name: '',
+        owner: '',
+        phone: '',
+        email: '',
+        address: '',
+        type: 'boutique',
+        district: '',
+        region: '',
+        commune: '',
+        latitude: 0,
+        longitude: 0,
+        registration_date: new Date().toISOString().split('T')[0],
+        avatar: '',
+        brander: false,
+        marque_brander: '',
+        branding_image: ''
+      });
+      setAvatarFile(null);
+      setBrandingImageFile(null);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Ajouter un nouveau Distributeur
-const handleAddPoint = async () => {
-  const token = localStorage.getItem('access');
-  if (!token) {
-    setError('Veuillez vous connecter.');
-    return;
-  }
-
-  try {
-    setLoading(true);
-    
-    const formData = new FormData();
-    formData.append('name', newPoint.name);
-    formData.append('owner', newPoint.owner);
-    formData.append('phone', newPoint.phone);
-    formData.append('email', newPoint.email);
-    formData.append('address', newPoint.address);
-    formData.append('type', newPoint.type);
-    formData.append('district', newPoint.district);
-    formData.append('region', newPoint.region);
-    formData.append('commune', newPoint.commune);
-    formData.append('latitude', newPoint.latitude.toString());
-    formData.append('longitude', newPoint.longitude.toString());
-    formData.append('registration_date', newPoint.registration_date);
-    formData.append('brander', newPoint.brander.toString());
-    
-    if (newPoint.brander && newPoint.marque_brander) {
-      formData.append('marque_brander', newPoint.marque_brander);
-    }
-    
-    if (avatarFile) {
-      formData.append('avatar', avatarFile);
-    }
-    
-    // Ajout de l'image de branding
-    if (brandingImageFile) {
-      formData.append('branding_image', brandingImageFile);
-    }
-
-    const response = await fetch(`${API_BASE_URL}/points-vente/`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-      body: formData
-    });
-
-    if (!response.ok) {
-      throw new Error('Erreur lors de l\'ajout du Distributeur');
-    }
-
-    const createdPoint = await response.json();
-    setPointsVente([...pointsVente, {
-      ...createdPoint,
-      brander: createdPoint.brander || false,
-      marque_brander: createdPoint.marque_brander || null,
-      branding_image: createdPoint.branding_image || null
-    }]);
-    setShowAddModal(false);
-    setNewPoint({
-      name: '',
-      owner: '',
-      phone: '',
-      email: '',
-      address: '',
-      type: 'boutique',
-      district: '',
-      region: '',
-      commune: '',
-      latitude: 0,
-      longitude: 0,
-      registration_date: new Date().toISOString().split('T')[0],
-      avatar: '',
-      brander: false,
-      marque_brander: '',
-      branding_image: ''
-    });
-    setAvatarFile(null);
-    setBrandingImageFile(null); // Reset du fichier branding
-  } catch (err: any) {
-    setError(err.message);
-  } finally {
-    setLoading(false);
-  }
-};
-
   // Mettre à jour un Distributeur
-const updatePoint = async () => {
-  if (!editingPoint) return;
-  
-  const token = localStorage.getItem('access');
-  if (!token) {
-    setError('Veuillez vous connecter.');
-    return;
-  }
-
-  try {
-    setLoading(true);
+  const updatePoint = async () => {
+    if (!editingPoint) return;
     
-    const formData = new FormData();
-    formData.append('name', editingPoint.name);
-    formData.append('owner', editingPoint.owner);
-    formData.append('phone', editingPoint.phone);
-    formData.append('email', editingPoint.email);
-    formData.append('address', editingPoint.address);
-    formData.append('type', editingPoint.type);
-    formData.append('status', editingPoint.status);
-    formData.append('district', editingPoint.district);
-    formData.append('region', editingPoint.region);
-    formData.append('commune', editingPoint.commune);
-    formData.append('latitude', editingPoint.latitude.toString());
-    formData.append('longitude', editingPoint.longitude.toString());
-    formData.append('registration_date', editingPoint.registration_date);
-    formData.append('brander', editingPoint.brander.toString());
-    
-    if (editingPoint.brander && editingPoint.marque_brander) {
-      formData.append('marque_brander', editingPoint.marque_brander);
-    } else {
-      formData.append('marque_brander', '');
-    }
-    
-    if (avatarFile) {
-      formData.append('avatar', avatarFile);
-    }
-    
-    // Ajout de l'image de branding
-    if (brandingImageFile) {
-      formData.append('branding_image', brandingImageFile);
+    const token = localStorage.getItem('access');
+    if (!token) {
+      setError('Veuillez vous connecter.');
+      return;
     }
 
-    const response = await fetch(`${API_BASE_URL}/points-vente/${editingPoint.id}/`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-      body: formData
-    });
+    try {
+      setLoading(true);
+      
+      const formData = new FormData();
+      formData.append('name', editingPoint.name);
+      formData.append('owner', editingPoint.owner);
+      formData.append('phone', editingPoint.phone);
+      formData.append('email', editingPoint.email);
+      formData.append('address', editingPoint.address);
+      formData.append('type', editingPoint.type);
+      formData.append('status', editingPoint.status);
+      formData.append('district', editingPoint.district);
+      formData.append('region', editingPoint.region);
+      formData.append('commune', editingPoint.commune);
+      formData.append('latitude', editingPoint.latitude.toString());
+      formData.append('longitude', editingPoint.longitude.toString());
+      formData.append('registration_date', editingPoint.registration_date);
+      formData.append('brander', editingPoint.brander.toString());
+      
+      if (editingPoint.brander && editingPoint.marque_brander) {
+        formData.append('marque_brander', editingPoint.marque_brander);
+      } else {
+        formData.append('marque_brander', '');
+      }
+      
+      if (avatarFile) {
+        formData.append('avatar', avatarFile);
+      }
+      
+      if (brandingImageFile) {
+        formData.append('branding_image', brandingImageFile);
+      }
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Erreur lors de la mise à jour du Distributeur');
+      const response = await fetch(`${API_BASE_URL}/points-vente/${editingPoint.id}/`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erreur lors de la mise à jour du Distributeur');
+      }
+
+      const updatedPoint = await response.json();
+      setPointsVente(pointsVente.map(point => 
+        point.id === updatedPoint.id ? {
+          ...updatedPoint,
+          brander: updatedPoint.brander || false,
+          marque_brander: updatedPoint.marque_brander || null,
+          branding_image: updatedPoint.branding_image || null
+        } : point
+      ));
+      setEditingPoint(null);
+      setAvatarFile(null);
+      setBrandingImageFile(null);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-
-    const updatedPoint = await response.json();
-    setPointsVente(pointsVente.map(point => 
-      point.id === updatedPoint.id ? {
-        ...updatedPoint,
-        brander: updatedPoint.brander || false,
-        marque_brander: updatedPoint.marque_brander || null,
-        branding_image: updatedPoint.branding_image || null
-      } : point
-    ));
-    setEditingPoint(null);
-    setAvatarFile(null);
-    setBrandingImageFile(null); // Reset du fichier branding
-  } catch (err: any) {
-    setError(err.message);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // Supprimer un Distributeur
   const deletePoint = async (id: string) => {
@@ -698,12 +690,15 @@ const updatePoint = async () => {
                   <tr key={point.id} className="hover:bg-gray-50 transition-colors duration-150">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center overflow-hidden">
                           {point.avatar && point.avatar !== '/default-avatar.png' ? (
                             <img 
                               src={point.avatar} 
                               alt={point.name}
-                              className="w-10 h-10 rounded-lg object-cover"
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = '/default-avatar.png';
+                              }}
                             />
                           ) : (
                             <Store className="text-blue-600" size={20} />
@@ -770,6 +765,7 @@ const updatePoint = async () => {
                           onClick={() => {
                             setEditingPoint(point);
                             setAvatarFile(null);
+                            setBrandingImageFile(null);
                           }}
                           className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors duration-200"
                           title="Modifier"
@@ -946,7 +942,7 @@ const updatePoint = async () => {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-2xl">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-2xl sticky top-0 z-10">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
                   <Plus size={20} className="text-white" />
@@ -965,39 +961,40 @@ const updatePoint = async () => {
             </div>
             
             <div className="p-6 space-y-6">
-              {/* Upload d'image */}
-                {/* Upload d'image - CORRIGÉ */}
-                <div className="flex flex-col items-center">
-                  <div className="relative w-32 h-32 mb-4 rounded-2xl overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 group hover:border-blue-500 transition-colors duration-200">
-                    {newPoint.avatar ? (
-                      <img 
-                        src={newPoint.avatar} 
-                        alt="Avatar preview" 
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                        <ImageIcon size={32} />
-                        <span className="text-xs mt-2">Ajouter une image</span>
-                      </div>
-                    )}
-                    {/* CORRECTION : Ajout d'un ID unique et liaison correcte avec le label */}
-                    <input 
-                      id="avatar-upload-add"
-                      type="file" 
-                      accept="image/*" 
-                      onChange={handleAvatarChange}
-                      className="hidden"
+              {/* Upload d'image - CORRIGÉ */}
+              <div className="flex flex-col items-center">
+                <div className="relative w-32 h-32 mb-4 rounded-2xl overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 group hover:border-blue-500 transition-colors duration-200">
+                  {newPoint.avatar ? (
+                    <img 
+                      src={newPoint.avatar} 
+                      alt="Avatar preview" 
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/default-avatar.png';
+                      }}
                     />
-                    <label 
-                      htmlFor="avatar-upload-add"
-                      className="absolute inset-0 cursor-pointer flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                    >
-                      <Upload size={20} className="text-white" />
-                    </label>
-                  </div>
-                  <p className="text-sm text-gray-500 text-center">Format recommandé: JPG, PNG • Max 2MB</p>
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                      <ImageIcon size={32} />
+                      <span className="text-xs mt-2">Ajouter une image</span>
+                    </div>
+                  )}
+                  <input 
+                    id="avatar-upload-add"
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleAvatarChange}
+                    className="hidden"
+                  />
+                  <label 
+                    htmlFor="avatar-upload-add"
+                    className="absolute inset-0 cursor-pointer flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                  >
+                    <Upload size={20} className="text-white" />
+                  </label>
                 </div>
+                <p className="text-sm text-gray-500 text-center">Format recommandé: JPG, PNG • Max 2MB</p>
+              </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Colonne gauche */}
@@ -1145,7 +1142,6 @@ const updatePoint = async () => {
                     </div>
                   </div>
 
-                  {/* Section Branding */}
                   {/* Section Branding avec image */}
                   <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
                     <h4 className="font-semibold text-gray-800 font-sans flex items-center gap-2 mb-3">
@@ -1213,6 +1209,9 @@ const updatePoint = async () => {
                                       src={newPoint.branding_image} 
                                       alt="Branding preview" 
                                       className="w-32 h-32 object-cover rounded-lg mx-auto mb-2"
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).style.display = 'none';
+                                      }}
                                     />
                                     <span className="text-sm text-blue-600 font-medium">Modifier l'image de branding</span>
                                   </div>
@@ -1308,7 +1307,7 @@ const updatePoint = async () => {
               </div>
             </div>
             
-            <div className="p-6 border-t border-gray-200 flex justify-end gap-3 bg-gray-50 rounded-b-2xl">
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-3 bg-gray-50 rounded-b-2xl sticky bottom-0">
               <button 
                 onClick={() => setShowAddModal(false)}
                 className={`px-6 py-3 rounded-xl ${colors.secondary} font-medium transition-all duration-200`}
@@ -1349,7 +1348,7 @@ const updatePoint = async () => {
       {editingPoint && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-emerald-600 to-teal-600 rounded-t-2xl">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-emerald-600 to-teal-600 rounded-t-2xl sticky top-0 z-10">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
                   <Edit size={20} className="text-white" />
@@ -1368,39 +1367,40 @@ const updatePoint = async () => {
             </div>
             
             <div className="p-6 space-y-6">
-              {/* Upload d'image */}
-                {/* Upload d'image - CORRIGÉ */}
-                <div className="flex flex-col items-center">
-                  <div className="relative w-32 h-32 mb-4 rounded-2xl overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 group hover:border-blue-500 transition-colors duration-200">
-                    {editingPoint.avatar ? (
-                      <img 
-                        src={editingPoint.avatar} 
-                        alt="Avatar preview" 
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                        <ImageIcon size={32} />
-                        <span className="text-xs mt-2">Modifier l'image</span>
-                      </div>
-                    )}
-                    {/* CORRECTION : Ajout d'un ID unique pour l'édition */}
-                    <input 
-                      id="avatar-upload-edit"
-                      type="file" 
-                      accept="image/*" 
-                      onChange={handleAvatarChange}
-                      className="hidden"
+              {/* Upload d'image - CORRIGÉ */}
+              <div className="flex flex-col items-center">
+                <div className="relative w-32 h-32 mb-4 rounded-2xl overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 group hover:border-blue-500 transition-colors duration-200">
+                  {editingPoint.avatar ? (
+                    <img 
+                      src={editingPoint.avatar} 
+                      alt="Avatar preview" 
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/default-avatar.png';
+                      }}
                     />
-                    <label 
-                      htmlFor="avatar-upload-edit"
-                      className="absolute inset-0 cursor-pointer flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                    >
-                      <Upload size={20} className="text-white" />
-                    </label>
-                  </div>
-                  <p className="text-sm text-gray-500 text-center">Cliquez sur l'image pour la modifier</p>
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                      <ImageIcon size={32} />
+                      <span className="text-xs mt-2">Modifier l'image</span>
+                    </div>
+                  )}
+                  <input 
+                    id="avatar-upload-edit"
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleAvatarChange}
+                    className="hidden"
+                  />
+                  <label 
+                    htmlFor="avatar-upload-edit"
+                    className="absolute inset-0 cursor-pointer flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                  >
+                    <Upload size={20} className="text-white" />
+                  </label>
                 </div>
+                <p className="text-sm text-gray-500 text-center">Cliquez sur l'image pour la modifier</p>
+              </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Colonne gauche */}
@@ -1547,7 +1547,6 @@ const updatePoint = async () => {
                     </div>
                   </div>
 
-                  {/* Section Branding */}
                   {/* Section Branding avec image - Modal d'édition */}
                   <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
                     <h4 className="font-semibold text-gray-800 font-sans flex items-center gap-2 mb-3">
@@ -1615,6 +1614,9 @@ const updatePoint = async () => {
                                       src={editingPoint.branding_image} 
                                       alt="Branding preview" 
                                       className="w-32 h-32 object-cover rounded-lg mx-auto mb-2"
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).style.display = 'none';
+                                      }}
                                     />
                                     <span className="text-sm text-blue-600 font-medium">Modifier l'image de branding</span>
                                   </div>
@@ -1695,7 +1697,7 @@ const updatePoint = async () => {
               </div>
             </div>
             
-            <div className="p-6 border-t border-gray-200 flex justify-end gap-3 bg-gray-50 rounded-b-2xl">
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-3 bg-gray-50 rounded-b-2xl sticky bottom-0">
               <button 
                 onClick={() => setEditingPoint(null)}
                 className={`px-6 py-3 rounded-xl ${colors.secondary} font-medium transition-all duration-200`}
@@ -1732,42 +1734,64 @@ const updatePoint = async () => {
         </div>
       )}
 
-      {/* Modal de détails amélioré */}
+      {/* Modal de détails amélioré - AVEC IMAGES EN GRAND */}
       {selectedPoint && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-2xl">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-white bg-white">
-                  <img 
-                    src={selectedPoint.avatar || '/default-avatar.png'} 
-                    alt={selectedPoint.name}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/default-avatar.png';
-                    }}
-                  />
+            {/* Bannière avec image en grand - PLUS VISIBLE */}
+            <div className="relative h-72 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-2xl overflow-hidden">
+              {/* Image de fond en grand - PLUS VISIBLE */}
+              {selectedPoint.avatar && selectedPoint.avatar !== '/default-avatar.png' ? (
+                <img 
+                  src={selectedPoint.avatar} 
+                  alt={selectedPoint.name}
+                  className="w-full h-full object-cover opacity-60"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+              )}
+              
+              {/* Overlay gradient plus léger pour mieux voir l'image */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
+              
+              {/* Contenu de l'en-tête */}
+              <div className="absolute bottom-0 left-0 right-0 p-8 flex items-end justify-between">
+                <div className="flex items-end gap-6">
+                  {/* Avatar en grand */}
+                  <div className="w-32 h-32 rounded-2xl overflow-hidden border-4 border-white shadow-2xl bg-white">
+                    <img 
+                      src={selectedPoint.avatar || '/default-avatar.png'} 
+                      alt={selectedPoint.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/default-avatar.png';
+                      }}
+                    />
+                  </div>
+                  <div className="mb-2">
+                    <h3 className="text-3xl font-bold text-white font-sans drop-shadow-lg">{selectedPoint.name}</h3>
+                    <p className="text-white/90 flex items-center gap-1 text-lg drop-shadow">
+                      <MapPin size={18} />
+                      {selectedPoint.commune}, {selectedPoint.district}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-2xl font-bold text-white font-sans">{selectedPoint.name}</h3>
-                  <p className="text-white/80 flex items-center gap-1">
-                    <MapPin size={14} />
-                    {selectedPoint.commune}, {selectedPoint.district}
-                  </p>
-                </div>
+                <button 
+                  onClick={() => setSelectedPoint(null)}
+                  className="p-3 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl text-white transition-all duration-200"
+                >
+                  <X size={24} />
+                </button>
               </div>
-              <button 
-                onClick={() => setSelectedPoint(null)}
-                className="p-2 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors duration-200"
-              >
-                <X size={20} />
-              </button>
             </div>
             
-            <div className="p-6">
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div className="p-8">
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                 {/* Colonne principale */}
-                <div className="xl:col-span-2 space-y-6">
+                <div className="xl:col-span-2 space-y-8">
                   {/* Informations générales */}
                   <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                     <h4 className="font-semibold text-gray-800 font-sans text-lg mb-4">Informations Générales</h4>
@@ -1891,8 +1915,7 @@ const updatePoint = async () => {
                     </div>
                   </div>
                   
-                  {/* Information Branding */}
-                  {/* Information Branding avec image dans le modal de détails */}
+                  {/* Information Branding avec image EN GRAND */}
                   <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                     <h4 className="font-semibold text-gray-800 font-sans text-lg mb-4 flex items-center gap-2">
                       <Award size={18} />
@@ -1916,13 +1939,38 @@ const updatePoint = async () => {
                         </div>
                       )}
                       {selectedPoint.brander && selectedPoint.branding_image && (
-                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                          <p className="text-sm text-gray-600 font-medium mb-2">Image de la marque</p>
-                          <img 
-                            src={selectedPoint.branding_image} 
-                            alt={`Branding ${selectedPoint.marque_brander}`}
-                            className="w-full max-w-xs h-auto rounded-lg mx-auto"
-                          />
+                        <div className="mt-4">
+                          <p className="text-sm text-gray-600 font-medium mb-3">Image de la marque</p>
+                          {/* Image de branding en grand */}
+                          <div className="relative h-48 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl overflow-hidden border-2 border-purple-200">
+                            <img 
+                              src={selectedPoint.branding_image} 
+                              alt={`Branding ${selectedPoint.marque_brander}`}
+                              className="w-full h-full object-cover opacity-70"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent"></div>
+                            <div className="absolute bottom-3 left-3 right-3">
+                              <span className="inline-block px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs text-white">
+                                {selectedPoint.marque_brander}
+                              </span>
+                            </div>
+                          </div>
+                          {/* Miniature supplémentaire si besoin */}
+                          <div className="mt-3 flex justify-center">
+                            <div className="w-20 h-20 rounded-lg overflow-hidden border-2 border-white shadow-md">
+                              <img 
+                                src={selectedPoint.branding_image} 
+                                alt={`Miniature ${selectedPoint.marque_brander}`}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1961,7 +2009,10 @@ const updatePoint = async () => {
                         <span>Modifier les informations</span>
                       </button>
                       <button 
-                        onClick={() => deletePoint(selectedPoint.id)}
+                        onClick={() => {
+                          deletePoint(selectedPoint.id);
+                          setSelectedPoint(null);
+                        }}
                         className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium ${colors.danger}`}
                       >
                         <Trash2 size={16} />

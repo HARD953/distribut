@@ -55,6 +55,7 @@ const checkAuthStatus = async () => {
       return;
     }
 
+    // UTILISEZ UN ENDPOINT QUI EXISTE DANS VOTRE API
     // Essayez d'abord /users/ qui existe dans ApiService
     const response = await apiService.get("/users/");
     
