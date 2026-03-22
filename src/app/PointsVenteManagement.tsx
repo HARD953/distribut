@@ -59,6 +59,11 @@ const PointsVenteManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterType, setFilterType] = useState('all');
+  const [filterDistrict, setFilterDistrict] = useState('all');
+  const [filterRegion, setFilterRegion] = useState('all');
+  const [filterCommune, setFilterCommune] = useState('all');
+  const [filterMarqueBrander, setFilterMarqueBrander] = useState('all');
+  const [filterBrander, setFilterBrander] = useState('all');
   const [activeView, setActiveView] = useState('liste');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState<PointOfSale | null>(null);
@@ -90,6 +95,14 @@ const PointsVenteManagement = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
+  // Extraire les valeurs uniques pour les filtres
+  const districts = Array.from(new Set(pointsVente.map(p => p.district).filter(Boolean))).sort();
+  const regions = Array.from(new Set(pointsVente.map(p => p.region).filter(Boolean))).sort();
+  const communes = Array.from(new Set(pointsVente.map(p => p.commune).filter(Boolean))).sort();
+  const marquesBrander = Array.from(new Set(
+    pointsVente.filter(p => p.brander && p.marque_brander).map(p => p.marque_brander as string)
+  )).sort();
+
   // Types de Distributeurs
   const pointTypes = [
     { value: 'boutique', label: 'Boutique', icon: Store },
@@ -105,6 +118,13 @@ const PointsVenteManagement = () => {
     { value: 'actif', label: 'Actif', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
     { value: 'suspendu', label: 'Suspendu', color: 'text-red-600 bg-red-50 border-red-200' },
     { value: 'en_attente', label: 'En attente', color: 'text-amber-600 bg-amber-50 border-amber-200' }
+  ];
+
+  // Options pour le filtre brander
+  const branderOptions = [
+    { value: 'all', label: 'Tous' },
+    { value: 'brander', label: 'Brandé' },
+    { value: 'non_brander', label: 'Non brandé' }
   ];
 
   // Couleurs modernes
@@ -256,17 +276,26 @@ const PointsVenteManagement = () => {
     return typeof coord === 'number' && !isNaN(coord) && coord !== 0;
   };
 
-  // Filtrer les Distributeurs
+  // Filtrer les Distributeurs avec tous les nouveaux filtres
   const filteredPoints = pointsVente.filter(point => {
     const matchesSearch = 
       point.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       point.owner.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      point.address.toLowerCase().includes(searchTerm.toLowerCase());
+      point.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (point.marque_brander && point.marque_brander.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesStatus = filterStatus === 'all' || point.status === filterStatus;
     const matchesType = filterType === 'all' || point.type === filterType;
+    const matchesDistrict = filterDistrict === 'all' || point.district === filterDistrict;
+    const matchesRegion = filterRegion === 'all' || point.region === filterRegion;
+    const matchesCommune = filterCommune === 'all' || point.commune === filterCommune;
+    const matchesBrander = filterBrander === 'all' || 
+      (filterBrander === 'brander' && point.brander) ||
+      (filterBrander === 'non_brander' && !point.brander);
+    const matchesMarqueBrander = filterMarqueBrander === 'all' || point.marque_brander === filterMarqueBrander;
     
-    return matchesSearch && matchesStatus && matchesType;
+    return matchesSearch && matchesStatus && matchesType && matchesDistrict && 
+           matchesRegion && matchesCommune && matchesBrander && matchesMarqueBrander;
   });
 
   // Pagination
@@ -276,6 +305,19 @@ const PointsVenteManagement = () => {
   const totalPages = Math.ceil(filteredPoints.length / itemsPerPage);
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
+
+  // Fonction pour réinitialiser tous les filtres
+  const resetFilters = () => {
+    setSearchTerm('');
+    setFilterStatus('all');
+    setFilterType('all');
+    setFilterDistrict('all');
+    setFilterRegion('all');
+    setFilterCommune('all');
+    setFilterBrander('all');
+    setFilterMarqueBrander('all');
+    setCurrentPage(1);
+  };
 
   // Fonction pour télécharger les données
   const downloadData = () => {
@@ -557,7 +599,7 @@ const PointsVenteManagement = () => {
     }
   ];
 
-  // Vue Liste améliorée
+  // Vue Liste améliorée avec nouveaux filtres
   const ListView = () => (
     <div className="space-y-6">
       {/* En-tête avec titre et actions */}
@@ -612,47 +654,124 @@ const PointsVenteManagement = () => {
         ))}
       </div>
 
-      {/* Barre de recherche et filtres améliorée */}
+      {/* Barre de recherche et filtres améliorée avec nouveaux filtres */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div className="flex flex-col sm:flex-row gap-3 flex-1">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-              <input 
-                type="text" 
-                placeholder="Rechercher un Distributeur..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2.5 w-full border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium"
-              />
+        <div className="flex flex-col gap-4">
+          {/* Première ligne : recherche et filtres principaux */}
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div className="flex flex-col sm:flex-row gap-3 flex-1">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                <input 
+                  type="text" 
+                  placeholder="Rechercher un Distributeur..." 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2.5 w-full border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium"
+                />
+              </div>
+              
+              <select 
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium min-w-[140px]"
+              >
+                <option value="all">Tous les statuts</option>
+                {statusOptions.map(status => (
+                  <option key={status.value} value={status.value}>{status.label}</option>
+                ))}
+              </select>
+
+              <select 
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium min-w-[140px]"
+              >
+                <option value="all">Tous les types</option>
+                {pointTypes.map(type => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
+              </select>
             </div>
             
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Filter size={16} />
+              <span>{filteredPoints.length} résultats</span>
+            </div>
+          </div>
+
+          {/* Deuxième ligne : filtres géographiques */}
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">Filtres géographiques :</span>
+            
             <select 
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium"
+              value={filterDistrict}
+              onChange={(e) => setFilterDistrict(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium text-sm flex-1 min-w-[150px]"
             >
-              <option value="all">Tous les statuts</option>
-              {statusOptions.map(status => (
-                <option key={status.value} value={status.value}>{status.label}</option>
+              <option value="all">Tous les districts</option>
+              {districts.map(district => (
+                <option key={district} value={district}>{district}</option>
               ))}
             </select>
 
             <select 
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium"
+              value={filterRegion}
+              onChange={(e) => setFilterRegion(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium text-sm flex-1 min-w-[150px]"
             >
-              <option value="all">Tous les types</option>
-              {pointTypes.map(type => (
-                <option key={type.value} value={type.value}>{type.label}</option>
+              <option value="all">Toutes les régions</option>
+              {regions.map(region => (
+                <option key={region} value={region}>{region}</option>
+              ))}
+            </select>
+
+            <select 
+              value={filterCommune}
+              onChange={(e) => setFilterCommune(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium text-sm flex-1 min-w-[150px]"
+            >
+              <option value="all">Toutes les communes</option>
+              {communes.map(commune => (
+                <option key={commune} value={commune}>{commune}</option>
               ))}
             </select>
           </div>
-          
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <Filter size={16} />
-            <span>{filteredPoints.length} résultats</span>
+
+          {/* Troisième ligne : filtres branding */}
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">Filtres branding :</span>
+            
+            <select 
+              value={filterBrander}
+              onChange={(e) => setFilterBrander(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium text-sm flex-1 min-w-[140px]"
+            >
+              {branderOptions.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+
+            <select 
+              value={filterMarqueBrander}
+              onChange={(e) => setFilterMarqueBrander(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-medium text-sm flex-1 min-w-[150px]"
+              disabled={marquesBrander.length === 0}
+            >
+              <option value="all">Toutes les marques</option>
+              {marquesBrander.map(marque => (
+                <option key={marque} value={marque}>{marque}</option>
+              ))}
+            </select>
+
+            {/* Bouton pour réinitialiser les filtres */}
+            <button
+              onClick={resetFilters}
+              className={`px-4 py-2 rounded-lg text-sm font-medium ${colors.secondary}`}
+            >
+              <X size={16} className="inline-block mr-1" />
+              Réinitialiser
+            </button>
           </div>
         </div>
       </div>
@@ -880,11 +999,7 @@ const PointsVenteManagement = () => {
               <h3 className="text-lg font-semibold text-gray-800 mb-2 font-sans">Aucun Distributeur trouvé</h3>
               <p className="text-gray-600 mb-4">Aucun Distributeur ne correspond à vos critères de recherche.</p>
               <button 
-                onClick={() => {
-                  setSearchTerm('');
-                  setFilterStatus('all');
-                  setFilterType('all');
-                }}
+                onClick={resetFilters}
                 className={`px-4 py-2 rounded-lg ${colors.primary} font-medium`}
               >
                 Réinitialiser les filtres
@@ -961,7 +1076,7 @@ const PointsVenteManagement = () => {
             </div>
             
             <div className="p-6 space-y-6">
-              {/* Upload d'image - CORRIGÉ */}
+              {/* Upload d'image */}
               <div className="flex flex-col items-center">
                 <div className="relative w-32 h-32 mb-4 rounded-2xl overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 group hover:border-blue-500 transition-colors duration-200">
                   {newPoint.avatar ? (
@@ -1367,7 +1482,7 @@ const PointsVenteManagement = () => {
             </div>
             
             <div className="p-6 space-y-6">
-              {/* Upload d'image - CORRIGÉ */}
+              {/* Upload d'image */}
               <div className="flex flex-col items-center">
                 <div className="relative w-32 h-32 mb-4 rounded-2xl overflow-hidden border-2 border-dashed border-gray-300 bg-gray-50 group hover:border-blue-500 transition-colors duration-200">
                   {editingPoint.avatar ? (
@@ -1738,9 +1853,9 @@ const PointsVenteManagement = () => {
       {selectedPoint && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
-            {/* Bannière avec image en grand - PLUS VISIBLE */}
+            {/* Bannière avec image en grand */}
             <div className="relative h-72 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-2xl overflow-hidden">
-              {/* Image de fond en grand - PLUS VISIBLE */}
+              {/* Image de fond en grand */}
               {selectedPoint.avatar && selectedPoint.avatar !== '/default-avatar.png' ? (
                 <img 
                   src={selectedPoint.avatar} 
