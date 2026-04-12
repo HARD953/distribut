@@ -1,18 +1,18 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { 
-  Filter, Search, MapPin, Calendar, User, Phone, 
+import {
+  Filter, Search, MapPin, Calendar, User, Phone,
   DollarSign, Package, BarChart3, ChevronDown, ChevronUp,
-  Download, Eye, MoreVertical, X, Plus, Loader2,
-  ArrowLeft, ShoppingCart, Bike, RefreshCw, TrendingUp,
-  Users, Target, ArrowUpRight, ArrowDownRight, CheckCircle,
-  FileText, Database, AlertCircle, Store, Building
+  Download, Eye, X, RefreshCw,
+  Users, Target, ArrowUpRight, ShoppingCart, Bike,
+  Store, Building, AlertCircle, ChevronLeft, ChevronRight
 } from 'lucide-react';
-
 import { useAuth } from './AuthContext';
 import { apiService } from './ApiService';
 
-// Interface pour les données Prospects Pushcart
+/* ─────────────────────────────────────────────
+   TYPES
+───────────────────────────────────────────── */
 interface Purchase {
   id: number;
   full_name: string;
@@ -35,7 +35,6 @@ interface Purchase {
   created_at: string;
 }
 
-// Interface pour les données Prospects Point de vente
 interface PurchasePOS {
   id: number;
   name: string;
@@ -68,23 +67,12 @@ interface PurchasePOS {
   marque_brander: string | null;
 }
 
-// Interface pour les détails de vente
 interface SaleDetail {
   id: number;
   product_variant: {
     id: number;
-    product: {
-      id: number;
-      name: string;
-      sku: string;
-      category: number;
-      status: string;
-    };
-    format: {
-      id: number;
-      name: string;
-      description: string;
-    };
+    product: { id: number; name: string; sku: string; category: number; status: string };
+    format: { id: number; name: string; description: string };
     current_stock: number;
     price: string;
     barcode: string;
@@ -98,7 +86,6 @@ interface SaleDetail {
   longitude?: number;
 }
 
-// Interface pour les statistiques des détails
 interface SaleStatistics {
   grand_total_amount: number;
   grand_total_quantity: number;
@@ -107,1345 +94,796 @@ interface SaleStatistics {
   average_price: number;
 }
 
-// Interface pour la réponse des détails de vente
 interface PurchaseDetails {
-  purchase: {
-    id: number;
-    full_name: string;
-    zone: string;
-    purchase_date?: string;
-    vendor: string;
-  };
-  sales: SaleDetail[];
-  statistics: SaleStatistics;
-}
-
-// Interface pour la réponse des détails de vente POS
-interface PurchasePOSDetails {
-  purchase: {
-    id: number;
-    full_name: string;
-    zone: string;
-    vendor: string;
-  };
+  purchase: { id: number; full_name: string; zone: string; purchase_date?: string; vendor: string };
   sales: SaleDetail[];
   statistics: SaleStatistics;
 }
 
 type TabType = 'pushcart' | 'pos';
 
-const PushcartManagement = () => {
-  const [activeTab, setActiveTab] = useState<TabType>('pushcart');
-  
-  // États pour Prospects Pushcart
-  const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const [filteredPurchases, setFilteredPurchases] = useState<Purchase[]>([]);
-  
-  // États pour Prospects Point de vente
-  const [purchasesPOS, setPurchasesPOS] = useState<PurchasePOS[]>([]);
-  const [filteredPurchasesPOS, setFilteredPurchasesPOS] = useState<PurchasePOS[]>([]);
-  
-  const [selectedPurchase, setSelectedPurchase] = useState<Purchase | PurchasePOS | null>(null);
-  const [purchaseDetails, setPurchaseDetails] = useState<PurchaseDetails | PurchasePOSDetails | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [detailsLoading, setDetailsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
-  
-  // États pour les filtres Pushcart
-  const [filters, setFilters] = useState({
-    search: '',
-    zone: '',
-    pushcard_type: '',
-    start_date: '',
-    end_date: '',
-    vendor: ''
-  });
-  
-  // États pour les filtres POS
-  const [filtersPOS, setFiltersPOS] = useState({
-    search: '',
-    district: '',
-    region: '',
-    commune: '',
-    type: '',
-    status: '',
-    start_date: '',
-    end_date: ''
-  });
-  
-  // États pour la pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const [currentPagePOS, setCurrentPagePOS] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  
-  const [showFilters, setShowFilters] = useState(false);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [zones, setZones] = useState<string[]>([]);
-  const [pushcardTypes, setPushcardTypes] = useState<string[]>([]);
-  const [districts, setDistricts] = useState<string[]>([]);
-  const [regions, setRegions] = useState<string[]>([]);
-  const [communes, setCommunes] = useState<string[]>([]);
-  const [posTypes, setPosTypes] = useState<string[]>([]);
-  const [statuses, setStatuses] = useState<string[]>([]);
-
-  // Thème moderne avec couleurs professionnelles
-  const theme = {
-    primary: { 
-      light: '#EEF2FF', 
-      DEFAULT: '#4F46E5', 
-      dark: '#4338CA', 
-      text: '#3730A3',
-      gradient: 'linear-gradient(135deg, #4F46E5 0%, #7C73E6 100%)'
-    },
-    success: { 
-      light: '#ECFDF5', 
-      DEFAULT: '#10B981', 
-      dark: '#059669', 
-      text: '#065F46' 
-    },
-    warning: { 
-      light: '#FFFBEB', 
-      DEFAULT: '#F59E0B', 
-      dark: '#D97706', 
-      text: '#92400E' 
-    },
-    error: { 
-      light: '#FEF2F2', 
-      DEFAULT: '#EF4444', 
-      dark: '#DC2626', 
-      text: '#991B1B' 
-    },
-    gray: { 
-      50: '#F9FAFB',
-      100: '#F3F4F6',
-      200: '#E5E7EB',
-      300: '#D1D5DB',
-      400: '#9CA3AF',
-      500: '#6B7280',
-      600: '#4B5563',
-      700: '#374151',
-      800: '#1F2937',
-      900: '#111827'
-    }
-  };
-
-  // Calculs pour la pagination Pushcart
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredPurchases.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredPurchases.length / itemsPerPage);
-
-  // Calculs pour la pagination POS
-  const indexOfLastItemPOS = currentPagePOS * itemsPerPage;
-  const indexOfFirstItemPOS = indexOfLastItemPOS - itemsPerPage;
-  const currentItemsPOS = filteredPurchasesPOS.slice(indexOfFirstItemPOS, indexOfLastItemPOS);
-  const totalPagesPOS = Math.ceil(filteredPurchasesPOS.length / itemsPerPage);
-
-  // Fonctions de pagination Pushcart
-  const nextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
-    }
-  };
-
-  const prevPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  };
-
-  const goToPage = (pageNumber: number) => {
-    setCurrentPage(pageNumber);
-  };
-
-  // Fonctions de pagination POS
-  const nextPagePOS = () => {
-    if (currentPagePOS < totalPagesPOS) {
-      setCurrentPagePOS(currentPagePOS + 1);
-    }
-  };
-
-  const prevPagePOS = () => {
-    if (currentPagePOS > 1) {
-      setCurrentPagePOS(currentPagePOS - 1);
-    }
-  };
-
-  const goToPagePOS = (pageNumber: number) => {
-    setCurrentPagePOS(pageNumber);
-  };
-
-  // Charger les données initiales
-  useEffect(() => {
-    fetchPurchases();
-    fetchPurchasesPOS();
-  }, []);
-
-  // Filtrer les données lorsque les filtres changent
-  useEffect(() => {
-    filterPurchases();
-  }, [filters, purchases]);
-
-  useEffect(() => {
-    filterPurchasesPOS();
-  }, [filtersPOS, purchasesPOS]);
-
-  // Réinitialiser la page quand les filtres changent
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filters]);
-
-  useEffect(() => {
-    setCurrentPagePOS(1);
-  }, [filtersPOS]);
-
-  // Fonction pour récupérer les achats Pushcart
-  const fetchPurchases = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await apiService.get('/purchasedata/');
-      
-      if (!response.ok) {
-        throw new Error(`Erreur ${response.status}: ${response.statusText}`);
-      }
-      
-      const data: Purchase[] = await response.json();
-      setPurchases(data);
-      
-      // Extraire les zones et types uniques pour les filtres
-      const uniqueZones = Array.from(new Set(data.map(p => p.zone))).filter(zone => zone);
-      const uniqueTypes = Array.from(new Set(data.map(p => p.pushcard_type))).filter(type => type);
-      
-      setZones(uniqueZones);
-      setPushcardTypes(uniqueTypes);
-      
-    } catch (err) {
-      console.error('Erreur lors du chargement des achats:', err);
-      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fonction pour récupérer les achats POS
-  const fetchPurchasesPOS = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await apiService.get('/purchasedatapos/');
-      
-      if (!response.ok) {
-        throw new Error(`Erreur ${response.status}: ${response.statusText}`);
-      }
-      
-      const data: PurchasePOS[] = await response.json();
-      setPurchasesPOS(data);
-      
-      // Extraire les districts, régions, communes, types et statuts uniques pour les filtres
-      const uniqueDistricts = Array.from(new Set(data.map(p => p.district))).filter(district => district);
-      const uniqueRegions = Array.from(new Set(data.map(p => p.region))).filter(region => region);
-      const uniqueCommunes = Array.from(new Set(data.map(p => p.commune))).filter(commune => commune);
-      const uniqueTypes = Array.from(new Set(data.map(p => p.type))).filter(type => type);
-      const uniqueStatuses = Array.from(new Set(data.map(p => p.status))).filter(status => status);
-      
-      setDistricts(uniqueDistricts);
-      setRegions(uniqueRegions);
-      setCommunes(uniqueCommunes);
-      setPosTypes(uniqueTypes);
-      setStatuses(uniqueStatuses);
-      
-    } catch (err) {
-      console.error('Erreur lors du chargement des points de vente:', err);
-      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fonction pour récupérer les détails d'un achat
-  const fetchPurchaseDetails = async (purchaseId: number) => {
-    try {
-      setDetailsLoading(true);
-      setError(null);
-      
-      const endpoint = activeTab === 'pushcart' 
-        ? `/purchasedata/${purchaseId}/sales_details/`
-        : `/purchasedatapos/${purchaseId}/sales_details/`;
-      
-      const response = await apiService.get(endpoint);
-      
-      if (!response.ok) {
-        throw new Error(`Erreur ${response.status}: ${response.statusText}`);
-      }
-      
-      const data: PurchaseDetails | PurchasePOSDetails = await response.json();
-      setPurchaseDetails(data);
-      setShowDetailsModal(true);
-      
-    } catch (err) {
-      console.error('Erreur lors du chargement des détails:', err);
-      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
-    } finally {
-      setDetailsLoading(false);
-    }
-  };
-
-  // Filtrer les achats Pushcart selon les critères
-  const filterPurchases = () => {
-    let result = purchases;
-
-    if (filters.search) {
-      const searchTerm = filters.search.toLowerCase();
-      result = result.filter(purchase => 
-        purchase.full_name.toLowerCase().includes(searchTerm) ||
-        purchase.zone.toLowerCase().includes(searchTerm) ||
-        purchase.base.toLowerCase().includes(searchTerm) ||
-        purchase.phone.includes(searchTerm)
-      );
-    }
-
-    if (filters.zone) {
-      result = result.filter(purchase => purchase.zone === filters.zone);
-    }
-
-    if (filters.pushcard_type) {
-      result = result.filter(purchase => purchase.pushcard_type === filters.pushcard_type);
-    }
-
-    if (filters.start_date) {
-      result = result.filter(purchase => 
-        new Date(purchase.purchase_date) >= new Date(filters.start_date)
-      );
-    }
-
-    if (filters.end_date) {
-      const endDate = new Date(filters.end_date);
-      endDate.setHours(23, 59, 59); // Inclure toute la journée
-      result = result.filter(purchase => 
-        new Date(purchase.purchase_date) <= endDate
-      );
-    }
-
-    if (filters.vendor) {
-      result = result.filter(purchase => purchase.vendor.toString() === filters.vendor);
-    }
-
-    setFilteredPurchases(result);
-  };
-
-  // Filtrer les achats POS selon les critères
-  const filterPurchasesPOS = () => {
-    let result = purchasesPOS;
-
-    if (filtersPOS.search) {
-      const searchTerm = filtersPOS.search.toLowerCase();
-      result = result.filter(purchase => 
-        purchase.name.toLowerCase().includes(searchTerm) ||
-        purchase.owner.toLowerCase().includes(searchTerm) ||
-        purchase.address.toLowerCase().includes(searchTerm) ||
-        purchase.phone.includes(searchTerm) ||
-        purchase.email.toLowerCase().includes(searchTerm)
-      );
-    }
-
-    if (filtersPOS.district) {
-      result = result.filter(purchase => purchase.district === filtersPOS.district);
-    }
-
-    if (filtersPOS.region) {
-      result = result.filter(purchase => purchase.region === filtersPOS.region);
-    }
-
-    if (filtersPOS.commune) {
-      result = result.filter(purchase => purchase.commune === filtersPOS.commune);
-    }
-
-    if (filtersPOS.type) {
-      result = result.filter(purchase => purchase.type === filtersPOS.type);
-    }
-
-    if (filtersPOS.status) {
-      result = result.filter(purchase => purchase.status === filtersPOS.status);
-    }
-
-    if (filtersPOS.start_date) {
-      result = result.filter(purchase => 
-        new Date(purchase.registration_date) >= new Date(filtersPOS.start_date)
-      );
-    }
-
-    if (filtersPOS.end_date) {
-      const endDate = new Date(filtersPOS.end_date);
-      endDate.setHours(23, 59, 59);
-      result = result.filter(purchase => 
-        new Date(purchase.registration_date) <= endDate
-      );
-    }
-
-    setFilteredPurchasesPOS(result);
-  };
-
-  // Réinitialiser les filtres Pushcart
-  const resetFilters = () => {
-    setFilters({
-      search: '',
-      zone: '',
-      pushcard_type: '',
-      start_date: '',
-      end_date: '',
-      vendor: ''
-    });
-  };
-
-  // Réinitialiser les filtres POS
-  const resetFiltersPOS = () => {
-    setFiltersPOS({
-      search: '',
-      district: '',
-      region: '',
-      commune: '',
-      type: '',
-      status: '',
-      start_date: '',
-      end_date: ''
-    });
-  };
-
-  // Formater une date pour l'affichage
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }).format(date);
-  };
-
-  // Formater un montant
-  const formatCurrency = (amount: string | number) => {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'XOF'
-    }).format(Number(amount));
-  };
-
-  // Exporter les données
-// Exporter les données
-const exportData = () => {
-  const dataToExport = activeTab === 'pushcart' ? filteredPurchases : filteredPurchasesPOS;
-  
-  const csvContent = activeTab === 'pushcart' 
-    ? [
-        ['Nom complet', 'Zone', 'Base', 'Type', 'Téléphone', 'Date', 'Montant total', 'Quantité'],
-        ...dataToExport.map(p => {
-          const purchase = p as Purchase;
-          return [
-            purchase.full_name,
-            purchase.zone,
-            purchase.base,
-            purchase.pushcard_type,
-            purchase.phone,
-            formatDate(purchase.purchase_date),
-            purchase.total_sales_amount,
-            purchase.total_sales_quantity
-          ];
-        })
-      ]
-    : [
-        ['Nom', 'Propriétaire', 'Téléphone', 'Email', 'Adresse', 'District', 'Région', 'Commune', 'Type', 'Statut', 'Date d\'enregistrement', 'Chiffre d\'affaires'],
-        ...dataToExport.map(p => {
-          const purchase = p as PurchasePOS;
-          return [
-            purchase.name,
-            purchase.owner,
-            purchase.phone,
-            purchase.email,
-            purchase.address,
-            purchase.district,
-            purchase.region,
-            purchase.commune,
-            purchase.type,
-            purchase.status,
-            formatDate(purchase.registration_date),
-            purchase.turnover
-          ];
-        })
-      ];
-
-  const content = csvContent.map(row => row.join(',')).join('\n');
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  
-  link.setAttribute('href', url);
-  link.setAttribute('download', `${activeTab === 'pushcart' ? 'pushcarts' : 'points_de_vente'}_${new Date().toISOString().split('T')[0]}.csv`);
-  link.style.visibility = 'hidden';
-  
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+/* ─────────────────────────────────────────────
+   PALETTE (calquée sur LoginPage)
+───────────────────────────────────────────── */
+const P = {
+  forest:      '#2D5A3D',
+  forestLight: '#3E7A54',
+  forestPale:  '#EAF2EC',
+  ocre:        '#C07A2F',
+  ocreLight:   '#D4A843',
+  ocrePale:    '#FFF3E8',
+  gold:        '#F0C878',
+  cream:       '#FAF7F0',
+  sand:        '#F2EDE0',
+  sandBorder:  '#E8D9B8',
+  sandMid:     '#D4C4A0',
+  ink:         '#2A1A08',
+  muted:       '#A89880',
+  mutedDark:   '#7A6A52',
+  white:       '#FFFFFF',
 };
-  // Générer les numéros de page à afficher
-  const getPageNumbers = (currentPage: number, totalPages: number) => {
-    const pageNumbers = [];
-    const maxVisiblePages = 5;
-    
-    if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) {
-        pageNumbers.push(i);
-      }
-    } else {
-      let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-      let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-      
-      if (endPage - startPage + 1 < maxVisiblePages) {
-        startPage = Math.max(1, endPage - maxVisiblePages + 1);
-      }
-      
-      for (let i = startPage; i <= endPage; i++) {
-        pageNumbers.push(i);
-      }
-    }
-    
-    return pageNumbers;
+
+/* ─────────────────────────────────────────────
+   HELPERS
+───────────────────────────────────────────── */
+const fmt = (n: string | number) =>
+  new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF' }).format(Number(n));
+
+const fmtDate = (d: string) =>
+  new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(d));
+
+const fmtDateShort = (d: string) =>
+  new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(d));
+
+/* ─────────────────────────────────────────────
+   MICRO-COMPONENTS
+───────────────────────────────────────────── */
+const Badge = ({ label, color }: { label: string; color: 'green' | 'red' | 'amber' | 'gray' | 'blue' }) => {
+  const styles: Record<string, React.CSSProperties> = {
+    green: { background: P.forestPale, color: P.forest,  border: `1px solid #C4DCCA` },
+    red:   { background: '#FCECEA',    color: '#9A1F1F',  border: '1px solid #F5C2C2' },
+    amber: { background: P.ocrePale,   color: '#9A5E1A',  border: `1px solid #E8C090` },
+    gray:  { background: P.sand,       color: P.mutedDark,border: `1px solid ${P.sandBorder}` },
+    blue:  { background: '#EAF1FB',    color: '#185FA5',  border: '1px solid #B5D4F4' },
   };
-
-  // Calculs des statistiques globales
-  const totalSalesAmount = purchases.reduce((sum, p) => sum + Number(p.total_sales_amount), 0);
-  const totalSalesAmountPOS = purchasesPOS.reduce((sum, p) => sum + Number(p.total_sales_amount), 0);
-  const totalTurnoverPOS = purchasesPOS.reduce((sum, p) => sum + Number(p.turnover), 0);
-
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* En-tête */}
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-3">Gestion des Prospects</h1>
-          <p className="text-gray-600 text-lg">Suivi et analyse des ventes ambulantes et points de vente</p>
-        </div>
+    <span style={{
+      ...styles[color],
+      display: 'inline-flex', alignItems: 'center',
+      padding: '2px 10px', borderRadius: 999,
+      fontSize: 11, fontWeight: 600,
+    }}>
+      {label}
+    </span>
+  );
+};
 
-        {/* Navigation par onglets */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="border-b border-gray-200">
-            <div className="flex">
-              <button
-                onClick={() => setActiveTab('pushcart')}
-                className={`flex-1 py-4 px-6 text-center font-semibold transition-colors ${
-                  activeTab === 'pushcart'
-                    ? 'bg-indigo-600 text-white'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <Bike size={20} />
-                  Prospects Pushcart
-                </div>
-              </button>
-              <button
-                onClick={() => setActiveTab('pos')}
-                className={`flex-1 py-4 px-6 text-center font-semibold transition-colors ${
-                  activeTab === 'pos'
-                    ? 'bg-indigo-600 text-white'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <Store size={20} />
-                  Prospects Point de vente
-                </div>
-              </button>
-            </div>
+const StatCard = ({ icon, label, value, sub, accentBg, accentIcon }: {
+  icon: React.ReactNode; label: string; value: React.ReactNode;
+  sub?: React.ReactNode; accentBg: string; accentIcon: string;
+}) => (
+  <div style={{
+    background: P.white, borderRadius: 16,
+    border: `1.5px solid ${P.sandBorder}`,
+    padding: '20px', display: 'flex', flexDirection: 'column', gap: 12,
+    transition: 'border-color .15s',
+  }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 10, fontWeight: 700, color: P.mutedDark, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>{label}</p>
+        <p style={{ fontSize: 22, fontWeight: 700, color: P.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</p>
+      </div>
+      <div style={{ width: 40, height: 40, borderRadius: 12, background: accentBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 12, color: accentIcon }}>
+        {icon}
+      </div>
+    </div>
+    {sub && (
+      <div style={{ borderTop: `1px solid ${P.sand}`, paddingTop: 10 }}>{sub}</div>
+    )}
+  </div>
+);
+
+const inputStyle: React.CSSProperties = {
+  width: '100%', height: 40,
+  padding: '0 14px',
+  background: P.sand,
+  border: `1.5px solid ${P.sandMid}`,
+  borderRadius: 12,
+  color: P.ink, fontSize: 13.5,
+  fontFamily: 'inherit',
+  outline: 'none',
+  transition: 'border .15s, background .15s, box-shadow .15s',
+  boxSizing: 'border-box',
+};
+
+const InputField = ({ value, onChange, placeholder, type = 'text', style = {} }: {
+  value: string; onChange: (v: string) => void;
+  placeholder?: string; type?: string; style?: React.CSSProperties;
+}) => (
+  <input
+    type={type} value={value} placeholder={placeholder}
+    onChange={e => onChange(e.target.value)}
+    style={{ ...inputStyle, ...style }}
+    onFocus={e => { e.currentTarget.style.background = P.white; e.currentTarget.style.borderColor = P.forest; e.currentTarget.style.boxShadow = `0 0 0 3px rgba(45,90,61,.10)`; }}
+    onBlur={e => { e.currentTarget.style.background = P.sand; e.currentTarget.style.borderColor = P.sandMid; e.currentTarget.style.boxShadow = 'none'; }}
+  />
+);
+
+const SelectField = ({ value, onChange, children }: {
+  value: string; onChange: (v: string) => void; children: React.ReactNode;
+}) => (
+  <select
+    value={value} onChange={e => onChange(e.target.value)}
+    style={{ ...inputStyle, cursor: 'pointer' }}
+    onFocus={e => { e.currentTarget.style.background = P.white; e.currentTarget.style.borderColor = P.forest; e.currentTarget.style.boxShadow = `0 0 0 3px rgba(45,90,61,.10)`; }}
+    onBlur={e => { e.currentTarget.style.background = P.sand; e.currentTarget.style.borderColor = P.sandMid; e.currentTarget.style.boxShadow = 'none'; }}
+  >
+    {children}
+  </select>
+);
+
+const LabelBlock = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div>
+    <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: P.mutedDark, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>{label}</label>
+    {children}
+  </div>
+);
+
+/* ─────────────────────────────────────────────
+   FILTER PANEL
+───────────────────────────────────────────── */
+const FilterPanel = ({ activeTab, filters, filtersPOS, zones, pushcardTypes, districts, regions, communes, posTypes, statuses, setFilters, setFiltersPOS, onReset, onResetPOS }: any) => (
+  <div style={{ padding: '20px 24px', borderBottom: `1px solid ${P.sandBorder}`, background: P.cream }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+      {activeTab === 'pushcart' ? (
+        <>
+          <LabelBlock label="Zone">
+            <SelectField value={filters.zone} onChange={v => setFilters((p: any) => ({ ...p, zone: v }))}>
+              <option value="">Toutes les zones</option>
+              {zones.map((z: string) => <option key={z} value={z}>{z}</option>)}
+            </SelectField>
+          </LabelBlock>
+          <LabelBlock label="Type de prospect">
+            <SelectField value={filters.pushcard_type} onChange={v => setFilters((p: any) => ({ ...p, pushcard_type: v }))}>
+              <option value="">Tous les types</option>
+              {pushcardTypes.map((t: string) => <option key={t} value={t}>{t}</option>)}
+            </SelectField>
+          </LabelBlock>
+          <LabelBlock label="Commercial (ID)">
+            <InputField value={filters.vendor} onChange={v => setFilters((p: any) => ({ ...p, vendor: v }))} placeholder="Ex : 42" />
+          </LabelBlock>
+          <LabelBlock label="Date de début">
+            <InputField type="date" value={filters.start_date} onChange={v => setFilters((p: any) => ({ ...p, start_date: v }))} />
+          </LabelBlock>
+          <LabelBlock label="Date de fin">
+            <InputField type="date" value={filters.end_date} onChange={v => setFilters((p: any) => ({ ...p, end_date: v }))} />
+          </LabelBlock>
+          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <button onClick={onReset} style={{ height: 40, padding: '0 18px', borderRadius: 12, border: `1.5px solid ${P.sandMid}`, background: P.sand, color: P.mutedDark, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              Réinitialiser
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <LabelBlock label="District">
+            <SelectField value={filtersPOS.district} onChange={v => setFiltersPOS((p: any) => ({ ...p, district: v }))}>
+              <option value="">Tous les districts</option>
+              {districts.map((d: string) => <option key={d} value={d}>{d}</option>)}
+            </SelectField>
+          </LabelBlock>
+          <LabelBlock label="Région">
+            <SelectField value={filtersPOS.region} onChange={v => setFiltersPOS((p: any) => ({ ...p, region: v }))}>
+              <option value="">Toutes les régions</option>
+              {regions.map((r: string) => <option key={r} value={r}>{r}</option>)}
+            </SelectField>
+          </LabelBlock>
+          <LabelBlock label="Commune">
+            <SelectField value={filtersPOS.commune} onChange={v => setFiltersPOS((p: any) => ({ ...p, commune: v }))}>
+              <option value="">Toutes les communes</option>
+              {communes.map((c: string) => <option key={c} value={c}>{c}</option>)}
+            </SelectField>
+          </LabelBlock>
+          <LabelBlock label="Type">
+            <SelectField value={filtersPOS.type} onChange={v => setFiltersPOS((p: any) => ({ ...p, type: v }))}>
+              <option value="">Tous les types</option>
+              {posTypes.map((t: string) => <option key={t} value={t}>{t}</option>)}
+            </SelectField>
+          </LabelBlock>
+          <LabelBlock label="Statut">
+            <SelectField value={filtersPOS.status} onChange={v => setFiltersPOS((p: any) => ({ ...p, status: v }))}>
+              <option value="">Tous les statuts</option>
+              {statuses.map((s: string) => <option key={s} value={s}>{s}</option>)}
+            </SelectField>
+          </LabelBlock>
+          <LabelBlock label="Date début">
+            <InputField type="date" value={filtersPOS.start_date} onChange={v => setFiltersPOS((p: any) => ({ ...p, start_date: v }))} />
+          </LabelBlock>
+          <LabelBlock label="Date fin">
+            <InputField type="date" value={filtersPOS.end_date} onChange={v => setFiltersPOS((p: any) => ({ ...p, end_date: v }))} />
+          </LabelBlock>
+          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <button onClick={onResetPOS} style={{ height: 40, padding: '0 18px', borderRadius: 12, border: `1.5px solid ${P.sandMid}`, background: P.sand, color: P.mutedDark, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              Réinitialiser
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  </div>
+);
+
+/* ─────────────────────────────────────────────
+   DETAIL MODAL
+───────────────────────────────────────────── */
+const DetailsModal = ({ details, loading, activeTab, selectedPurchase, onClose }: {
+  details: PurchaseDetails | null;
+  loading: boolean;
+  activeTab: TabType;
+  selectedPurchase: Purchase | PurchasePOS | null;
+  onClose: () => void;
+}) => (
+  <div style={{ position: 'fixed', inset: 0, background: 'rgba(42,26,8,.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+    <div style={{ background: P.white, borderRadius: 20, boxShadow: '0 24px 64px rgba(42,26,8,.18)', maxWidth: 900, width: '100%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+
+      {/* Kente top band */}
+      <div style={{ height: 3, background: `linear-gradient(90deg,${P.ocre} 0%,${P.gold} 40%,${P.ocre} 100%)`, flexShrink: 0 }} />
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: `1px solid ${P.sandBorder}`, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 12, background: P.forestPale, display: 'flex', alignItems: 'center', justifyContent: 'center', color: P.forest }}>
+            {activeTab === 'pushcart' ? <Bike size={17} /> : <Store size={17} />}
+          </div>
+          <div>
+            <h2 style={{ fontWeight: 700, color: P.ink, fontSize: 17, margin: 0 }}>Détails de la vente</h2>
+            {details && <p style={{ fontSize: 12, color: P.muted, margin: 0 }}>#{details.purchase.id}</p>}
           </div>
         </div>
+        <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 10, border: `1.5px solid ${P.sandBorder}`, background: P.sand, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: P.muted }}>
+          <X size={16} />
+        </button>
+      </div>
 
-        {/* Cartes de statistiques */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-gray-600 mb-1">Total des ventes</p>
-                <p className="text-3xl font-bold text-gray-900">
-                  {formatCurrency(activeTab === 'pushcart' ? totalSalesAmount : totalSalesAmountPOS)}
-                </p>
-              </div>
-              <div className="p-3 bg-indigo-100 rounded-xl">
-                <DollarSign className="text-indigo-600" size={24} />
-              </div>
-            </div>
-            <div className="mt-4 flex items-center text-sm text-emerald-600">
-              <TrendingUp size={14} className="mr-1" />
-              <span>+12% ce mois</span>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-gray-600 mb-1">
-                  {activeTab === 'pushcart' ? 'Nombre de ventes' : 'Points de vente'}
-                </p>
-                <p className="text-3xl font-bold text-gray-900">
-                  {activeTab === 'pushcart' ? purchases.length : purchasesPOS.length}
-                </p>
-              </div>
-              <div className="p-3 bg-emerald-100 rounded-xl">
-                {activeTab === 'pushcart' ? (
-                  <ShoppingCart className="text-emerald-600" size={24} />
-                ) : (
-                  <Store className="text-emerald-600" size={24} />
-                )}
-              </div>
-            </div>
-            <div className="mt-4 flex items-center text-sm text-emerald-600">
-              <ArrowUpRight size={14} className="mr-1" />
-              <span>+8% ce mois</span>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-gray-600 mb-1">
-                  {activeTab === 'pushcart' ? 'Zones couvertes' : 'Régions couvertes'}
-                </p>
-                <p className="text-3xl font-bold text-gray-900">
-                  {activeTab === 'pushcart' ? zones.length : regions.length}
-                </p>
-              </div>
-              <div className="p-3 bg-purple-100 rounded-xl">
-                <MapPin className="text-purple-600" size={24} />
-              </div>
-            </div>
-            <div className="mt-4 flex items-center text-sm text-purple-600">
-              <Target size={14} className="mr-1" />
-              <span>+2 nouvelles {activeTab === 'pushcart' ? 'zones' : 'régions'}</span>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-gray-600 mb-1">
-                  {activeTab === 'pushcart' ? 'Types de Prospects' : 'Chiffre d\'affaires total'}
-                </p>
-                <p className="text-3xl font-bold text-gray-900">
-                  {activeTab === 'pushcart' ? pushcardTypes.length : formatCurrency(totalTurnoverPOS)}
-                </p>
-              </div>
-              <div className="p-3 bg-orange-100 rounded-xl">
-                {activeTab === 'pushcart' ? (
-                  <Bike className="text-orange-600" size={24} />
-                ) : (
-                  <Building className="text-orange-600" size={24} />
-                )}
-              </div>
-            </div>
-            <div className="mt-4 flex items-center text-sm text-orange-600">
-              <Users size={14} className="mr-1" />
-              <span>Stable ce mois</span>
-            </div>
-          </div>
+      {loading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', gap: 12 }}>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', border: `2.5px solid ${P.forest}`, borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
+          <p style={{ fontSize: 13, color: P.muted }}>Chargement…</p>
+          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         </div>
-
-        {/* Barre de recherche et filtres */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="relative w-full md:w-80">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="text"
-                placeholder={
-                  activeTab === 'pushcart' 
-                    ? "Rechercher un client, zone, base..." 
-                    : "Rechercher un point de vente, propriétaire, adresse..."
-                }
-                className="pl-12 pr-4 py-3 w-full border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                value={activeTab === 'pushcart' ? filters.search : filtersPOS.search}
-                onChange={(e) => activeTab === 'pushcart' 
-                  ? setFilters({...filters, search: e.target.value})
-                  : setFiltersPOS({...filtersPOS, search: e.target.value})
-                }
-              />
-            </div>
-            
-            <div className="flex flex-wrap gap-3">
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className="flex items-center px-4 py-2.5 bg-indigo-50 text-indigo-700 rounded-xl hover:bg-indigo-100 transition-colors font-medium"
-              >
-                <Filter size={18} className="mr-2" />
-                Filtres
-                {showFilters ? <ChevronUp size={16} className="ml-1" /> : <ChevronDown size={16} className="ml-1" />}
-              </button>
-              
-              <button
-                onClick={exportData}
-                className="flex items-center px-4 py-2.5 bg-emerald-50 text-emerald-700 rounded-xl hover:bg-emerald-100 transition-colors font-medium"
-              >
-                <Download size={18} className="mr-2" />
-                Exporter
-              </button>
-              
-              <button
-                onClick={activeTab === 'pushcart' ? fetchPurchases : fetchPurchasesPOS}
-                className="p-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors"
-                title="Actualiser"
-              >
-                <RefreshCw size={18} />
-              </button>
-            </div>
-          </div>
-          
-          {/* Panneau de filtres avancés */}
-          {showFilters && (
-            <div className="p-6 border-b border-gray-100 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 bg-gray-50">
-              {activeTab === 'pushcart' ? (
+      ) : details ? (
+        <div style={{ overflowY: 'auto', flex: 1, padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Info cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ background: P.sand, borderRadius: 14, border: `1px solid ${P.sandBorder}`, padding: 18 }}>
+              <h3 style={{ fontSize: 10, fontWeight: 700, color: P.mutedDark, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                <User size={11} /> {activeTab === 'pushcart' ? 'Client' : 'Point de vente'}
+              </h3>
+              <p style={{ fontWeight: 600, color: P.ink, fontSize: 15, marginBottom: 6 }}>{details.purchase.full_name}</p>
+              <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: P.muted, marginBottom: 4 }}><MapPin size={11} />{details.purchase.zone}</p>
+              {activeTab === 'pos' && selectedPurchase && (
                 <>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">Zone</label>
-                    <select
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                      value={filters.zone}
-                      onChange={(e) => setFilters({...filters, zone: e.target.value})}
-                    >
-                      <option value="">Toutes les zones</option>
-                      {zones.map(zone => (
-                        <option key={zone} value={zone}>{zone}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">Type de prospect</label>
-                    <select
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                      value={filters.pushcard_type}
-                      onChange={(e) => setFilters({...filters, pushcard_type: e.target.value})}
-                    >
-                      <option value="">Tous les types</option>
-                      {pushcardTypes.map(type => (
-                        <option key={type} value={type}>{type}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">Commercial</label>
-                    <input
-                      type="text"
-                      placeholder="ID du vendeur"
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                      value={filters.vendor}
-                      onChange={(e) => setFilters({...filters, vendor: e.target.value})}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">Date de début</label>
-                    <input
-                      type="date"
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                      value={filters.start_date}
-                      onChange={(e) => setFilters({...filters, start_date: e.target.value})}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">Date de fin</label>
-                    <input
-                      type="date"
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                      value={filters.end_date}
-                      onChange={(e) => setFilters({...filters, end_date: e.target.value})}
-                    />
-                  </div>
-                  
-                  <div className="flex items-end">
-                    <button
-                      onClick={resetFilters}
-                      className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium"
-                    >
-                      Réinitialiser
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">District</label>
-                    <select
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                      value={filtersPOS.district}
-                      onChange={(e) => setFiltersPOS({...filtersPOS, district: e.target.value})}
-                    >
-                      <option value="">Tous les districts</option>
-                      {districts.map(district => (
-                        <option key={district} value={district}>{district}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">Région</label>
-                    <select
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                      value={filtersPOS.region}
-                      onChange={(e) => setFiltersPOS({...filtersPOS, region: e.target.value})}
-                    >
-                      <option value="">Toutes les régions</option>
-                      {regions.map(region => (
-                        <option key={region} value={region}>{region}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">Commune</label>
-                    <select
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                      value={filtersPOS.commune}
-                      onChange={(e) => setFiltersPOS({...filtersPOS, commune: e.target.value})}
-                    >
-                      <option value="">Toutes les communes</option>
-                      {communes.map(commune => (
-                        <option key={commune} value={commune}>{commune}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">Type</label>
-                    <select
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                      value={filtersPOS.type}
-                      onChange={(e) => setFiltersPOS({...filtersPOS, type: e.target.value})}
-                    >
-                      <option value="">Tous les types</option>
-                      {posTypes.map(type => (
-                        <option key={type} value={type}>{type}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">Statut</label>
-                    <select
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                      value={filtersPOS.status}
-                      onChange={(e) => setFiltersPOS({...filtersPOS, status: e.target.value})}
-                    >
-                      <option value="">Tous les statuts</option>
-                      {statuses.map(status => (
-                        <option key={status} value={status}>{status}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">Date d'enregistrement (début)</label>
-                    <input
-                      type="date"
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                      value={filtersPOS.start_date}
-                      onChange={(e) => setFiltersPOS({...filtersPOS, start_date: e.target.value})}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">Date d'enregistrement (fin)</label>
-                    <input
-                      type="date"
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                      value={filtersPOS.end_date}
-                      onChange={(e) => setFiltersPOS({...filtersPOS, end_date: e.target.value})}
-                    />
-                  </div>
-                  
-                  <div className="flex items-end">
-                    <button
-                      onClick={resetFiltersPOS}
-                      className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium"
-                    >
-                      Réinitialiser
-                    </button>
-                  </div>
+                  <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: P.muted, marginBottom: 4 }}><Phone size={11} />{(selectedPurchase as PurchasePOS).phone}</p>
+                  <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: P.muted }}><Users size={11} />{(selectedPurchase as PurchasePOS).owner}</p>
                 </>
               )}
-            </div>
-          )}
-        </div>
-
-        {/* Tableau des données */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          {loading ? (
-            <div className="flex justify-center items-center py-16">
-              <Loader2 className="animate-spin text-indigo-600 mr-3" size={28} />
-              <span className="text-gray-600">Chargement des données...</span>
-            </div>
-          ) : error ? (
-            <div className="p-8 text-center">
-              <div className="mx-auto w-16 h-16 flex items-center justify-center bg-red-100 rounded-full mb-4">
-                <X className="text-red-600" size={28} />
-              </div>
-              <div className="text-red-700 font-semibold mb-2">Erreur lors du chargement des données</div>
-              <div className="text-gray-600 mb-6">{error}</div>
-              <button
-                onClick={activeTab === 'pushcart' ? fetchPurchases : fetchPurchasesPOS}
-                className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm"
-              >
-                Réessayer
-              </button>
-            </div>
-          ) : (activeTab === 'pushcart' ? filteredPurchases : filteredPurchasesPOS).length === 0 ? (
-            <div className="p-8 text-center">
-              <div className="mx-auto w-16 h-16 flex items-center justify-center bg-gray-100 rounded-full mb-4">
-                <Search className="text-gray-500" size={28} />
-              </div>
-              <div className="text-gray-900 font-semibold mb-2">Aucune donnée à afficher</div>
-              <div className="text-gray-600 mb-6">
-                {(activeTab === 'pushcart' ? Object.values(filters) : Object.values(filtersPOS)).some(value => value) 
-                  ? `Aucun ${activeTab === 'pushcart' ? 'prospect pushcart' : 'point de vente'} ne correspond à vos critères de recherche.`
-                  : `Aucun ${activeTab === 'pushcart' ? 'prospect pushcart' : 'point de vente'} enregistré pour le moment.`
-                }
-              </div>
-              {(activeTab === 'pushcart' ? Object.values(filters) : Object.values(filtersPOS)).some(value => value) && (
-                <button
-                  onClick={activeTab === 'pushcart' ? resetFilters : resetFiltersPOS}
-                  className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm"
-                >
-                  Réinitialiser les filtres
-                </button>
+              {activeTab === 'pushcart' && details.purchase.purchase_date && (
+                <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: P.muted }}><Calendar size={11} />{fmtDate(details.purchase.purchase_date)}</p>
               )}
             </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      {activeTab === 'pushcart' ? (
-                        <>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Client
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Zone & Base
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Type & Commercial
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Contact
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Montant & Quantité
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Date
-                          </th>
-                        </>
-                      ) : (
-                        <>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Point de vente
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Propriétaire & Contact
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Localisation
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Type & Statut
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Ventes & Commandes
-                          </th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            Date d'enregistrement
-                          </th>
-                        </>
-                      )}
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                        Actions
-                      </th>
+            <div style={{ background: P.forestPale, borderRadius: 14, border: '1px solid #C4DCCA', padding: 18 }}>
+              <h3 style={{ fontSize: 10, fontWeight: 700, color: P.forest, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                <BarChart3 size={11} /> Résumé
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {[
+                  { label: 'Montant total', val: fmt(details.statistics.grand_total_amount) },
+                  { label: 'Quantité',       val: details.statistics.grand_total_quantity },
+                  { label: 'Produits',        val: details.statistics.total_products },
+                  { label: 'Variantes',       val: details.statistics.total_variants },
+                ].map(s => (
+                  <div key={s.label} style={{ background: P.white, borderRadius: 10, padding: 12, border: '1px solid #C4DCCA' }}>
+                    <p style={{ fontSize: 11, color: P.muted, marginBottom: 3 }}>{s.label}</p>
+                    <p style={{ fontWeight: 700, fontSize: 14, color: P.ink }}>{s.val}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Products table */}
+          <div>
+            <h3 style={{ fontSize: 10, fontWeight: 700, color: P.mutedDark, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+              <Package size={11} /> Produits vendus
+            </h3>
+            <div style={{ background: P.white, borderRadius: 14, border: `1px solid ${P.sandBorder}`, overflow: 'hidden' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ minWidth: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: P.sand, borderBottom: `1px solid ${P.sandBorder}` }}>
+                      {['Produit', 'Format', 'Prix unit.', 'Qté', 'Total', 'Date'].map(h => (
+                        <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: P.mutedDark, textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {activeTab === 'pushcart' 
-                      ? currentItems.map((purchase) => (
-                          <tr key={purchase.id} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="font-semibold text-gray-900">{purchase.full_name}</div>
-                              <div className="text-sm text-gray-500">{purchase.pushcard_type}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center">
-                                <MapPin size={14} className="text-indigo-500 mr-1" />
-                                <span className="text-gray-900 font-medium">{purchase.zone}</span>
-                              </div>
-                              <div className="text-sm text-gray-500">{purchase.base}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-gray-900 font-medium">Commercial #{purchase.vendor}</div>
-                              <div className="text-sm text-gray-500">{purchase.pushcard_type}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center">
-                                <Phone size={14} className="text-emerald-500 mr-1" />
-                                <span className="text-gray-900">{purchase.phone}</span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="font-semibold text-emerald-600">
-                                {formatCurrency(purchase.total_sales_amount)}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {purchase.total_sales_quantity} unités
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-gray-900 font-medium">
-                                {formatDate(purchase.purchase_date).split(' ')[0]}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {formatDate(purchase.purchase_date).split(' ')[1]}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <button
-                                onClick={() => {
-                                  setSelectedPurchase(purchase);
-                                  fetchPurchaseDetails(purchase.id);
-                                }}
-                                className="flex items-center px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors font-medium"
-                              >
-                                <Eye size={16} className="mr-1.5" />
-                                Détails
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      : currentItemsPOS.map((purchase) => (
-                          <tr key={purchase.id} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="font-semibold text-gray-900">{purchase.name}</div>
-                              <div className="text-sm text-gray-500">{purchase.email}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-gray-900 font-medium">{purchase.owner}</div>
-                              <div className="flex items-center text-sm text-gray-500">
-                                <Phone size={14} className="mr-1" />
-                                {purchase.phone}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center">
-                                <MapPin size={14} className="text-indigo-500 mr-1" />
-                                <span className="text-gray-900">{purchase.address}</span>
-                              </div>
-                              <div className="text-sm text-gray-500">{purchase.commune}, {purchase.district}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-gray-900 font-medium capitalize">{purchase.type}</div>
-                              <div className={`text-sm font-medium ${
-                                purchase.status === 'actif' ? 'text-emerald-600' : 'text-red-600'
-                              }`}>
-                                {purchase.status}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="font-semibold text-emerald-600">
-                                {formatCurrency(purchase.total_sales_amount)}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {purchase.monthly_orders} commandes/mois
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-gray-900 font-medium">
-                                {formatDate(purchase.registration_date).split(' ')[0]}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                CA: {formatCurrency(purchase.turnover)}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <button
-                                onClick={() => {
-                                  setSelectedPurchase(purchase);
-                                  fetchPurchaseDetails(purchase.id);
-                                }}
-                                className="flex items-center px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors font-medium"
-                              >
-                                <Eye size={16} className="mr-1.5" />
-                                Détails
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                    }
+                  <tbody>
+                    {details.sales.map((sale, i) => (
+                      <tr key={sale.id} style={{ borderBottom: i < details.sales.length - 1 ? `1px solid ${P.cream}` : 'none' }}>
+                        <td style={{ padding: '12px 16px' }}>
+                          <p style={{ fontWeight: 600, color: P.ink, marginBottom: 2 }}>{sale.product_variant.product.name}</p>
+                          <p style={{ fontSize: 11, color: P.muted }}>SKU: {sale.product_variant.product.sku}</p>
+                        </td>
+                        <td style={{ padding: '12px 16px', color: P.ink, fontWeight: 500 }}>{sale.product_variant.format.name}</td>
+                        <td style={{ padding: '12px 16px', color: P.mutedDark }}>{fmt(sale.unit_price)}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ padding: '2px 10px', background: P.forestPale, color: P.forest, borderRadius: 999, fontSize: 12, fontWeight: 700 }}>{sale.quantity}</span>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontWeight: 700, color: P.forest }}>{fmt(sale.total_amount)}</td>
+                        <td style={{ padding: '12px 16px', fontSize: 12, color: P.muted, whiteSpace: 'nowrap' }}>{fmtDateShort(sale.created_at)}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
-              
-              {/* Pagination */}
-              <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="text-sm text-gray-700 font-medium">
-                  Affichage de{' '}
-                  <span className="text-gray-900">
-                    {activeTab === 'pushcart' 
-                      ? `${indexOfFirstItem + 1}-${Math.min(indexOfLastItem, filteredPurchases.length)}`
-                      : `${indexOfFirstItemPOS + 1}-${Math.min(indexOfLastItemPOS, filteredPurchasesPOS.length)}`
-                    }
-                  </span>{' '}
-                  sur{' '}
-                  <span className="text-gray-900">
-                    {activeTab === 'pushcart' ? filteredPurchases.length : filteredPurchasesPOS.length}
-                  </span>{' '}
-                  résultats
-                </div>
-                
-                <div className="flex items-center space-x-3">
-                  <select
-                    value={itemsPerPage}
-                    onChange={(e) => {
-                      setItemsPerPage(Number(e.target.value));
-                      activeTab === 'pushcart' ? setCurrentPage(1) : setCurrentPagePOS(1);
-                    }}
-                    className="border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
-                  >
-                    <option value="5">5 par page</option>
-                    <option value="10">10 par page</option>
-                    <option value="20">20 par page</option>
-                    <option value="50">50 par page</option>
-                  </select>
-                  
-                  <button
-                    onClick={activeTab === 'pushcart' ? prevPage : prevPagePOS}
-                    disabled={activeTab === 'pushcart' ? currentPage === 1 : currentPagePOS === 1}
-                    className={`px-4 py-2 border border-gray-300 rounded-xl text-sm font-medium transition-colors ${
-                      (activeTab === 'pushcart' ? currentPage === 1 : currentPagePOS === 1)
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                        : 'bg-white text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    Précédent
-                  </button>
-                  
-                  {/* Numéros de page */}
-                  <div className="flex space-x-1">
-                    {getPageNumbers(
-                      activeTab === 'pushcart' ? currentPage : currentPagePOS, 
-                      activeTab === 'pushcart' ? totalPages : totalPagesPOS
-                    ).map(pageNumber => (
-                      <button
-                        key={pageNumber}
-                        onClick={() => activeTab === 'pushcart' ? goToPage(pageNumber) : goToPagePOS(pageNumber)}
-                        className={`px-3 py-2 rounded-xl text-sm font-medium min-w-[40px] transition-colors ${
-                          (activeTab === 'pushcart' ? currentPage : currentPagePOS) === pageNumber
-                            ? 'bg-indigo-600 text-white'
-                            : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-                        }`}
-                      >
-                        {pageNumber}
-                      </button>
-                    ))}
-                  </div>
-                  
-                  <button
-                    onClick={activeTab === 'pushcart' ? nextPage : nextPagePOS}
-                    disabled={activeTab === 'pushcart' ? currentPage === totalPages : currentPagePOS === totalPagesPOS}
-                    className={`px-4 py-2 border border-gray-300 rounded-xl text-sm font-medium transition-colors ${
-                      (activeTab === 'pushcart' ? currentPage === totalPages : currentPagePOS === totalPagesPOS)
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                        : 'bg-white text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    Suivant
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Modal de détails */}
-        {showDetailsModal && purchaseDetails && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-screen overflow-y-auto">
-              <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-t-2xl">
-                <div>
-                  <h2 className="text-xl font-bold">Détails de la vente</h2>
-                  <p className="text-indigo-100 text-sm mt-1">
-                    {activeTab === 'pushcart' ? 'Vente' : 'Point de vente'} #{purchaseDetails.purchase.id}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowDetailsModal(false)}
-                  className="text-white hover:text-indigo-100 p-2 rounded-lg hover:bg-indigo-400 transition-colors"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-              
-              {detailsLoading ? (
-                <div className="flex justify-center items-center py-16">
-                  <Loader2 className="animate-spin text-indigo-600 mr-3" size={28} />
-                  <span className="text-gray-600">Chargement des détails...</span>
-                </div>
-              ) : (
-                <div className="p-6">
-                  {/* Informations sur l'achat */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                    <div className="bg-indigo-50 p-5 rounded-xl border border-indigo-100">
-                      <h3 className="font-semibold text-indigo-800 mb-3 flex items-center">
-                        <User size={18} className="mr-2" />
-                        {activeTab === 'pushcart' ? 'Informations client' : 'Informations point de vente'}
-                      </h3>
-                      <p className="text-gray-900 font-medium">{purchaseDetails.purchase.full_name}</p>
-                      <div className="flex items-center mt-2 text-gray-600">
-                        <MapPin size={14} className="mr-1" />
-                        <span>{purchaseDetails.purchase.zone}</span>
-                      </div>
-                      {activeTab === 'pos' && selectedPurchase && (
-                        <>
-                          <div className="flex items-center mt-1 text-gray-600">
-                            <Phone size={14} className="mr-1" />
-                            <span>{(selectedPurchase as PurchasePOS).phone}</span>
-                          </div>
-                          <div className="flex items-center mt-1 text-gray-600">
-                            <Users size={14} className="mr-1" />
-                            <span>Propriétaire: {(selectedPurchase as PurchasePOS).owner}</span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    
-                    <div className="bg-emerald-50 p-5 rounded-xl border border-emerald-100">
-                      <h3 className="font-semibold text-emerald-800 mb-3 flex items-center">
-                        <ShoppingCart size={18} className="mr-2" />
-                        Informations vente
-                      </h3>
-                      {activeTab === 'pushcart' && selectedPurchase && (
-                        <p className="text-gray-900 font-medium">
-                          {formatDate((selectedPurchase as Purchase).purchase_date)}
-                        </p>
-                      )}
-                      <p className="text-emerald-600 font-bold mt-2 text-xl">
-                        {formatCurrency(purchaseDetails.statistics.grand_total_amount)}
-                      </p>
-                      <p className="text-gray-600">Quantité: {purchaseDetails.statistics.grand_total_quantity} unités</p>
-                    </div>
-                  </div>
-                  
-                  {/* Détails des produits vendus */}
-                  <div className="mb-6">
-                    <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                      <Package size={18} className="mr-2 text-indigo-500" />
-                      Produits vendus
-                    </h3>
-                    <div className="overflow-x-auto rounded-xl border border-gray-200">
-                      <table className="w-full">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                              Produit
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                              Format
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                              Prix unitaire
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                              Quantité
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                              Total
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                              Date
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {purchaseDetails.sales.map((sale) => (
-                            <tr key={sale.id} className="hover:bg-gray-50 transition-colors">
-                              <td className="px-4 py-4 whitespace-nowrap">
-                                <div className="font-medium text-gray-900">{sale.product_variant.product.name}</div>
-                                <div className="text-sm text-gray-500">SKU: {sale.product_variant.product.sku}</div>
-                              </td>
-                              <td className="px-4 py-4 whitespace-nowrap text-gray-900 font-medium">
-                                {sale.product_variant.format.name}
-                              </td>
-                              <td className="px-4 py-4 whitespace-nowrap text-gray-900">
-                                {formatCurrency(sale.unit_price)}
-                              </td>
-                              <td className="px-4 py-4 whitespace-nowrap">
-                                <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm font-medium">
-                                  {sale.quantity}
-                                </span>
-                              </td>
-                              <td className="px-4 py-4 whitespace-nowrap font-semibold text-emerald-600">
-                                {formatCurrency(sale.total_amount)}
-                              </td>
-                              <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {formatDate(sale.created_at)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  
-                  {/* Résumé */}
-                  <div className="mt-8 p-5 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-xl text-white">
-                    <h3 className="font-semibold mb-4 flex items-center">
-                      <BarChart3 size={18} className="mr-2" />
-                      Résumé de la vente
-                    </h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="bg-white/20 p-3 rounded-lg">
-                        <p className="text-sm opacity-90">Montant total</p>
-                        <p className="font-bold text-lg">{formatCurrency(purchaseDetails.statistics.grand_total_amount)}</p>
-                      </div>
-                      <div className="bg-white/20 p-3 rounded-lg">
-                        <p className="text-sm opacity-90">Quantité totale</p>
-                        <p className="font-bold text-lg">{purchaseDetails.statistics.grand_total_quantity}</p>
-                      </div>
-                      <div className="bg-white/20 p-3 rounded-lg">
-                        <p className="text-sm opacity-90">Produits différents</p>
-                        <p className="font-bold text-lg">{purchaseDetails.statistics.total_products}</p>
-                      </div>
-                      <div className="bg-white/20 p-3 rounded-lg">
-                        <p className="text-sm opacity-90">Variantes différentes</p>
-                        <p className="font-bold text-lg">{purchaseDetails.statistics.total_variants}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              <div className="p-6 border-t border-gray-200 flex justify-end bg-gray-50 rounded-b-2xl">
-                <button
-                  onClick={() => setShowDetailsModal(false)}
-                  className="px-5 py-2.5 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors font-medium"
-                >
-                  Fermer
-                </button>
-              </div>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      <div style={{ padding: '14px 24px', borderTop: `1px solid ${P.sandBorder}`, display: 'flex', justifyContent: 'flex-end', background: P.cream, flexShrink: 0 }}>
+        <button onClick={onClose} style={{ height: 38, padding: '0 20px', borderRadius: 12, border: `1.5px solid ${P.sandMid}`, background: P.white, color: P.mutedDark, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+          Fermer
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+/* ─────────────────────────────────────────────
+   PAGINATION
+───────────────────────────────────────────── */
+const Pagination = ({ current, total, from, to, count, onPrev, onNext, onGo, perPage, onPerPage }: {
+  current: number; total: number; from: number; to: number; count: number;
+  onPrev: () => void; onNext: () => void; onGo: (n: number) => void;
+  perPage: number; onPerPage: (n: number) => void;
+}) => {
+  const pages: number[] = [];
+  const max = 5;
+  let start = Math.max(1, current - Math.floor(max / 2));
+  let end = Math.min(total, start + max - 1);
+  if (end - start + 1 < max) start = Math.max(1, end - max + 1);
+  for (let i = start; i <= end; i++) pages.push(i);
+
+  const btnBase: React.CSSProperties = { height: 32, minWidth: 32, borderRadius: 8, border: `1.5px solid ${P.sandBorder}`, background: P.white, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: P.mutedDark, fontFamily: 'inherit', transition: 'all .12s' };
+
+  return (
+    <div style={{ padding: '14px 20px', background: P.cream, borderTop: `1px solid ${P.sandBorder}`, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 12, color: P.muted }}>{from}–{to} sur <strong style={{ color: P.ink }}>{count}</strong></span>
+        <select value={perPage} onChange={e => onPerPage(+e.target.value)}
+          style={{ height: 30, padding: '0 10px', borderRadius: 8, border: `1.5px solid ${P.sandBorder}`, background: P.white, fontSize: 12, color: P.mutedDark, fontFamily: 'inherit', cursor: 'pointer', outline: 'none' }}>
+          {[5, 10, 20, 50].map(n => <option key={n} value={n}>{n} / page</option>)}
+        </select>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <button onClick={onPrev} disabled={current === 1} style={{ ...btnBase, opacity: current === 1 ? 0.4 : 1 }}><ChevronLeft size={13} /></button>
+        {pages.map(n => (
+          <button key={n} onClick={() => onGo(n)} style={{ ...btnBase, background: n === current ? P.forest : P.white, color: n === current ? P.white : P.mutedDark, border: n === current ? `1.5px solid ${P.forest}` : `1.5px solid ${P.sandBorder}` }}>
+            {n}
+          </button>
+        ))}
+        <button onClick={onNext} disabled={current === total} style={{ ...btnBase, opacity: current === total ? 0.4 : 1 }}><ChevronRight size={13} /></button>
+      </div>
+    </div>
+  );
+};
+
+/* ─────────────────────────────────────────────
+   MAIN COMPONENT
+───────────────────────────────────────────── */
+const PushcartManagement = () => {
+  const [activeTab, setActiveTab]                 = useState<TabType>('pushcart');
+  const [purchases, setPurchases]                 = useState<Purchase[]>([]);
+  const [filteredPurchases, setFilteredPurchases] = useState<Purchase[]>([]);
+  const [purchasesPOS, setPurchasesPOS]           = useState<PurchasePOS[]>([]);
+  const [filteredPurchasesPOS, setFilteredPurchasesPOS] = useState<PurchasePOS[]>([]);
+  const [selectedPurchase, setSelectedPurchase]   = useState<Purchase | PurchasePOS | null>(null);
+  const [purchaseDetails, setPurchaseDetails]     = useState<PurchaseDetails | null>(null);
+  const [loading, setLoading]                     = useState(true);
+  const [detailsLoading, setDetailsLoading]       = useState(false);
+  const [error, setError]                         = useState<string | null>(null);
+  const [showFilters, setShowFilters]             = useState(false);
+  const [showDetailsModal, setShowDetailsModal]   = useState(false);
+
+  const [filters, setFilters]       = useState({ search: '', zone: '', pushcard_type: '', start_date: '', end_date: '', vendor: '' });
+  const [filtersPOS, setFiltersPOS] = useState({ search: '', district: '', region: '', commune: '', type: '', status: '', start_date: '', end_date: '' });
+
+  const [currentPage, setCurrentPage]       = useState(1);
+  const [currentPagePOS, setCurrentPagePOS] = useState(1);
+  const [itemsPerPage, setItemsPerPage]     = useState(10);
+
+  const [zones, setZones]               = useState<string[]>([]);
+  const [pushcardTypes, setPushcardTypes] = useState<string[]>([]);
+  const [districts, setDistricts]       = useState<string[]>([]);
+  const [regions, setRegions]           = useState<string[]>([]);
+  const [communes, setCommunes]         = useState<string[]>([]);
+  const [posTypes, setPosTypes]         = useState<string[]>([]);
+  const [statuses, setStatuses]         = useState<string[]>([]);
+
+  /* ── Pagination ── */
+  const iPP = itemsPerPage;
+  const pc = filteredPurchases, pp = filteredPurchasesPOS;
+  const from  = (currentPage    - 1) * iPP + 1, to  = Math.min(currentPage    * iPP, pc.length);
+  const fromP = (currentPagePOS - 1) * iPP + 1, toP = Math.min(currentPagePOS * iPP, pp.length);
+  const totalPagesPC  = Math.max(1, Math.ceil(pc.length / iPP));
+  const totalPagesPOS = Math.max(1, Math.ceil(pp.length / iPP));
+  const currentItems    = pc.slice((currentPage    - 1) * iPP, currentPage    * iPP);
+  const currentItemsPOS = pp.slice((currentPagePOS - 1) * iPP, currentPagePOS * iPP);
+
+  /* ── API ── */
+  const fetchPurchases = async () => {
+    try {
+      setLoading(true); setError(null);
+      const res = await apiService.get('/purchasedata/');
+      if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
+      const data: Purchase[] = await res.json();
+      setPurchases(data);
+      setZones(Array.from(new Set(data.map(p => p.zone))).filter(Boolean));
+      setPushcardTypes(Array.from(new Set(data.map(p => p.pushcard_type))).filter(Boolean));
+    } catch (e: any) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+
+  const fetchPurchasesPOS = async () => {
+    try {
+      setLoading(true); setError(null);
+      const res = await apiService.get('/purchasedatapos/');
+      if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
+      const data: PurchasePOS[] = await res.json();
+      setPurchasesPOS(data);
+      setDistricts(Array.from(new Set(data.map(p => p.district))).filter(Boolean));
+      setRegions(Array.from(new Set(data.map(p => p.region))).filter(Boolean));
+      setCommunes(Array.from(new Set(data.map(p => p.commune))).filter(Boolean));
+      setPosTypes(Array.from(new Set(data.map(p => p.type))).filter(Boolean));
+      setStatuses(Array.from(new Set(data.map(p => p.status))).filter(Boolean));
+    } catch (e: any) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+
+  const fetchDetails = async (id: number) => {
+    try {
+      setDetailsLoading(true);
+      const url = activeTab === 'pushcart' ? `/purchasedata/${id}/sales_details/` : `/purchasedatapos/${id}/sales_details/`;
+      const res = await apiService.get(url);
+      if (!res.ok) throw new Error('Erreur de chargement');
+      setPurchaseDetails(await res.json());
+      setShowDetailsModal(true);
+    } catch (e: any) { setError(e.message); }
+    finally { setDetailsLoading(false); }
+  };
+
+  /* ── Filters ── */
+  useEffect(() => {
+    let r = purchases;
+    if (filters.search) { const s = filters.search.toLowerCase(); r = r.filter(p => p.full_name.toLowerCase().includes(s) || p.zone.toLowerCase().includes(s) || p.phone.includes(s) || p.base.toLowerCase().includes(s)); }
+    if (filters.zone) r = r.filter(p => p.zone === filters.zone);
+    if (filters.pushcard_type) r = r.filter(p => p.pushcard_type === filters.pushcard_type);
+    if (filters.vendor) r = r.filter(p => p.vendor.toString() === filters.vendor);
+    if (filters.start_date) r = r.filter(p => new Date(p.purchase_date) >= new Date(filters.start_date));
+    if (filters.end_date) { const d = new Date(filters.end_date); d.setHours(23,59,59); r = r.filter(p => new Date(p.purchase_date) <= d); }
+    setFilteredPurchases(r); setCurrentPage(1);
+  }, [filters, purchases]);
+
+  useEffect(() => {
+    let r = purchasesPOS;
+    if (filtersPOS.search) { const s = filtersPOS.search.toLowerCase(); r = r.filter(p => p.name.toLowerCase().includes(s) || p.owner.toLowerCase().includes(s) || p.address.toLowerCase().includes(s) || p.phone.includes(s)); }
+    if (filtersPOS.district) r = r.filter(p => p.district === filtersPOS.district);
+    if (filtersPOS.region)   r = r.filter(p => p.region   === filtersPOS.region);
+    if (filtersPOS.commune)  r = r.filter(p => p.commune  === filtersPOS.commune);
+    if (filtersPOS.type)     r = r.filter(p => p.type     === filtersPOS.type);
+    if (filtersPOS.status)   r = r.filter(p => p.status   === filtersPOS.status);
+    if (filtersPOS.start_date) r = r.filter(p => new Date(p.registration_date) >= new Date(filtersPOS.start_date));
+    if (filtersPOS.end_date) { const d = new Date(filtersPOS.end_date); d.setHours(23,59,59); r = r.filter(p => new Date(p.registration_date) <= d); }
+    setFilteredPurchasesPOS(r); setCurrentPagePOS(1);
+  }, [filtersPOS, purchasesPOS]);
+
+  useEffect(() => { fetchPurchases(); fetchPurchasesPOS(); }, []);
+
+  /* ── Export ── */
+  const exportData = () => {
+    const rows = activeTab === 'pushcart'
+      ? [['Nom','Zone','Base','Type','Téléphone','Date','Montant','Quantité'], ...filteredPurchases.map(p => [p.full_name, p.zone, p.base, p.pushcard_type, p.phone, fmtDate(p.purchase_date), p.total_sales_amount, p.total_sales_quantity])]
+      : [['Nom','Propriétaire','Téléphone','Email','Adresse','District','Région','Type','Statut','CA'], ...filteredPurchasesPOS.map(p => [p.name, p.owner, p.phone, p.email, p.address, p.district, p.region, p.type, p.status, p.turnover])];
+    const blob = new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `${activeTab}_${new Date().toISOString().split('T')[0]}.csv`; a.click();
+  };
+
+  /* ── Stats ── */
+  const totalSales    = purchases.reduce((s, p) => s + Number(p.total_sales_amount), 0);
+  const totalSalesPOS = purchasesPOS.reduce((s, p) => s + Number(p.total_sales_amount), 0);
+  const totalTurnover = purchasesPOS.reduce((s, p) => s + Number(p.turnover), 0);
+  const activeFiltersCount = activeTab === 'pushcart'
+    ? Object.values(filters).filter(Boolean).length
+    : Object.values(filtersPOS).filter(Boolean).length;
+
+  const isFiltered = activeTab === 'pushcart' ? filteredPurchases.length === 0 : filteredPurchasesPOS.length === 0;
+
+  /* ── Render ── */
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: 4 }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: P.ink, letterSpacing: '-0.02em', marginBottom: 4 }}>Gestion des Prospects</h1>
+          <p style={{ fontSize: 13, color: P.muted }}>Suivi et analyse des ventes ambulantes et points de vente</p>
+          {/* Kente accent */}
+          <div style={{ marginTop: 10, width: 40, height: 3, borderRadius: 2, background: `linear-gradient(90deg,${P.ocre},${P.gold})` }} />
+        </div>
+      </div>
+
+      {/* Tab switcher */}
+      <div style={{ background: P.sand, borderRadius: 14, padding: 5, display: 'inline-flex', gap: 4, border: `1.5px solid ${P.sandBorder}` }}>
+        {([
+          { key: 'pushcart', label: 'Prospects Pushcart', icon: <Bike size={14} /> },
+          { key: 'pos',      label: 'Points de vente',    icon: <Store size={14} /> },
+        ] as { key: TabType; label: string; icon: React.ReactNode }[]).map(t => (
+          <button key={t.key} onClick={() => setActiveTab(t.key)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '9px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+              border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              transition: 'all .15s',
+              background: activeTab === t.key ? P.forest : 'transparent',
+              color: activeTab === t.key ? P.white : P.mutedDark,
+              boxShadow: activeTab === t.key ? '0 2px 8px rgba(45,90,61,.20)' : 'none',
+            }}>
+            {t.icon}{t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Stat cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+        <StatCard
+          icon={<DollarSign size={17} />} label="Total ventes"
+          value={fmt(activeTab === 'pushcart' ? totalSales : totalSalesPOS)}
+          accentBg={P.forestPale} accentIcon={P.forest}
+          sub={<span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: P.forest, fontWeight: 600 }}><ArrowUpRight size={11} />+12% ce mois</span>}
+        />
+        <StatCard
+          icon={activeTab === 'pushcart' ? <ShoppingCart size={17} /> : <Store size={17} />}
+          label={activeTab === 'pushcart' ? 'Nombre de ventes' : 'Points de vente'}
+          value={activeTab === 'pushcart' ? purchases.length : purchasesPOS.length}
+          accentBg={P.ocrePale} accentIcon={P.ocre}
+          sub={<span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: P.ocre, fontWeight: 600 }}><ArrowUpRight size={11} />+8% ce mois</span>}
+        />
+        <StatCard
+          icon={<MapPin size={17} />}
+          label={activeTab === 'pushcart' ? 'Zones couvertes' : 'Régions couvertes'}
+          value={activeTab === 'pushcart' ? zones.length : regions.length}
+          accentBg={P.forestPale} accentIcon={P.forest}
+          sub={<span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: P.forest, fontWeight: 600 }}><Target size={11} />+2 nouvelles</span>}
+        />
+        <StatCard
+          icon={activeTab === 'pushcart' ? <Bike size={17} /> : <Building size={17} />}
+          label={activeTab === 'pushcart' ? 'Types de prospects' : "Chiffre d'affaires"}
+          value={activeTab === 'pushcart' ? pushcardTypes.length : fmt(totalTurnover)}
+          accentBg={P.ocrePale} accentIcon={P.ocre}
+          sub={<span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: P.muted, fontWeight: 600 }}><Users size={11} />Stable ce mois</span>}
+        />
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 18px', background: '#FFF0F0', border: '1.5px solid #F7C1C1', borderRadius: 14, fontSize: 13 }}>
+          <AlertCircle size={15} style={{ color: '#A32D2D', marginTop: 1, flexShrink: 0 }} />
+          <span style={{ color: '#A32D2D', flex: 1 }}>{error}</span>
+          <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A32D2D' }}><X size={15} /></button>
+        </div>
+      )}
+
+      {/* Table card */}
+      <div style={{ background: P.white, borderRadius: 18, border: `1.5px solid ${P.sandBorder}`, overflow: 'hidden' }}>
+
+        {/* Kente accent top */}
+        <div style={{ height: 3, background: `linear-gradient(90deg,${P.forest} 0%,${P.ocre} 50%,${P.forest} 100%)`, opacity: 0.7 }} />
+
+        {/* Toolbar */}
+        <div style={{ padding: '16px 20px', borderBottom: `1px solid ${P.sandBorder}`, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ position: 'relative', flex: '1 1 240px', maxWidth: 340 }}>
+            <Search size={14} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: P.muted, pointerEvents: 'none' }} />
+            <InputField
+              value={activeTab === 'pushcart' ? filters.search : filtersPOS.search}
+              onChange={v => activeTab === 'pushcart' ? setFilters(p => ({ ...p, search: v })) : setFiltersPOS(p => ({ ...p, search: v }))}
+              placeholder={activeTab === 'pushcart' ? 'Rechercher client, zone…' : 'Rechercher PDV, propriétaire…'}
+              style={{ paddingLeft: 38 }}
+            />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '0 14px', height: 36, borderRadius: 10, fontSize: 12, fontWeight: 600,
+                border: `1.5px solid ${showFilters || activeFiltersCount > 0 ? P.forest : P.sandBorder}`,
+                background: showFilters || activeFiltersCount > 0 ? P.forest : P.white,
+                color: showFilters || activeFiltersCount > 0 ? P.white : P.mutedDark,
+                cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s',
+              }}>
+              <Filter size={12} /> Filtres
+              {activeFiltersCount > 0 && (
+                <span style={{ background: 'rgba(255,255,255,.28)', color: P.white, fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 999 }}>{activeFiltersCount}</span>
+              )}
+              {showFilters ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+            <button onClick={exportData} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 14px', height: 36, borderRadius: 10, fontSize: 12, fontWeight: 600, border: `1.5px solid ${P.sandBorder}`, background: P.white, color: P.mutedDark, cursor: 'pointer', fontFamily: 'inherit' }}>
+              <Download size={12} /> CSV
+            </button>
+            <button onClick={activeTab === 'pushcart' ? fetchPurchases : fetchPurchasesPOS} title="Actualiser"
+              style={{ width: 36, height: 36, borderRadius: 10, border: `1.5px solid ${P.sandBorder}`, background: P.white, color: P.mutedDark, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <RefreshCw size={13} />
+            </button>
+          </div>
+        </div>
+
+        {showFilters && (
+          <FilterPanel
+            activeTab={activeTab} filters={filters} filtersPOS={filtersPOS}
+            zones={zones} pushcardTypes={pushcardTypes}
+            districts={districts} regions={regions} communes={communes} posTypes={posTypes} statuses={statuses}
+            setFilters={setFilters} setFiltersPOS={setFiltersPOS}
+            onReset={() => setFilters({ search: '', zone: '', pushcard_type: '', start_date: '', end_date: '', vendor: '' })}
+            onResetPOS={() => setFiltersPOS({ search: '', district: '', region: '', commune: '', type: '', status: '', start_date: '', end_date: '' })}
+          />
+        )}
+
+        {/* Content */}
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', gap: 12 }}>
+            <div style={{ width: 32, height: 32, borderRadius: '50%', border: `2.5px solid ${P.forest}`, borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
+            <p style={{ fontSize: 13, color: P.muted }}>Chargement…</p>
+            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+          </div>
+        ) : isFiltered ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '64px 24px', textAlign: 'center' }}>
+            <div style={{ width: 52, height: 52, borderRadius: 16, background: P.sand, border: `1.5px solid ${P.sandBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, color: P.muted }}>
+              <Search size={20} />
+            </div>
+            <p style={{ fontSize: 14, fontWeight: 600, color: P.ink, marginBottom: 6 }}>Aucun résultat</p>
+            <p style={{ fontSize: 12, color: P.muted, maxWidth: 280 }}>
+              {activeFiltersCount > 0 ? 'Aucune donnée ne correspond à vos filtres.' : 'Aucune donnée enregistrée.'}
+            </p>
+            {activeFiltersCount > 0 && (
+              <button
+                onClick={activeTab === 'pushcart'
+                  ? () => setFilters({ search: '', zone: '', pushcard_type: '', start_date: '', end_date: '', vendor: '' })
+                  : () => setFiltersPOS({ search: '', district: '', region: '', commune: '', type: '', status: '', start_date: '', end_date: '' })}
+                style={{ marginTop: 16, padding: '8px 18px', fontSize: 12, fontWeight: 600, color: P.forest, background: P.forestPale, border: '1.5px solid #C4DCCA', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Réinitialiser les filtres
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ minWidth: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: P.cream, borderBottom: `1px solid ${P.sandBorder}` }}>
+                    {(activeTab === 'pushcart'
+                      ? ['Client', 'Zone & Base', 'Commercial', 'Contact', 'Ventes', 'Date', '']
+                      : ['Point de vente', 'Propriétaire', 'Localisation', 'Type / Statut', 'Ventes', 'Enregistrement', '']
+                    ).map(h => (
+                      <th key={h} style={{ padding: '12px 18px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: P.mutedDark, textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeTab === 'pushcart'
+                    ? currentItems.map((p, i) => (
+                        <tr key={p.id} style={{ borderBottom: i < currentItems.length - 1 ? `1px solid ${P.cream}` : 'none' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = P.cream)}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                          <td style={{ padding: '14px 18px' }}>
+                            <p style={{ fontWeight: 600, color: P.ink, marginBottom: 2 }}>{p.full_name}</p>
+                            <span style={{ fontSize: 11, color: P.muted }}>{p.pushcard_type}</span>
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: P.ink }}><MapPin size={11} style={{ color: P.ocre, flexShrink: 0 }} />{p.zone}</div>
+                            <p style={{ fontSize: 11, color: P.muted, marginTop: 3 }}>{p.base}</p>
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: P.mutedDark, background: P.sand, border: `1px solid ${P.sandBorder}`, padding: '2px 10px', borderRadius: 999 }}>#{p.vendor}</span>
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: P.ink }}><Phone size={11} style={{ color: P.forest }} />{p.phone}</div>
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>
+                            <p style={{ fontWeight: 700, color: P.forest }}>{fmt(p.total_sales_amount)}</p>
+                            <p style={{ fontSize: 11, color: P.muted, marginTop: 2 }}>{p.total_sales_quantity} unités</p>
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>
+                            <p style={{ color: P.ink }}>{fmtDateShort(p.purchase_date)}</p>
+                            <p style={{ fontSize: 11, color: P.muted, marginTop: 2 }}>{new Date(p.purchase_date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>
+                            <button
+                              onClick={() => { setSelectedPurchase(p); fetchDetails(p.id); }}
+                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 11, fontWeight: 600, color: P.forest, background: P.forestPale, border: '1px solid #C4DCCA', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                              <Eye size={12} /> Détails
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    : currentItemsPOS.map((p, i) => (
+                        <tr key={p.id} style={{ borderBottom: i < currentItemsPOS.length - 1 ? `1px solid ${P.cream}` : 'none' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = P.cream)}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                          <td style={{ padding: '14px 18px' }}>
+                            <p style={{ fontWeight: 600, color: P.ink, marginBottom: 2 }}>{p.name}</p>
+                            <p style={{ fontSize: 11, color: P.muted }}>{p.email}</p>
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>
+                            <p style={{ fontWeight: 500, color: P.ink, marginBottom: 3 }}>{p.owner}</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: P.muted }}><Phone size={10} />{p.phone}</div>
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: P.ink }}><MapPin size={11} style={{ color: P.ocre, flexShrink: 0 }} /><span style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.address}</span></div>
+                            <p style={{ fontSize: 11, color: P.muted, marginTop: 3 }}>{p.commune}, {p.district}</p>
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>
+                            <p style={{ fontWeight: 500, color: P.ink, textTransform: 'capitalize', marginBottom: 5 }}>{p.type}</p>
+                            <Badge label={p.status} color={p.status === 'actif' ? 'green' : 'red'} />
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>
+                            <p style={{ fontWeight: 700, color: P.forest }}>{fmt(p.total_sales_amount)}</p>
+                            <p style={{ fontSize: 11, color: P.muted, marginTop: 2 }}>{p.monthly_orders} cmd/mois</p>
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>
+                            <p style={{ color: P.ink }}>{fmtDateShort(p.registration_date)}</p>
+                            <p style={{ fontSize: 11, color: P.muted, marginTop: 2 }}>CA : {fmt(p.turnover)}</p>
+                          </td>
+                          <td style={{ padding: '14px 18px' }}>
+                            <button
+                              onClick={() => { setSelectedPurchase(p); fetchDetails(p.id); }}
+                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 11, fontWeight: 600, color: P.forest, background: P.forestPale, border: '1px solid #C4DCCA', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                              <Eye size={12} /> Détails
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <Pagination
+              current={activeTab === 'pushcart' ? currentPage : currentPagePOS}
+              total={activeTab === 'pushcart' ? totalPagesPC : totalPagesPOS}
+              from={activeTab === 'pushcart' ? from : fromP}
+              to={activeTab === 'pushcart' ? to : toP}
+              count={activeTab === 'pushcart' ? filteredPurchases.length : filteredPurchasesPOS.length}
+              onPrev={() => activeTab === 'pushcart' ? setCurrentPage(p => Math.max(1, p - 1)) : setCurrentPagePOS(p => Math.max(1, p - 1))}
+              onNext={() => activeTab === 'pushcart' ? setCurrentPage(p => Math.min(totalPagesPC, p + 1)) : setCurrentPagePOS(p => Math.min(totalPagesPOS, p + 1))}
+              onGo={n => activeTab === 'pushcart' ? setCurrentPage(n) : setCurrentPagePOS(n)}
+              perPage={itemsPerPage}
+              onPerPage={n => { setItemsPerPage(n); setCurrentPage(1); setCurrentPagePOS(1); }}
+            />
+          </>
         )}
       </div>
+
+      {/* Modal */}
+      {showDetailsModal && (
+        <DetailsModal
+          details={purchaseDetails}
+          loading={detailsLoading}
+          activeTab={activeTab}
+          selectedPurchase={selectedPurchase}
+          onClose={() => setShowDetailsModal(false)}
+        />
+      )}
     </div>
   );
 };

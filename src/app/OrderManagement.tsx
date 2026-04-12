@@ -1,13 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Package, Search, Filter, Eye, Edit, Trash2, Plus, 
-  Calendar, MapPin, User, Phone, Mail, CheckCircle, 
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Package, Search, Eye, Edit, Trash2, Plus,
+  Calendar, MapPin, CheckCircle,
   Clock, AlertCircle, XCircle, Truck, DollarSign,
-  Download, RefreshCw, ChevronDown, ChevronUp, Star, List, ShoppingCart,
-  Users, Target, BarChart3, TrendingUp, FileText
+  Download, RefreshCw, Star, List, ShoppingCart,
+  Users, Target, BarChart3, TrendingUp, FileText,
+  ChevronLeft, ChevronRight, AlertTriangle
 } from 'lucide-react';
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
+type Priority = 'low' | 'medium' | 'high';
+
+interface UserRole {
+  id: number;
+  name: string;
+  createcommande: boolean;
+  vuecommande: boolean;
+}
 
 interface UserProfile {
   id: number;
@@ -18,12 +29,7 @@ interface UserProfile {
   profile?: {
     phone?: string;
     location?: string;
-    role?: {
-      id: number;
-      name: string;
-      createcommande: boolean;
-      vuecommande: boolean;
-    };
+    role?: UserRole;
     status?: string;
     avatar?: string | null;
     points_of_sale?: string[];
@@ -41,18 +47,8 @@ interface PointOfSale {
   avatar?: string;
 }
 
-interface Product {
-  id: number;
-  name: string;
-  sku?: string;
-  status?: string;
-}
-
-interface ProductFormat {
-  id: number;
-  name?: string;
-  description?: string;
-}
+interface Product { id: number; name: string; sku?: string; status?: string; }
+interface ProductFormat { id: number; name?: string; description?: string; }
 
 interface ProductVariant {
   id: number;
@@ -85,22 +81,11 @@ interface Order {
   total: string;
   date: string;
   delivery_date?: string;
-  priority: 'low' | 'medium' | 'high';
+  priority: Priority;
   notes?: string;
   created_at?: string;
   updated_at?: string;
   items: OrderItem[];
-}
-
-interface NewOrder {
-  point_of_sale_id: number | null;
-  status: OrderStatus | null;
-  total: string | null;
-  date: string;
-  delivery_date: string;
-  priority: 'low' | 'medium' | 'high';
-  notes: string;
-  items: NewOrderItem[];
 }
 
 interface NewOrderItem {
@@ -109,2163 +94,1172 @@ interface NewOrderItem {
   price: string;
 }
 
+interface NewOrder {
+  point_of_sale_id: number | null;
+  date: string;
+  delivery_date: string;
+  priority: Priority;
+  notes: string;
+  items: NewOrderItem[];
+}
+
 interface MobileVendor {
   id: number;
   full_name: string;
   phone?: string;
   email?: string;
   status?: string;
-  avatar?: string;
 }
 
 interface VendorActivity {
-  id?: number;
   vendor: number | null;
-  activity_type: string | null;
-  timestamp: string | null;
-  location: { lat: number, lng: number } | null;
+  activity_type: string;
+  timestamp: string;
+  location: { lat: number; lng: number } | null;
   notes: string;
   related_order: number | null;
   quantity_assignes: number | null;
   quantity_sales: number | null;
 }
 
-const OrderManagement = () => {
-  const [activeTab, setActiveTab] = useState<'received' | 'created'>('received');
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
-  const [productVariants, setProductVariants] = useState<ProductVariant[]>([]);
-  const [pointsOfSale, setPointsOfSale] = useState<PointOfSale[]>([]);
-  const [mobileVendors, setMobileVendors] = useState<MobileVendor[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [dateFilter, setDateFilter] = useState('all');
-  const [sortBy, setSortBy] = useState<keyof Order>('date');
-  const [sortOrder, setSortOrder] = useState('desc');
-  const [selectedOrders, setSelectedOrders] = useState<number[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [selectedItem, setSelectedItem] = useState<OrderItem | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [ordersPerPage] = useState(10);
-  const [error, setError] = useState<string | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  
-  const [newOrder, setNewOrder] = useState<NewOrder>({
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const API_BASE = 'https://backendsupply.onrender.com/api';
+const ORDERS_PER_PAGE = 10;
+
+const STATUS_CONFIG: Record<OrderStatus, { label: string; colorClass: string; bgClass: string; borderClass: string; icon: React.FC<any> }> = {
+  pending:   { label: 'En Attente', colorClass: 'text-amber-700',   bgClass: 'bg-amber-50',   borderClass: 'border-amber-200',   icon: Clock },
+  confirmed: { label: 'Confirmée',  colorClass: 'text-blue-700',    bgClass: 'bg-blue-50',    borderClass: 'border-blue-200',    icon: CheckCircle },
+  shipped:   { label: 'Expédiée',   colorClass: 'text-indigo-700',  bgClass: 'bg-indigo-50',  borderClass: 'border-indigo-200',  icon: Truck },
+  delivered: { label: 'Livrée',     colorClass: 'text-emerald-700', bgClass: 'bg-emerald-50', borderClass: 'border-emerald-200', icon: CheckCircle },
+  cancelled: { label: 'Annulée',    colorClass: 'text-red-700',     bgClass: 'bg-red-50',     borderClass: 'border-red-200',     icon: XCircle },
+};
+
+const PRIORITY_CONFIG: Record<Priority, { label: string; colorClass: string }> = {
+  high:   { label: 'Haute',   colorClass: 'text-red-500' },
+  medium: { label: 'Moyenne', colorClass: 'text-amber-500' },
+  low:    { label: 'Basse',   colorClass: 'text-emerald-500' },
+};
+
+const ACTIVITY_TYPES = [
+  { value: 'sale',                label: 'Vente' },
+  { value: 'stock_replenishment', label: 'Réapprovisionnement' },
+  { value: 'check_in',            label: 'Check-in' },
+  { value: 'check_out',           label: 'Check-out' },
+  { value: 'incident',            label: 'Incident' },
+  { value: 'other',               label: 'Autre' },
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const formatCurrency = (amount: string | number) =>
+  new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF', minimumFractionDigits: 0 })
+    .format(parseFloat(String(amount)) || 0);
+
+const formatDate = (dateStr?: string) =>
+  dateStr ? new Date(dateStr).toLocaleDateString('fr-FR') : 'Non spécifiée';
+
+const isToday = (d: string) => new Date(d).toDateString() === new Date().toDateString();
+const isThisWeek = (d: string) => { const now = new Date(); const week = new Date(now); week.setDate(now.getDate() - 7); return new Date(d) >= week; };
+const isThisMonth = (d: string) => { const now = new Date(); const dt = new Date(d); return dt.getMonth() === now.getMonth() && dt.getFullYear() === now.getFullYear(); };
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('access');
+  return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : null;
+};
+
+// ─── Shared UI Components ─────────────────────────────────────────────────────
+
+const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
+  const cfg = STATUS_CONFIG[status];
+  const Icon = cfg.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${cfg.colorClass} ${cfg.bgClass} ${cfg.borderClass}`}>
+      <Icon size={11} />
+      {cfg.label}
+    </span>
+  );
+};
+
+const PriorityBadge: React.FC<{ priority: Priority }> = ({ priority }) => {
+  const cfg = PRIORITY_CONFIG[priority];
+  return (
+    <span className={`inline-flex items-center gap-1 text-sm font-medium ${cfg.colorClass}`}>
+      <Star size={14} fill="currentColor" />
+      {cfg.label}
+    </span>
+  );
+};
+
+const ErrorBanner: React.FC<{ message: string; onClose: () => void }> = ({ message, onClose }) => (
+  <div className="flex items-center justify-between p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 mb-6">
+    <div className="flex items-center gap-2">
+      <AlertTriangle size={18} />
+      <span className="font-medium text-sm">{message}</span>
+    </div>
+    <button onClick={onClose} className="text-red-400 hover:text-red-600 transition-colors">
+      <XCircle size={18} />
+    </button>
+  </div>
+);
+
+const Spinner: React.FC = () => (
+  <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="text-center space-y-4">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto" />
+      <p className="text-gray-500 font-medium">Chargement en cours…</p>
+    </div>
+  </div>
+);
+
+const ModalWrapper: React.FC<{ onClose: () => void; children: React.ReactNode }> = ({ onClose, children }) => (
+  <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-h-[90vh] overflow-y-auto" style={{ maxWidth: '56rem' }}>
+      {children}
+    </div>
+  </div>
+);
+
+const ModalHeader: React.FC<{ title: string; subtitle?: string; onClose: () => void }> = ({ title, subtitle, onClose }) => (
+  <div className="p-6 border-b border-gray-100 flex items-start justify-between bg-gradient-to-r from-indigo-50 to-white rounded-t-2xl">
+    <div>
+      <h3 className="text-xl font-bold text-gray-900">{title}</h3>
+      {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
+    </div>
+    <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+      <XCircle size={22} />
+    </button>
+  </div>
+);
+
+const FormField: React.FC<{ label: string; icon?: React.ReactNode; required?: boolean; children: React.ReactNode }> = ({ label, icon, required, children }) => (
+  <div>
+    <label className="block text-sm font-semibold text-gray-800 mb-2">
+      {icon && <span className="inline-flex mr-1.5 text-indigo-500 align-middle">{icon}</span>}
+      {label}{required && ' *'}
+    </label>
+    {children}
+  </div>
+);
+
+const inputClass = "w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors text-sm";
+
+// ─── Stat Card ────────────────────────────────────────────────────────────────
+
+const StatCard: React.FC<{ label: string; value: string | number; icon: React.FC<any>; iconBg: string; iconColor: string; trend?: string; trendColor?: string }> =
+  ({ label, value, icon: Icon, iconBg, iconColor, trend, trendColor = 'text-gray-500' }) => (
+  <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+    <div className="flex items-center justify-between mb-3">
+      <p className="text-sm font-medium text-gray-500">{label}</p>
+      <div className={`p-2.5 rounded-xl ${iconBg}`}>
+        <Icon className={iconColor} size={20} />
+      </div>
+    </div>
+    <p className="text-2xl font-bold text-gray-900">{value}</p>
+    {trend && <p className={`text-xs mt-2 flex items-center gap-1 ${trendColor}`}><TrendingUp size={12} />{trend}</p>}
+  </div>
+);
+
+// ─── Order Items Editor (shared between Add & Edit) ───────────────────────────
+
+const OrderItemsEditor: React.FC<{
+  items: NewOrderItem[];
+  productVariants: ProductVariant[];
+  onAdd: () => void;
+  onRemove: (i: number) => void;
+  onChange: (i: number, field: keyof NewOrderItem, value: any) => void;
+}> = ({ items, productVariants, onAdd, onRemove, onChange }) => (
+  <div className="border border-gray-200 rounded-xl overflow-hidden bg-gray-50">
+    {items.length > 0 && (
+      <div className="px-4 pt-3 pb-1 grid grid-cols-12 gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+        <div className="col-span-5">Produit</div>
+        <div className="col-span-2">Format</div>
+        <div className="col-span-2 text-center">Qté</div>
+        <div className="col-span-2 text-right">Prix unit.</div>
+        <div className="col-span-1"></div>
+      </div>
+    )}
+    <div className="p-3 space-y-2">
+      {items.map((item, index) => {
+        const variant = productVariants.find(v => v.id === item.product_variant_id);
+        return (
+          <div key={index} className="grid grid-cols-12 gap-2 items-center bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+            <div className="col-span-5">
+              <select
+                required
+                value={item.product_variant_id}
+                onChange={(e) => onChange(index, 'product_variant_id', parseInt(e.target.value))}
+                className={inputClass}
+              >
+                <option value={0}>Sélectionner un produit</option>
+                {productVariants.map(v => (
+                  <option key={v.id} value={v.id}>
+                    {v.product?.name || 'Inconnu'} — {v.format?.name || 'Sans format'}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-span-2 text-sm text-gray-500 font-medium truncate">
+              {variant?.format?.name || '—'}
+            </div>
+            <div className="col-span-2">
+              <input
+                type="number"
+                required
+                min={1}
+                max={variant?.current_stock || 9999}
+                value={item.quantity}
+                onChange={(e) => onChange(index, 'quantity', parseInt(e.target.value) || 1)}
+                className={inputClass + ' text-center'}
+              />
+            </div>
+            <div className="col-span-2 text-right text-sm font-semibold text-gray-700">
+              {formatCurrency(item.price)}
+            </div>
+            <div className="col-span-1 flex justify-center">
+              <button type="button" onClick={() => onRemove(index)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                <XCircle size={16} />
+              </button>
+            </div>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        onClick={onAdd}
+        className="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 hover:text-indigo-600 hover:border-indigo-300 transition-colors bg-white flex items-center justify-center gap-2 text-sm font-medium"
+      >
+        <Plus size={15} /> Ajouter un article
+      </button>
+    </div>
+  </div>
+);
+
+// ─── Add Order Modal ──────────────────────────────────────────────────────────
+
+const AddOrderModal: React.FC<{
+  onClose: () => void;
+  onCreated: (order: Order) => void;
+  productVariants: ProductVariant[];
+  pointsOfSale: PointOfSale[];
+}> = ({ onClose, onCreated, productVariants, pointsOfSale }) => {
+  const [form, setForm] = useState<NewOrder>({
     point_of_sale_id: null,
-    status: null,
-    total: null,
     date: new Date().toISOString().split('T')[0],
     delivery_date: '',
     priority: 'medium',
     notes: '',
-    items: []
+    items: [],
   });
-  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
-  const [editingItems, setEditingItems] = useState<NewOrderItem[]>([]);
-  const [vendorActivity, setVendorActivity] = useState<VendorActivity>({
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleItemChange = (index: number, field: keyof NewOrderItem, value: any) => {
+    setForm(prev => {
+      const items = [...prev.items];
+      items[index] = { ...items[index], [field]: value };
+      if (field === 'product_variant_id') {
+        const variant = productVariants.find(v => v.id === value);
+        items[index].price = variant?.price ?? '0';
+      }
+      return { ...prev, items };
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!form.point_of_sale_id) return setError('Veuillez sélectionner un point de vente.');
+    if (form.items.length === 0) return setError('Veuillez ajouter au moins un article.');
+
+    const headers = getAuthHeaders();
+    if (!headers) return setError('Veuillez vous connecter.');
+
+    for (const item of form.items) {
+      const variant = productVariants.find(v => v.id === item.product_variant_id);
+      if (!variant) return setError('Variante de produit invalide.');
+      if ((variant.current_stock || 0) < item.quantity)
+        return setError(`Stock insuffisant pour ${variant.product?.name || 'ce produit'}.`);
+    }
+
+    try {
+      setSubmitting(true);
+      const res = await fetch(`${API_BASE}/orders/`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          point_of_sale: form.point_of_sale_id,
+          date: form.date,
+          delivery_date: form.delivery_date,
+          priority: form.priority,
+          notes: form.notes,
+          items: form.items.map(({ product_variant_id, quantity }) => ({ product_variant_id, quantity })),
+        }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || JSON.stringify(d)); }
+      const created = await res.json();
+      onCreated(created);
+      onClose();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <ModalWrapper onClose={onClose}>
+      <ModalHeader title="Nouvelle Commande" onClose={onClose} />
+      <div className="p-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {error && <ErrorBanner message={error} onClose={() => setError(null)} />}
+
+          <FormField label="Point de vente" icon={<MapPin size={14} />} required>
+            <select required value={form.point_of_sale_id || ''} onChange={e => setForm(p => ({ ...p, point_of_sale_id: parseInt(e.target.value) || null }))} className={inputClass}>
+              <option value="">Sélectionner un point de vente</option>
+              {pointsOfSale.map(pos => <option key={pos.id} value={pos.id}>{pos.name}{pos.address ? ` — ${pos.address}` : ''}</option>)}
+            </select>
+          </FormField>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <FormField label="Priorité" icon={<Star size={14} />} required>
+              <select value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value as Priority }))} className={inputClass}>
+                <option value="low">Basse</option>
+                <option value="medium">Moyenne</option>
+                <option value="high">Haute</option>
+              </select>
+            </FormField>
+            <FormField label="Date commande" icon={<Calendar size={14} />} required>
+              <input type="date" required value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} className={inputClass} />
+            </FormField>
+            <FormField label="Date livraison" icon={<Calendar size={14} />} required>
+              <input type="date" required value={form.delivery_date} onChange={e => setForm(p => ({ ...p, delivery_date: e.target.value }))} className={inputClass} />
+            </FormField>
+          </div>
+
+          <FormField label="Articles" icon={<Package size={14} />}>
+            <OrderItemsEditor
+              items={form.items}
+              productVariants={productVariants}
+              onAdd={() => setForm(p => ({ ...p, items: [...p.items, { product_variant_id: 0, quantity: 1, price: '0' }] }))}
+              onRemove={(i) => setForm(p => ({ ...p, items: p.items.filter((_, idx) => idx !== i) }))}
+              onChange={handleItemChange}
+            />
+          </FormField>
+
+          <FormField label="Notes" icon={<FileText size={14} />}>
+            <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} className={inputClass + ' resize-none'} rows={3} placeholder="Instructions, remarques…" />
+          </FormField>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+            <button type="button" onClick={onClose} className="px-5 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors text-sm font-medium">Annuler</button>
+            <button type="submit" disabled={submitting} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors text-sm font-semibold shadow-sm disabled:opacity-60">
+              {submitting ? 'Création…' : 'Créer la commande'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </ModalWrapper>
+  );
+};
+
+// ─── Edit Order Modal ─────────────────────────────────────────────────────────
+
+const EditOrderModal: React.FC<{
+  order: Order;
+  onClose: () => void;
+  onUpdated: (order: Order) => void;
+  productVariants: ProductVariant[];
+}> = ({ order, onClose, onUpdated, productVariants }) => {
+  const [form, setForm] = useState({ ...order });
+  const [items, setItems] = useState<NewOrderItem[]>(
+    order.items.map(item => ({ product_variant_id: item.product_variant?.id || 0, quantity: item.quantity, price: item.price }))
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleItemChange = (index: number, field: keyof NewOrderItem, value: any) => {
+    setItems(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      if (field === 'product_variant_id') {
+        const variant = productVariants.find(v => v.id === value);
+        next[index].price = variant?.price ?? '0';
+      }
+      return next;
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (items.length === 0) return setError('Veuillez ajouter au moins un article.');
+    const headers = getAuthHeaders();
+    if (!headers) return setError('Veuillez vous connecter.');
+    try {
+      setSubmitting(true);
+      const res = await fetch(`${API_BASE}/orders/${order.id}/`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          point_of_sale: form.point_of_sale,
+          date: form.date,
+          delivery_date: form.delivery_date,
+          priority: form.priority,
+          status: form.status,
+          notes: form.notes,
+          items: items.map(({ product_variant_id, quantity }) => ({ product_variant_id, quantity })),
+        }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || JSON.stringify(d)); }
+      onUpdated(await res.json());
+      onClose();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <ModalWrapper onClose={onClose}>
+      <ModalHeader title="Modifier la Commande" subtitle={`Commande #${order.id}`} onClose={onClose} />
+      <div className="p-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {error && <ErrorBanner message={error} onClose={() => setError(null)} />}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FormField label="Date commande">
+              <input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} className={inputClass} />
+            </FormField>
+            <FormField label="Date livraison">
+              <input type="date" value={form.delivery_date || ''} onChange={e => setForm(p => ({ ...p, delivery_date: e.target.value }))} className={inputClass} />
+            </FormField>
+            <FormField label="Priorité">
+              <select value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value as Priority }))} className={inputClass}>
+                <option value="low">Basse</option>
+                <option value="medium">Moyenne</option>
+                <option value="high">Haute</option>
+              </select>
+            </FormField>
+            <FormField label="Statut">
+              <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value as OrderStatus }))} className={inputClass}>
+                {Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+            </FormField>
+          </div>
+
+          <FormField label="Articles">
+            <OrderItemsEditor
+              items={items}
+              productVariants={productVariants}
+              onAdd={() => setItems(p => [...p, { product_variant_id: 0, quantity: 1, price: '0' }])}
+              onRemove={(i) => setItems(p => p.filter((_, idx) => idx !== i))}
+              onChange={handleItemChange}
+            />
+          </FormField>
+
+          <FormField label="Notes">
+            <textarea value={form.notes || ''} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} className={inputClass + ' resize-none'} rows={3} placeholder="Notes supplémentaires…" />
+          </FormField>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+            <button type="button" onClick={onClose} className="px-5 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors text-sm font-medium">Annuler</button>
+            <button type="submit" disabled={submitting} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors text-sm font-semibold shadow-sm disabled:opacity-60">
+              {submitting ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </ModalWrapper>
+  );
+};
+
+// ─── Order Details Modal ──────────────────────────────────────────────────────
+
+const OrderDetailsModal: React.FC<{
+  order: Order;
+  canEdit: boolean;
+  onClose: () => void;
+  onEdit: (order: Order) => void;
+  onDelete: (id: number) => void;
+  onStatusChange: (id: number, status: OrderStatus) => void;
+  onAssign: (order: Order, item: OrderItem) => void;
+}> = ({ order, canEdit, onClose, onEdit, onDelete, onStatusChange, onAssign }) => {
+  const cfg = STATUS_CONFIG[order.status];
+
+  const handlePrint = () => {
+    const win = window.open('', '_blank');
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head><title>Commande #${order.id}</title>
+      <style>body{font-family:system-ui,sans-serif;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #e5e7eb;padding:10px;text-align:left}th{background:#4f46e5;color:#fff}</style>
+      </head><body>
+      <h1>Commande #${order.id}</h1>
+      <p>Point de vente: ${order.point_of_sale_details?.name || '—'}</p>
+      <p>Date: ${formatDate(order.date)} | Livraison: ${formatDate(order.delivery_date)}</p>
+      <table><thead><tr><th>Produit</th><th>Qté</th><th>Prix</th><th>Total</th></tr></thead><tbody>
+      ${order.items.map(i => `<tr><td>${i.product_name || i.product_variant?.product?.name || '—'}</td><td>${i.quantity}</td><td>${formatCurrency(i.price)}</td><td>${formatCurrency(i.total)}</td></tr>`).join('')}
+      </tbody><tfoot><tr><td colspan="3"><strong>Total</strong></td><td><strong>${formatCurrency(order.total)}</strong></td></tr></tfoot></table>
+      <script>window.onload=()=>window.print()</script></body></html>`);
+    win.document.close();
+  };
+
+  return (
+    <ModalWrapper onClose={onClose}>
+      <ModalHeader title="Détails de la Commande" subtitle={`CMD-${order.id}`} onClose={onClose} />
+      <div className="p-6 space-y-6">
+        {/* Info grid */}
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className={`p-5 rounded-xl border ${cfg.borderClass} ${cfg.bgClass}`}>
+            <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2 text-sm uppercase tracking-wide">
+              <MapPin size={14} className="text-indigo-500" /> Point de Vente
+            </h4>
+            <div className="space-y-1.5 text-sm">
+              {[
+                ['Nom', order.point_of_sale_details?.name],
+                ['Propriétaire', order.point_of_sale_details?.owner],
+                ['Email', order.point_of_sale_details?.email],
+                ['Téléphone', order.point_of_sale_details?.phone],
+                ['Adresse', order.point_of_sale_details?.address],
+              ].map(([label, val]) => (
+                <div key={label} className="flex justify-between gap-4">
+                  <span className="text-gray-500">{label}:</span>
+                  <span className="font-medium text-gray-800 text-right">{val || 'Non spécifié'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={`p-5 rounded-xl border ${cfg.borderClass} ${cfg.bgClass}`}>
+            <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2 text-sm uppercase tracking-wide">
+              <Package size={14} className="text-indigo-500" /> Informations
+            </h4>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-gray-500">Date:</span><span className="font-medium">{formatDate(order.date)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Livraison:</span><span className="font-medium">{formatDate(order.delivery_date)}</span></div>
+              <div className="flex justify-between items-center"><span className="text-gray-500">Statut:</span><StatusBadge status={order.status} /></div>
+              <div className="flex justify-between items-center"><span className="text-gray-500">Priorité:</span><PriorityBadge priority={order.priority} /></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Items table */}
+        <div>
+          <h4 className="font-semibold text-gray-800 mb-3 text-sm uppercase tracking-wide">Articles Commandés</h4>
+          <div className="rounded-xl border border-gray-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    {['Produit', 'Format', 'Qté', 'Prix unit.', 'Total', 'Affecté', 'Action'].map(h => (
+                      <th key={h} className="px-4 py-3 text-left font-semibold text-gray-700">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {order.items.map((item, i) => (
+                    <tr key={i} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 font-medium text-gray-900">{item.product_name || item.product_variant?.product?.name || '—'}</td>
+                      <td className="px-4 py-3 text-gray-500">{item.product_variant?.format?.name || '—'}</td>
+                      <td className="px-4 py-3 text-gray-700">{item.quantity}</td>
+                      <td className="px-4 py-3 text-gray-700">{formatCurrency(item.price)}</td>
+                      <td className="px-4 py-3 font-semibold text-gray-900">{formatCurrency(item.total)}</td>
+                      <td className="px-4 py-3 text-gray-700">{item.quantity_affecte || '0'}</td>
+                      <td className="px-4 py-3">
+                        <button onClick={() => onAssign(order, item)} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-xs font-medium">
+                          <Target size={12} /> Affecter
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-gray-50 border-t border-gray-200">
+                  <tr>
+                    <td colSpan={4} className="px-4 py-3 text-right font-bold text-gray-900">Total:</td>
+                    <td className="px-4 py-3 font-bold text-gray-900">{formatCurrency(order.total)}</td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {order.notes && (
+          <div className={`p-4 rounded-xl border ${cfg.borderClass} ${cfg.bgClass}`}>
+            <h4 className="font-semibold text-gray-800 mb-2 text-sm">Notes</h4>
+            <p className="text-sm text-gray-700 leading-relaxed">{order.notes}</p>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between flex-wrap gap-3 pt-4 border-t border-gray-100">
+          <select value={order.status} onChange={e => onStatusChange(order.id, e.target.value as OrderStatus)} className={inputClass + ' max-w-xs'}>
+            {Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+          <div className="flex gap-2 flex-wrap">
+            {canEdit && (
+              <button onClick={() => onEdit(order)} className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors text-sm font-medium">
+                <Edit size={14} /> Modifier
+              </button>
+            )}
+            <button onClick={handlePrint} className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors text-sm font-medium">
+              <Download size={14} /> Imprimer
+            </button>
+            {canEdit && (
+              <button onClick={() => onDelete(order.id)} className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors text-sm font-medium">
+                <Trash2 size={14} /> Supprimer
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </ModalWrapper>
+  );
+};
+
+// ─── Assign Vendor Modal ──────────────────────────────────────────────────────
+
+const AssignVendorModal: React.FC<{
+  order: Order;
+  item: OrderItem;
+  vendors: MobileVendor[];
+  onClose: () => void;
+}> = ({ order, item, vendors, onClose }) => {
+  const [form, setForm] = useState<VendorActivity>({
     vendor: null,
     activity_type: 'sale',
     timestamp: new Date().toISOString(),
     location: null,
     notes: '',
-    related_order: null,
-    quantity_assignes: null,
-    quantity_sales: null
+    related_order: order.id,
+    quantity_assignes: item.quantity,
+    quantity_sales: 0,
   });
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const theme = {
-    primary: { 
-      light: '#EEF2FF', 
-      DEFAULT: '#4F46E5', 
-      dark: '#4338CA', 
-      text: '#3730A3',
-      gradient: 'linear-gradient(135deg, #4F46E5 0%, #7C73E6 100%)'
-    },
-    secondary: { 
-      light: '#F0FDF9', 
-      DEFAULT: '#0D9488', 
-      dark: '#0F766E', 
-      text: '#134E4A' 
-    },
-    success: { 
-      light: '#ECFDF5', 
-      DEFAULT: '#10B981', 
-      dark: '#059669', 
-      text: '#065F46' 
-    },
-    warning: { 
-      light: '#FFFBEB', 
-      DEFAULT: '#F59E0B', 
-      dark: '#D97706', 
-      text: '#92400E' 
-    },
-    error: { 
-      light: '#FEF2F2', 
-      DEFAULT: '#EF4444', 
-      dark: '#DC2626', 
-      text: '#991B1B' 
-    },
-    gray: { 
-      50: '#F9FAFB',
-      100: '#F3F4F6',
-      200: '#E5E7EB',
-      300: '#D1D5DB',
-      400: '#9CA3AF',
-      500: '#6B7280',
-      600: '#4B5563',
-      700: '#374151',
-      800: '#1F2937',
-      900: '#111827'
-    }
-  };
-
-  const orderStatuses: Record<OrderStatus, { label: string; color: string; icon: any; bgColor: string; borderColor: string }> = {
-    pending: { 
-      label: 'En Attente', 
-      color: `text-amber-700`, 
-      icon: Clock,
-      bgColor: theme.warning.light,
-      borderColor: 'border-amber-200'
-    },
-    confirmed: { 
-      label: 'Confirmée', 
-      color: 'text-blue-700', 
-      icon: CheckCircle,
-      bgColor: theme.primary.light,
-      borderColor: 'border-blue-200'
-    },
-    shipped: { 
-      label: 'Expédiée', 
-      color: 'text-indigo-700', 
-      icon: Truck,
-      bgColor: '#F5F3FF',
-      borderColor: 'border-indigo-200'
-    },
-    delivered: { 
-      label: 'Livrée', 
-      color: 'text-emerald-700', 
-      icon: CheckCircle,
-      bgColor: theme.success.light, 
-      borderColor: 'border-emerald-200'
-    },
-    cancelled: { 
-      label: 'Annulée', 
-      color: 'text-red-700', 
-      icon: XCircle,
-      bgColor: theme.error.light,
-      borderColor: 'border-red-200'
-    }
-  };
-
-  useEffect(() => {
-    const fetchUserProfile = async () => {
-      const token = localStorage.getItem('access');
-      if (!token) {
-        setError('Veuillez vous connecter.');
-        setLoading(false);
-        return;
-      }
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      };
-
-      try {
-        setError(null);
-        
-        const profileRes = await fetch('https://api.lanfialink.com/api/me/', { headers });
-        if (!profileRes.ok) throw new Error('Échec de la récupération du profil utilisateur');
-        const profileData = await profileRes.json();
-        console.log('Profile data:', profileData); // Debug
-        setUserProfile(profileData);
-
-        // CORRECTION ICI : Accéder au rôle via profile.role
-        const userRole = profileData.profile?.role;
-        
-        // Définir l'onglet actif par défaut
-        if (userRole?.vuecommande) {
-          setActiveTab('received');
-        } else if (userRole?.createcommande) {
-          setActiveTab('created');
-        }
-
-        // Fetch Orders seulement si l'utilisateur a la permission de vue
-        if (userRole?.vuecommande) {
-          try {
-            const ordersRes = await fetch('https://api.lanfialink.com/api/orders/', { headers });
-            if (ordersRes.ok) {
-              const ordersData = await ordersRes.json();
-              setOrders(ordersData);
-              setFilteredOrders(ordersData);
-            }
-          } catch (orderError) {
-            console.error('Error fetching orders:', orderError);
-          }
-        }
-
-        // Fetch Product Variants (les deux vues ont besoin de cela)
-        try {
-          const variantsRes = await fetch('https://api.lanfialink.com/api/product-variants/', { headers });
-          if (variantsRes.ok) {
-            const variantsData = await variantsRes.json();
-            setProductVariants(variantsData);
-          }
-        } catch (variantError) {
-          console.error('Error fetching variants:', variantError);
-        }
-
-        // Fetch Points of Sale (les deux vues ont besoin de cela)
-        try {
-          const pointsOfSaleRes = await fetch('https://api.lanfialink.com/api/points-vente/', { headers });
-          if (pointsOfSaleRes.ok) {
-            const pointsOfSaleData = await pointsOfSaleRes.json();
-            setPointsOfSale(pointsOfSaleData);
-          }
-        } catch (posError) {
-          console.error('Error fetching points of sale:', posError);
-        }
-
-        // Fetch Mobile Vendors
-        try {
-          const vendorsRes = await fetch('https://api.lanfialink.com/api/mobile-vendors/', { headers });
-          if (vendorsRes.ok) {
-            const vendorsData = await vendorsRes.json();
-            setMobileVendors(vendorsData);
-          }
-        } catch (vendorError) {
-          console.error('Error fetching vendors:', vendorError);
-        }
-
-      } catch (error: any) {
-        console.error('Fetch error:', error);
-        setError(error.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUserProfile();
-  }, []);
-
-  useEffect(() => {
-    let filtered = orders.filter(order => {
-      const pointOfSaleName = order.point_of_sale_details?.name?.toLowerCase() || '';
-      const pointOfSaleAddress = order.point_of_sale_details?.address?.toLowerCase() || '';
-      
-      const matchesSearch = order.id.toString().includes(searchTerm.toLowerCase()) ||
-                           pointOfSaleName.includes(searchTerm.toLowerCase()) ||
-                           pointOfSaleAddress.includes(searchTerm.toLowerCase());
-      const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-      const matchesDate = dateFilter === 'all' || 
-                         (dateFilter === 'today' && order.date && isToday(order.date)) ||
-                         (dateFilter === 'week' && order.date && isThisWeek(order.date)) ||
-                         (dateFilter === 'month' && order.date && isThisMonth(order.date));
-      return matchesSearch && matchesStatus && matchesDate;
-    });
-
-    filtered.sort((a, b) => {
-      let aValue: any, bValue: any;
-      switch (sortBy) {
-        case 'date':
-          aValue = a.date ? new Date(a.date).getTime() : 0;
-          bValue = b.date ? new Date(b.date).getTime() : 0;
-          break;
-        case 'total':
-          aValue = parseFloat(a.total) || 0;
-          bValue = parseFloat(b.total) || 0;
-          break;
-        case 'point_of_sale':
-          aValue = a.point_of_sale_details?.name?.toLowerCase() || '';
-          bValue = b.point_of_sale_details?.name?.toLowerCase() || '';
-          break;
-        default:
-          aValue = a[sortBy as keyof Order] ?? '';
-          bValue = b[sortBy as keyof Order] ?? '';
-          if (typeof aValue === 'string') aValue = aValue.toLowerCase();
-          if (typeof bValue === 'string') bValue = bValue.toLowerCase();
-      }
-
-      if (aValue === undefined || aValue === null) return sortOrder === 'asc' ? -1 : 1;
-      if (bValue === undefined || bValue === null) return sortOrder === 'asc' ? 1 : -1;
-
-      return sortOrder === 'asc'
-        ? aValue > bValue ? 1 : aValue < bValue ? -1 : 0
-        : aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
-    });
-
-    setFilteredOrders(filtered);
-    setCurrentPage(1);
-  }, [orders, searchTerm, statusFilter, dateFilter, sortBy, sortOrder]);
-
-  const isToday = (dateString: string) => {
-    if (!dateString) return false;
-    const today = new Date().toDateString();
-    const date = new Date(dateString).toDateString();
-    return today === date;
-  };
-
-  const isThisWeek = (dateString: string) => {
-    if (!dateString) return false;
-    const now = new Date();
-    const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
-    const date = new Date(dateString);
-    return date >= weekAgo && date <= now;
-  };
-
-  const isThisMonth = (dateString: string) => {
-    if (!dateString) return false;
-    const now = new Date();
-    const date = new Date(dateString);
-    return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-  };
-
-  const handleSelectOrder = (orderId: number) => {
-    setSelectedOrders(prev => 
-      prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]
-    );
-  };
-
-  const handleSelectAll = () => {
-    if (selectedOrders.length === filteredOrders.length) {
-      setSelectedOrders([]);
-    } else {
-      setSelectedOrders(filteredOrders.map(order => order.id));
-    }
-  };
-
-  const updateOrderStatus = async (orderId: number, newStatus: OrderStatus) => {
-    const token = localStorage.getItem('access');
-    if (!token) {
-      setError('Veuillez vous connecter.');
-      return;
-    }
-    try {
-      setError(null);
-      const res = await fetch(`https://api.lanfialink.com/api/orders/${orderId}/`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status: newStatus })
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || 'Échec de la mise à jour du statut');
-      }
-      await res.json();
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
-    } catch (error: any) {
-      setError(error.message);
-    }
-  };
-
-  const handleEditOrder = (order: Order) => {
-    // CORRECTION ICI : Accéder au rôle via profile.role
-    if (!userProfile?.profile?.role?.createcommande) {
-      setError('Vous n\'avez pas la permission de modifier les commandes');
-      return;
-    }
-    setEditingOrder(order);
-    const convertedItems: NewOrderItem[] = order.items.map(item => ({
-      product_variant_id: item.product_variant?.id || 0,
-      quantity: item.quantity,
-      price: item.price
-    }));
-    setEditingItems(convertedItems);
-    setShowEditModal(true);
-  };
-
-  const handleUpdateOrder = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingOrder) return;
+    setError(null);
+    if (!form.vendor) return setError('Veuillez sélectionner un vendeur.');
+    if (!form.quantity_assignes || form.quantity_assignes <= 0) return setError('Quantité invalide.');
+    if (form.quantity_assignes > item.quantity) return setError('Quantité dépasse la quantité commandée.');
 
-    const token = localStorage.getItem('access');
-    if (!token) {
-      setError('Veuillez vous connecter.');
-      return;
-    }
-
+    const headers = getAuthHeaders();
+    if (!headers) return setError('Veuillez vous connecter.');
     try {
-      setError(null);
-      
-      if (editingItems.length === 0) {
-        throw new Error("Veuillez ajouter au moins un article");
-      }
-
-      const orderData = {
-        point_of_sale: editingOrder.point_of_sale,
-        date: editingOrder.date,
-        delivery_date: editingOrder.delivery_date,
-        priority: editingOrder.priority,
-        status: editingOrder.status,
-        notes: editingOrder.notes,
-        items: editingItems.map(item => ({
-          product_variant_id: item.product_variant_id,
-          quantity: item.quantity
-        }))
-      };
-
-      const res = await fetch(`https://api.lanfialink.com/api/orders/${editingOrder.id}/`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(orderData)
+      setSubmitting(true);
+      const res = await fetch(`${API_BASE}/vendor-activities/`, {
+        method: 'POST', headers, body: JSON.stringify(form),
       });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || JSON.stringify(errorData));
-      }
-
-      const updatedOrder = await res.json();
-      setOrders(prev => prev.map(o => o.id === editingOrder.id ? updatedOrder : o));
-      setShowEditModal(false);
-      setEditingOrder(null);
-      setEditingItems([]);
-    } catch (error: any) {
-      setError(error.message);
-      console.error("Erreur modification commande:", error);
+      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || JSON.stringify(d)); }
+      onClose();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
     }
   };
-
-  const handlePrintOrder = (order: Order) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      setError('Impossible d\'ouvrir la fenêtre d\'impression. Vérifiez les bloqueurs de pop-up.');
-      return;
-    }
-
-    const statusInfo = orderStatuses[order.status];
-    
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Commande #${order.id}</title>
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-          body { font-family: 'Inter', sans-serif; margin: 20px; background: #fff; }
-          .header { text-align: center; border-bottom: 2px solid #4F46E5; padding-bottom: 20px; margin-bottom: 20px; }
-          .order-info { margin-bottom: 20px; }
-          .table { width: 100%; border-collapse: collapse; margin: 20px 0; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-          .table th, .table td { border: 1px solid #E5E7EB; padding: 12px; text-align: left; }
-          .table th { background-color: #4F46E5; color: white; font-weight: 600; }
-          .total { font-weight: 600; text-align: right; background: #F9FAFB; }
-          .status { display: inline-block; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; }
-          @media print {
-            body { margin: 0; }
-            .no-print { display: none; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1 style="color: #4F46E5; margin: 0; font-weight: 700;">Commande #${order.id}</h1>
-          <p style="color: #6B7280; margin: 8px 0 0 0;">Date: ${order.date ? new Date(order.date).toLocaleDateString('fr-FR') : 'Non spécifiée'}</p>
-        </div>
-        
-        <div class="order-info">
-          <h2 style="color: #374151; border-bottom: 1px solid #E5E7EB; padding-bottom: 8px;">Informations de la commande</h2>
-          <p><strong>Point de vente:</strong> ${order.point_of_sale_details?.name || 'Non spécifié'}</p>
-          <p><strong>Statut:</strong> <span class="status" style="background-color: ${statusInfo.bgColor}; color: ${statusInfo.color};">${statusInfo.label}</span></p>
-          <p><strong>Priorité:</strong> ${order.priority === 'high' ? 'Haute' : order.priority === 'medium' ? 'Moyenne' : 'Basse'}</p>
-          <p><strong>Date de livraison:</strong> ${order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('fr-FR') : 'Non spécifiée'}</p>
-        </div>
-
-        <h2 style="color: #374151; border-bottom: 1px solid #E5E7EB; padding-bottom: 8px;">Articles commandés</h2>
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Produit</th>
-              <th>Quantité</th>
-              <th>Prix unitaire</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${order.items.map(item => `
-              <tr>
-                <td>${item.product_name || item.product_variant?.product?.name || 'Produit inconnu'}</td>
-                <td>${item.quantity}</td>
-                <td>${formatCurrency(item.price)}</td>
-                <td>${formatCurrency(item.total)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colspan="3" class="total">Total:</td>
-              <td class="total">${formatCurrency(order.total)}</td>
-            </tr>
-          </tfoot>
-        </table>
-
-        ${order.notes ? `
-        <div class="notes">
-          <h2 style="color: #374151; border-bottom: 1px solid #E5E7EB; padding-bottom: 8px;">Notes</h2>
-          <p style="background: #F9FAFB; padding: 12px; border-radius: 6px; border-left: 4px solid #4F46E5;">${order.notes}</p>
-        </div>
-        ` : ''}
-
-        <div class="no-print" style="margin-top: 30px; text-align: center; padding-top: 20px; border-top: 1px solid #E5E7EB;">
-          <button onclick="window.print()" style="padding: 12px 24px; background: #4F46E5; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500;">
-            Imprimer
-          </button>
-          <button onclick="window.close()" style="padding: 12px 24px; background: #6B7280; color: white; border: none; border-radius: 6px; cursor: pointer; margin-left: 10px; font-weight: 500;">
-            Fermer
-          </button>
-        </div>
-
-        <script>
-          window.onload = function() {
-            window.print();
-          }
-        </script>
-      </body>
-      </html>
-    `);
-    
-    printWindow.document.close();
-  };
-
-  const deleteOrder = async (orderId: number) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette commande ?')) return;
-    const token = localStorage.getItem('access');
-    if (!token) {
-      setError('Veuillez vous connecter.');
-      return;
-    }
-    try {
-      setError(null);
-      const res = await fetch(`https://api.lanfialink.com/api/orders/${orderId}/`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || 'Échec de la suppression de la commande');
-      }
-      setOrders(prev => prev.filter(o => o.id !== orderId));
-      setSelectedOrders(prev => prev.filter(id => id !== orderId));
-    } catch (error: any) {
-      setError(error.message);
-    }
-  };
-
-  const bulkStatusUpdate = async (newStatus: OrderStatus) => {
-    const token = localStorage.getItem('access');
-    if (!token) {
-      setError('Veuillez vous connecter.');
-      return;
-    }
-    try {
-      setError(null);
-      const promises = selectedOrders.map(orderId => 
-        fetch(`https://api.lanfialink.com/api/orders/${orderId}/`, {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ status: newStatus })
-        })
-      );
-
-      await Promise.all(promises);
-      setOrders(prev => prev.map(o => 
-        selectedOrders.includes(o.id) ? { ...o, status: newStatus } : o
-      ));
-      setSelectedOrders([]);
-    } catch (error: any) {
-      setError(error.message);
-    }
-  };
-
-  const handleAssignProduct = (order: Order, item: OrderItem) => {
-    setSelectedOrder(order);
-    setSelectedItem(item);
-    setVendorActivity({
-      vendor: null,
-      activity_type: 'sale',
-      timestamp: new Date().toISOString(),
-      location: null,
-      notes: '',
-      related_order: order.id,
-      quantity_assignes: item.quantity,
-      quantity_sales: 0
-    });
-    setShowAssignModal(true);
-  };
-
-  const handleVendorAssignment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const token = localStorage.getItem('access');
-    if (!token) {
-      setError('Veuillez vous connecter.');
-      return;
-    }
-
-    try {
-      setError(null);
-      
-      if (!vendorActivity.vendor) {
-        throw new Error("Veuillez sélectionner un vendeur");
-      }
-
-      if (!vendorActivity.quantity_assignes || vendorActivity.quantity_assignes <= 0) {
-        throw new Error("Veuillez spécifier une quantité valide");
-      }
-
-      if (selectedItem && vendorActivity.quantity_assignes > selectedItem.quantity) {
-        throw new Error("La quantité affectée ne peut pas dépasser la quantité commandée");
-      }
-
-      const response = await fetch('https://api.lanfialink.com/api/vendor-activities/', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(vendorActivity)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || JSON.stringify(errorData));
-      }
-
-      setShowAssignModal(false);
-      setSelectedItem(null);
-      setSelectedOrder(null);
-      alert('Produit affecté avec succès au vendeur!');
-
-    } catch (error: any) {
-      setError(error.message);
-      console.error("Erreur affectation produit:", error);
-    }
-  };
-
-  const handleAddOrderItem = () => {
-    setNewOrder(prev => ({
-      ...prev,
-      items: [...prev.items, { product_variant_id: 0, quantity: 1, price: "0" }]
-    }));
-  };
-
-  const handleRemoveOrderItem = (index: number) => {
-    setNewOrder(prev => ({
-      ...prev,
-      items: prev.items.filter((_, i) => i !== index)
-    }));
-  };
-
-  const handleOrderItemChange = (index: number, field: keyof NewOrderItem, value: any) => {
-    setNewOrder(prev => {
-      const newItems = [...prev.items];
-      newItems[index] = { ...newItems[index], [field]: value };
-      
-      if (field === 'product_variant_id') {
-        const variant = productVariants.find(v => v.id === value);
-        if (variant) {
-          newItems[index].price = variant.price;
-        }
-      }
-      
-      return { ...prev, items: newItems };
-    });
-  };
-
-  const handleAddEditingItem = () => {
-    setEditingItems(prev => [...prev, { product_variant_id: 0, quantity: 1, price: "0" }]);
-  };
-
-  const handleRemoveEditingItem = (index: number) => {
-    setEditingItems(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleEditingItemChange = (index: number, field: keyof NewOrderItem, value: any) => {
-    setEditingItems(prev => {
-      const newItems = [...prev];
-      newItems[index] = { ...newItems[index], [field]: value };
-      
-      if (field === 'product_variant_id') {
-        const variant = productVariants.find(v => v.id === value);
-        if (variant) {
-          newItems[index].price = variant.price;
-        }
-      }
-      
-      return newItems;
-    });
-  };
-
-  const handleCreateOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const token = localStorage.getItem('access');
-    if (!token) {
-      setError('Veuillez vous connecter.');
-      return;
-    }
-
-    try {
-      setError(null);
-      
-      if (newOrder.items.length === 0) {
-        throw new Error("Veuillez ajouter au moins un article");
-      }
-
-      if (!newOrder.point_of_sale_id) {
-        throw new Error("Veuillez sélectionner un point de vente");
-      }
-
-      const preparedItems = newOrder.items.map(item => {
-        const variant = productVariants.find(v => v.id === item.product_variant_id);
-        if (!variant) {
-          throw new Error("Variante de produit non trouvée");
-        }
-        if ((variant.current_stock || 0) < item.quantity) {
-          throw new Error(`Stock insuffisant pour ${variant.product?.name || 'le produit sélectionné'}`);
-        }
-
-        return {
-          product_variant_id: variant.id,
-          quantity: item.quantity
-        };
-      });
-
-      const orderData = {
-        point_of_sale: newOrder.point_of_sale_id,
-        date: newOrder.date,
-        delivery_date: newOrder.delivery_date,
-        priority: newOrder.priority,
-        notes: newOrder.notes,
-        items: preparedItems
-      };
-
-      const response = await fetch('https://api.lanfialink.com/api/orders/', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(orderData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || JSON.stringify(errorData));
-      }
-
-      const createdOrder = await response.json();
-      setOrders(prev => [createdOrder, ...prev]);
-      resetOrderForm();
-      setShowAddModal(false);
-
-    } catch (error: any) {
-      setError(error.message);
-      console.error("Erreur création commande:", error);
-    }
-  };
-
-  const resetOrderForm = () => {
-    setNewOrder({
-      point_of_sale_id: null,
-      status: null,
-      total: null,
-      date: new Date().toISOString().split('T')[0],
-      delivery_date: '',
-      priority: 'medium',
-      notes: '',
-      items: []
-    });
-  };
-
-  const indexOfLastOrder = currentPage * ordersPerPage;
-  const indexOfFirstOrder = indexOfLastOrder - ordersPerPage;
-  const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
-  const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
-
-  const formatCurrency = (amount: string) => {
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'XOF',
-      minimumFractionDigits: 0
-    }).format(parseFloat(amount));
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'text-red-500';
-      case 'medium': return 'text-amber-500';
-      case 'low': return 'text-emerald-500';
-      default: return 'text-gray-500';
-    }
-  };
-
-  const OrderDetailsModal = () => {
-    if (!selectedOrder) return null;
-    const statusInfo = orderStatuses[selectedOrder.status];
-    const pointOfSaleName = selectedOrder.point_of_sale_details?.name || 'Point de vente inconnu';
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="p-8 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-white">
-            <div>
-              <h3 className="text-2xl font-bold text-gray-900">Détails de la Commande</h3>
-              <p className="text-gray-600 mt-1">Commande #{selectedOrder.id}</p>
-            </div>
-            <button 
-              onClick={() => setShowDetailsModal(false)}
-              className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
-            >
-              <XCircle size={24} />
-            </button>
-          </div>
-          <div className="p-8 space-y-8">
-            <div className="grid md:grid-cols-2 gap-8">
-              <div className={`p-6 rounded-xl border ${statusInfo.borderColor} ${statusInfo.bgColor}`}>
-                <h4 className="font-semibold text-gray-900 mb-4 flex items-center text-lg">
-                  <MapPin className="mr-3 text-indigo-600" size={20} />
-                  Informations Point de Vente
-                </h4>
-                <div className="space-y-3 text-sm">
-                  <p className="flex justify-between"><span className="text-gray-600">Nom:</span> <span className="font-medium">{pointOfSaleName}</span></p>
-                  <p className="flex justify-between"><span className="text-gray-600">Propriétaire:</span> <span className="font-medium">{selectedOrder.point_of_sale_details?.owner || 'Non spécifié'}</span></p>
-                  <p className="flex justify-between"><span className="text-gray-600">Email:</span> <span className="font-medium">{selectedOrder.point_of_sale_details?.email || 'Non spécifié'}</span></p>
-                  <p className="flex justify-between"><span className="text-gray-600">Téléphone:</span> <span className="font-medium">{selectedOrder.point_of_sale_details?.phone || 'Non spécifié'}</span></p>
-                  <p className="flex justify-between"><span className="text-gray-600">Adresse:</span> <span className="font-medium text-right">{selectedOrder.point_of_sale_details?.address || 'Non spécifié'}</span></p>
-                </div>
-              </div>
-              <div className={`p-6 rounded-xl border ${statusInfo.borderColor} ${statusInfo.bgColor}`}>
-                <h4 className="font-semibold text-gray-900 mb-4 flex items-center text-lg">
-                  <Package className="mr-3 text-indigo-600" size={20} />
-                  Informations Commande
-                </h4>
-                <div className="space-y-3 text-sm">
-                  <p className="flex justify-between"><span className="text-gray-600">Date:</span> <span className="font-medium">{selectedOrder.date ? new Date(selectedOrder.date).toLocaleDateString('fr-FR') : 'Non spécifiée'}</span></p>
-                  <p className="flex justify-between"><span className="text-gray-600">Livraison prévue:</span> <span className="font-medium">{selectedOrder.delivery_date ? new Date(selectedOrder.delivery_date).toLocaleDateString('fr-FR') : 'Non spécifiée'}</span></p>
-                  <p className="flex justify-between items-center"><span className="text-gray-600">Statut:</span> 
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusInfo.color} bg-white border ${statusInfo.borderColor}`}>
-                      {React.createElement(statusInfo.icon, { size: 12, className: "mr-1 inline" })}
-                      {statusInfo.label}
-                    </span>
-                  </p>
-                  <p className="flex justify-between items-center"><span className="text-gray-600">Priorité:</span> 
-                    <div className="flex items-center">
-                      <Star className={`mr-1 ${getPriorityColor(selectedOrder.priority)}`} size={16} />
-                      <span className={`font-medium ${getPriorityColor(selectedOrder.priority)}`}>
-                        {selectedOrder.priority === 'high' ? 'Haute' : 
-                         selectedOrder.priority === 'medium' ? 'Moyenne' : 'Basse'}
-                      </span>
-                    </div>
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-900 mb-4 text-lg">Articles Commandés</h4>
-              <div className="overflow-x-auto rounded-xl border border-gray-200">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Produit</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Format</th>
-                      <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">Quantité</th>
-                      <th className="px-6 py-4 text-right text-sm font-semibold text-gray-900">Prix Unitaire</th>
-                      <th className="px-6 py-4 text-right text-sm font-semibold text-gray-900">Total</th>
-                      <th className="px-6 py-4 text-right text-sm font-semibold text-gray-900">Quantité Affectée</th>
-                      <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {selectedOrder.items.map((item, index) => (
-                      <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50 hover:bg-gray-100'}>
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{item.product_name || item.product_variant?.product?.name || 'Produit inconnu'}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{item.product_variant?.format?.name || '-'}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600 text-center">{item.quantity}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600 text-right">{formatCurrency(item.price)}</td>
-                        <td className="px-6 py-4 text-sm font-semibold text-gray-900 text-right">{formatCurrency(item.total)}</td>
-                        <td className="px-6 py-4 text-sm font-semibold text-gray-900 text-right">{item.quantity_affecte || '0'}</td>
-                        <td className="px-6 py-4 text-sm text-center">
-                          <button
-                            onClick={() => handleAssignProduct(selectedOrder, item)}
-                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium shadow-sm"
-                          >
-                            <Target size={14} />
-                            Affecter
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-gray-50">
-                    <tr>
-                      <td colSpan={4} className="px-6 py-4 text-sm font-bold text-gray-900 text-right">Total Commande:</td>
-                      <td className="px-6 py-4 text-sm font-bold text-gray-900 text-right">{formatCurrency(selectedOrder.total)}</td>
-                      <td colSpan={2}></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-            {selectedOrder.notes && (
-              <div className={`p-6 rounded-xl border ${statusInfo.borderColor} ${statusInfo.bgColor}`}>
-                <h4 className="font-semibold text-gray-900 mb-3">Notes</h4>
-                <p className="text-gray-700 leading-relaxed">{selectedOrder.notes}</p>
-              </div>
-            )}
-            <div className="flex items-center justify-between flex-wrap gap-4 pt-6 border-t border-gray-200">
-              <select 
-                value={selectedOrder.status}
-                onChange={(e) => updateOrderStatus(selectedOrder.id, e.target.value as OrderStatus)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-sm font-medium">
-                {Object.entries(orderStatuses).map(([key, status]) => (
-                  <option key={key} value={key}>{status.label}</option>
-                ))}
-              </select>
-              <div className="flex gap-3">
-                {/* CORRECTION ICI : Accéder au rôle via profile.role */}
-                {userProfile?.profile?.role?.createcommande && (
-                  <button 
-                    onClick={() => handleEditOrder(selectedOrder)}
-                    className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
-                  >
-                    <Edit size={16} />
-                    Modifier
-                  </button>
-                )}
-                <button 
-                  onClick={() => handlePrintOrder(selectedOrder)}
-                  className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
-                >
-                  <Download size={16} />
-                  Imprimer
-                </button>
-                {/* CORRECTION ICI : Accéder au rôle via profile.role */}
-                {userProfile?.profile?.role?.createcommande && (
-                  <button 
-                    onClick={() => deleteOrder(selectedOrder.id)}
-                    className="px-5 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
-                  >
-                    <Trash2 size={16} />
-                    Supprimer
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const EditOrderModal = () => {
-    if (!editingOrder) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="p-8 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-white">
-            <div>
-              <h3 className="text-2xl font-bold text-gray-900">Modifier la Commande</h3>
-              <p className="text-gray-600 mt-1">Commande #{editingOrder.id}</p>
-            </div>
-            <button 
-              onClick={() => setShowEditModal(false)}
-              className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
-            >
-              <XCircle size={24} />
-            </button>
-          </div>
-          <div className="p-8">
-            <form onSubmit={handleUpdateOrder} className="space-y-8">
-              {error && (
-                <div className="text-red-700 bg-red-50 p-4 rounded-xl text-sm border border-red-200">
-                  {error}
-                </div>
-              )}
-              
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-3">
-                    Date de commande
-                  </label>
-                  <input 
-                    type="date"
-                    value={editingOrder.date}
-                    onChange={(e) => setEditingOrder({...editingOrder, date: e.target.value})}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-3">
-                    Date de livraison
-                  </label>
-                  <input 
-                    type="date"
-                    value={editingOrder.delivery_date || ''}
-                    onChange={(e) => setEditingOrder({...editingOrder, delivery_date: e.target.value})}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-3">
-                    Priorité
-                  </label>
-                  <select 
-                    value={editingOrder.priority}
-                    onChange={(e) => setEditingOrder({...editingOrder, priority: e.target.value as 'low' | 'medium' | 'high'})}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors">
-                    <option value="low">Basse</option>
-                    <option value="medium">Moyenne</option>
-                    <option value="high">Haute</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-3">
-                    Statut
-                  </label>
-                  <select 
-                    value={editingOrder.status}
-                    onChange={(e) => setEditingOrder({...editingOrder, status: e.target.value as OrderStatus})}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors">
-                    {Object.entries(orderStatuses).map(([key, status]) => (
-                      <option key={key} value={key}>{status.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-4">
-                  Articles de la commande
-                </label>
-                <div className="border border-gray-300 rounded-xl p-6 space-y-4 bg-gray-50">
-                  <div className="grid grid-cols-12 gap-3 text-sm font-semibold text-gray-900">
-                    <div className="col-span-5">Produit</div>
-                    <div className="col-span-2">Format</div>
-                    <div className="col-span-2">Quantité</div>
-                    <div className="col-span-2">Prix Unitaire</div>
-                    <div className="col-span-1">Actions</div>
-                  </div>
-                  {editingItems.map((item, index) => {
-                    const variant = productVariants.find(v => v.id === item.product_variant_id);
-                    return (
-                      <div key={index} className="grid grid-cols-12 gap-3 items-center bg-white p-3 rounded-lg border border-gray-200">
-                        <div className="col-span-5">
-                          <select 
-                            required
-                            value={item.product_variant_id}
-                            onChange={(e) => handleEditingItemChange(index, 'product_variant_id', parseInt(e.target.value))}
-                            className="w-full text-sm border border-gray-300 px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors">
-                            <option value="0">Sélectionner un produit</option>
-                            {productVariants.map(v => (
-                              <option key={v.id} value={v.id}>
-                                {v.product?.name || 'Produit inconnu'} - {v.format?.name || 'Sans format'}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="col-span-2 text-sm text-gray-600 font-medium">
-                          {variant?.format?.name || '-'}
-                        </div>
-                        <div className="col-span-2">
-                          <input 
-                            type="number"
-                            required
-                            min="1"
-                            max={variant?.current_stock || 1}
-                            value={item.quantity}
-                            onChange={(e) => handleEditingItemChange(index, 'quantity', parseInt(e.target.value))}
-                            className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <input 
-                            type="text"
-                            readOnly
-                            value={formatCurrency(item.price)}
-                            className="w-full px-4 py-2.5 text-sm border text-gray-600 bg-gray-100 rounded-lg font-medium"
-                          />
-                        </div>
-                        <div className="col-span-1 flex items-center">
-                          <button 
-                            type="button"
-                            onClick={() => handleRemoveEditingItem(index)}
-                            className="text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors">
-                            <XCircle size={18} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <button 
-                    type="button"
-                    onClick={handleAddEditingItem}
-                    className="w-full py-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-600 hover:text-gray-700 hover:border-gray-400 transition-colors bg-white flex items-center justify-center gap-2 font-medium">
-                    <Plus size={16} />
-                    Ajouter un article
-                  </button>
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-3">
-                  Notes
-                </label>
-                <textarea 
-                  value={editingOrder.notes || ''}
-                  onChange={(e) => setEditingOrder({...editingOrder, notes: e.target.value})}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors resize-none"
-                  rows={4}
-                  placeholder="Notes supplémentaires..."
-                />
-              </div>
-              
-              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-                <button 
-                  type="button"
-                  onClick={() => setShowEditModal(false)}
-                  className="px-6 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
-                >
-                  Annuler
-                </button>
-                <button 
-                  type="submit"
-                  className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm"
-                >
-                  Enregistrer les modifications
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const AssignVendorModal = () => {
-    if (!selectedItem || !selectedOrder) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-          <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-white">
-            <div>
-              <h3 className="text-xl font-bold text-gray-900">Affecter un produit à un vendeur</h3>
-              <p className="text-gray-600 mt-1">Commande #{selectedOrder.id} - {selectedItem.product_name || selectedItem.product_variant?.product?.name || 'Produit inconnu'}</p>
-            </div>
-            <button 
-              onClick={() => setShowAssignModal(false)}
-              className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
-            >
-              <XCircle size={24} />
-            </button>
-          </div>
-          <div className="p-6">
-            <form onSubmit={handleVendorAssignment} className="space-y-6">
-              {error && (
-                <div className="text-red-700 bg-red-50 p-4 rounded-xl text-sm border border-red-200">
-                  {error}
-                </div>
-              )}
-              
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-3">
-                  <Users className="inline w-4 h-4 mr-2 text-indigo-600" />
-                  Vendeur ambulant *
-                </label>
-                <select
-                  required
-                  value={vendorActivity.vendor || ''}
-                  onChange={(e) => setVendorActivity({...vendorActivity, vendor: parseInt(e.target.value) || null})}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
-                >
-                  <option value="">Sélectionner un vendeur</option>
-                  {mobileVendors.map(vendor => (
-                    <option key={vendor.id} value={vendor.id}>
-                      {vendor.full_name} - {vendor.phone || 'Téléphone non spécifié'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-3">
-                  Type d'activité *
-                </label>
-                <select
-                  required
-                  value={vendorActivity.activity_type || ''}
-                  onChange={(e) => setVendorActivity({...vendorActivity, activity_type: e.target.value})}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
-                >
-                  <option value="sale">Vente</option>
-                  <option value="stock_replenishment">Réapprovisionnement</option>
-                  <option value="check_in">Check-in</option>
-                  <option value="check_out">Check-out</option>
-                  <option value="incident">Incident</option>
-                  <option value="other">Autre</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-3">
-                  Quantité à affecter *
-                </label>
-                <input 
-                  type="number"
-                  required
-                  min="1"
-                  max={selectedItem.quantity}
-                  value={vendorActivity.quantity_assignes || ''}
-                  onChange={(e) => setVendorActivity({...vendorActivity, quantity_assignes: parseInt(e.target.value) || null})}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
-                />
-                <p className="text-xs text-gray-500 mt-2">
-                  Quantité maximale disponible: {selectedItem.quantity}
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-3">
-                  Notes
-                </label>
-                <textarea 
-                  value={vendorActivity.notes}
-                  onChange={(e) => setVendorActivity({...vendorActivity, notes: e.target.value})}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors resize-none"
-                  rows={3}
-                  placeholder="Notes supplémentaires..."
-                />
-              </div>
-
-              <div className="flex justify-end space-x-4 pt-4">
-                <button 
-                  type="button"
-                  onClick={() => setShowAssignModal(false)}
-                  className="px-5 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
-                >
-                  Annuler
-                </button>
-                <button 
-                  type="submit"
-                  className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm"
-                >
-                  Affecter
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Chargement des permissions...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // CORRECTION ICI : Accéder au rôle via profile.role
-  const userRole = userProfile?.profile?.role;
-  const hasViewPermission = userRole?.vuecommande || false;
-  const hasCreatePermission = userRole?.createcommande || false;
-
-  if (!hasViewPermission && !hasCreatePermission) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 max-w-md text-center">
-          <div className="p-3 bg-red-100 rounded-xl inline-block mb-4">
-            <XCircle className="text-red-600" size={48} />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-3">Accès refusé</h2>
-          <p className="text-gray-600 mb-6">
-            Vous n'avez pas les permissions nécessaires pour accéder à la gestion des commandes.
-            Veuillez contacter votre administrateur.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 text-red-700 text-center rounded-xl border border-red-200 font-medium">
-          {error}
-        </div>
-      )}
-      
-      <div className="mb-8">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Gestion des Commandes</h1>
-            <p className="text-gray-600">Suivez et gérez l'ensemble de vos commandes</p>
-            {userProfile && (
-              <p className="text-sm text-gray-500 mt-1">
-                Connecté en tant que: <span className="font-medium">{userProfile.username}</span> 
-                - Rôle: <span className="font-medium">{userRole?.name}</span>
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-3 mt-4 lg:mt-0">
-            <button className="px-4 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium flex items-center gap-2">
-              <RefreshCw size={16} />
-              Actualiser
-            </button>
-            <button className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium flex items-center gap-2 shadow-sm">
-              <Download size={16} />
-              Exporter
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Commandes</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{orders.length}</p>
-              </div>
-              <div className="p-3 bg-indigo-100 rounded-xl">
-                <Package className="text-indigo-600" size={24} />
-              </div>
-            </div>
-            <div className="mt-4 flex items-center text-sm text-green-600">
-              <TrendingUp size={14} className="mr-1" />
-              <span>+12% ce mois</span>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">En Attente</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{orders.filter(o => o.status === 'pending').length}</p>
-              </div>
-              <div className="p-3 bg-amber-100 rounded-xl">
-                <Clock className="text-amber-600" size={24} />
-              </div>
-            </div>
-            <div className="mt-4 flex items-center text-sm text-amber-600">
-              <AlertCircle size={14} className="mr-1" />
-              <span>Nécessite attention</span>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Livrées</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{orders.filter(o => o.status === 'delivered').length}</p>
-              </div>
-              <div className="p-3 bg-emerald-100 rounded-xl">
-                <CheckCircle className="text-emerald-600" size={24} />
-              </div>
-            </div>
-            <div className="mt-4 flex items-center text-sm text-emerald-600">
-              <TrendingUp size={14} className="mr-1" />
-              <span>+8% cette semaine</span>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Chiffre d'Affaires</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {formatCurrency(orders.reduce((sum, order) => sum + parseFloat(order.total), 0).toString())}
-                </p>
-              </div>
-              <div className="p-3 bg-purple-100 rounded-xl">
-                <DollarSign className="text-purple-600" size={24} />
-              </div>
-            </div>
-            <div className="mt-4 flex items-center text-sm text-purple-600">
-              <BarChart3 size={14} className="mr-1" />
-              <span>Performance</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-6">
-        {(hasViewPermission && hasCreatePermission) && (
-          <div className="flex border-b border-gray-200">
-            <button
-              className={`px-6 py-4 font-semibold flex items-center gap-3 transition-colors ${
-                activeTab === 'received' 
-                  ? 'text-indigo-600 border-b-2 border-indigo-600' 
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-              onClick={() => setActiveTab('received')}
-            >
-              <List size={20} />
-              Commandes Reçues
-              <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-sm font-medium">
-                {orders.length}
-              </span>
-            </button>
-            <button
-              className={`px-6 py-4 font-semibold flex items-center gap-3 transition-colors ${
-                activeTab === 'created' 
-                  ? 'text-indigo-600 border-b-2 border-indigo-600' 
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-              onClick={() => setActiveTab('created')}
-            >
-              <ShoppingCart size={20} />
-              Créer une Commande
-            </button>
-          </div>
-        )}
-        
-        {(hasViewPermission && hasCreatePermission) ? (
-          activeTab === 'received' ? (
-            <OrdersReceivedView 
-              userProfile={userProfile}
-              userRole={userRole}
-              orders={orders}
-              filteredOrders={filteredOrders}
-              searchTerm={searchTerm}
-              setSearchTerm={setSearchTerm}
-              statusFilter={statusFilter}
-              setStatusFilter={setStatusFilter}
-              dateFilter={dateFilter}
-              setDateFilter={setDateFilter}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              setSortBy={setSortBy}
-              setSortOrder={setSortOrder}
-              selectedOrders={selectedOrders}
-              setSelectedOrders={setSelectedOrders}
-              handleSelectOrder={handleSelectOrder}
-              handleSelectAll={handleSelectAll}
-              setShowAddModal={setShowAddModal}
-              bulkStatusUpdate={bulkStatusUpdate}
-              setShowDetailsModal={setShowDetailsModal}
-              setSelectedOrder={setSelectedOrder}
-              handleEditOrder={handleEditOrder}
-              deleteOrder={deleteOrder}
-              formatCurrency={formatCurrency}
-              getPriorityColor={getPriorityColor}
-              orderStatuses={orderStatuses}
-              currentOrders={currentOrders}
-              indexOfFirstOrder={indexOfFirstOrder}
-              indexOfLastOrder={indexOfLastOrder}
-              filteredOrdersLength={filteredOrders.length}
-              totalPages={totalPages}
-              currentPage={currentPage}
-              setCurrentPage={setCurrentPage}
-            />
-          ) : (
-            <CreateOrderView 
-              productVariants={productVariants}
-              setShowAddModal={setShowAddModal}
-              formatCurrency={formatCurrency}
-            />
-          )
-        ) : hasViewPermission ? (
-          <OrdersReceivedView 
-            userProfile={userProfile}
-            userRole={userRole}
-            orders={orders}
-            filteredOrders={filteredOrders}
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            statusFilter={statusFilter}
-            setStatusFilter={setStatusFilter}
-            dateFilter={dateFilter}
-            setDateFilter={setDateFilter}
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            setSortBy={setSortBy}
-            setSortOrder={setSortOrder}
-            selectedOrders={selectedOrders}
-            setSelectedOrders={setSelectedOrders}
-            handleSelectOrder={handleSelectOrder}
-            handleSelectAll={handleSelectAll}
-            setShowAddModal={setShowAddModal}
-            bulkStatusUpdate={bulkStatusUpdate}
-            setShowDetailsModal={setShowDetailsModal}
-            setSelectedOrder={setSelectedOrder}
-            handleEditOrder={handleEditOrder}
-            deleteOrder={deleteOrder}
-            formatCurrency={formatCurrency}
-            getPriorityColor={getPriorityColor}
-            orderStatuses={orderStatuses}
-            currentOrders={currentOrders}
-            indexOfFirstOrder={indexOfFirstOrder}
-            indexOfLastOrder={indexOfLastOrder}
-            filteredOrdersLength={filteredOrders.length}
-            totalPages={totalPages}
-            currentPage={currentPage}
-            setCurrentPage={setCurrentPage}
-          />
-        ) : (
-          <CreateOrderView 
-            productVariants={productVariants}
-            setShowAddModal={setShowAddModal}
-            formatCurrency={formatCurrency}
-          />
-        )}
-      </div>
-
-      {showAddModal && (
-        <AddOrderModal 
-          showAddModal={showAddModal}
-          setShowAddModal={setShowAddModal}
-          error={error}
-          newOrder={newOrder}
-          setNewOrder={setNewOrder}
-          productVariants={productVariants}
-          pointsOfSale={pointsOfSale}
-          handleCreateOrder={handleCreateOrder}
-          formatCurrency={formatCurrency}
-          handleAddOrderItem={handleAddOrderItem}
-          handleRemoveOrderItem={handleRemoveOrderItem}
-          handleOrderItemChange={handleOrderItemChange}
+    <ModalWrapper onClose={onClose}>
+      <div style={{ maxWidth: '30rem' }} className="w-full">
+        <ModalHeader
+          title="Affecter à un vendeur"
+          subtitle={`Commande #${order.id} — ${item.product_name || item.product_variant?.product?.name || '—'}`}
+          onClose={onClose}
         />
-      )}
-      
-      {showDetailsModal && <OrderDetailsModal />}
-      {showEditModal && <EditOrderModal />}
-      {showAssignModal && <AssignVendorModal />}
-    </div>
-  );
-};
-
-const OrdersReceivedView = ({
-  userProfile,
-  userRole,
-  orders,
-  filteredOrders,
-  searchTerm,
-  setSearchTerm,
-  statusFilter,
-  setStatusFilter,
-  dateFilter,
-  setDateFilter,
-  sortBy,
-  sortOrder,
-  setSortBy,
-  setSortOrder,
-  selectedOrders,
-  setSelectedOrders,
-  handleSelectOrder,
-  handleSelectAll,
-  setShowAddModal,
-  bulkStatusUpdate,
-  setShowDetailsModal,
-  setSelectedOrder,
-  handleEditOrder,
-  deleteOrder,
-  formatCurrency,
-  getPriorityColor,
-  orderStatuses,
-  currentOrders,
-  indexOfFirstOrder,
-  indexOfLastOrder,
-  filteredOrdersLength,
-  totalPages,
-  currentPage,
-  setCurrentPage
-}: any) => {
-  return (
-    <div className="p-6">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-        <div className="flex flex-col sm:flex-row gap-4 flex-1">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-            <input 
-              type="text"
-              placeholder="Rechercher une commande, point de vente..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full transition-colors"
-            />
-          </div>
-          <div className="flex gap-3">
-            <select 
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors font-medium">
-              <option value="all">Tous les statuts</option>
-              {Object.entries(orderStatuses).map(([key, status]: [string, any]) => (
-                <option key={key} value={key}>{status.label}</option>
-              ))}
-            </select>
-
-            <select 
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors font-medium">
-              <option value="all">Toutes les dates</option>
-              <option value="today">Aujourd'hui</option>
-              <option value="week">Cette semaine</option>
-              <option value="month">Ce mois</option>
-            </select>
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <select 
-            value={`${sortBy}-${sortOrder}`}
-            onChange={(e) => {
-              const [field, order] = e.target.value.split('-');
-              setSortBy(field as keyof any);
-              setSortOrder(order);
-            }}
-            className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors font-medium">
-            <option value="date-desc">Plus récentes</option>
-            <option value="date-asc">Plus anciennes</option>
-            <option value="total-desc">Montant décroissant</option>
-            <option value="total-asc">Montant croissant</option>
-            <option value="point_of_sale-asc">Point de vente A-Z</option>
-            <option value="point_of_sale-desc">Point de vente Z-A</option>
-          </select>
-          {userRole?.createcommande && (
-            <button 
-              onClick={() => setShowAddModal(true)}
-              className="px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors flex items-center gap-2 font-medium shadow-sm"
-            >
-              <Plus size={18} />
-              Nouvelle Commande
-            </button>
-          )}
-        </div>
-      </div>
-
-      {selectedOrders.length > 0 && (
-        <div className="mb-6 p-4 bg-indigo-50 rounded-xl border border-indigo-200">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between items-center gap-4">
-            <div className="text-sm font-semibold text-indigo-800 flex items-center gap-2">
-              <CheckCircle size={16} />
-              <span>{selectedOrders.length} commande(s) sélectionnée(s)</span>
-            </div>
-            <div className="flex gap-3">
-              <select 
-                onChange={(e) => {
-                  if (e.target.value) {
-                    bulkStatusUpdate(e.target.value as any);
-                    e.target.value = '';
-                  }
-                }}
-                className="px-3 py-2 text-sm border border-indigo-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-medium">
-                <option value="">Modifier statut</option>
-                {Object.entries(orderStatuses).map(([key, status]: [string, any]) => (
-                  <option key={key} value={key}>{status.label}</option>
-                ))}
-              </select>
-              <button 
-                onClick={() => setSelectedOrders([])}
-                className="px-3 py-2 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium"
-              >
-                Tout désélectionner
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-4 text-left">
-                  <input 
-                    type="checkbox"
-                    checked={selectedOrders.length === filteredOrders.length && filteredOrders.length > 0}
-                    onChange={() => handleSelectAll()}
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                </th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Commande</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Point de Vente</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Date</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Statut</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Priorité</th>
-                <th className="px-6 py-4 text-right text-sm font-semibold text-gray-900">Total</th>
-                <th className="px-6 py-4 text-center text-sm font-semibold text-gray-900">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {currentOrders.length > 0 ? (
-                currentOrders.map((order: any) => {
-                  const statusInfo = orderStatuses[order.status];
-                  const pointOfSaleName = order.point_of_sale_details?.name || 'Point de vente inconnu';
-                  
-                  return (
-                    <tr 
-                      key={order.id} 
-                      className={`hover:bg-gray-50 transition-colors ${
-                        selectedOrders.includes(order.id) ? 'bg-indigo-25' : ''
-                      }`}
-                    >
-                      <td className="px-6 py-4">
-                        <input 
-                          type="checkbox"
-                          checked={selectedOrders.includes(order.id)}
-                          onChange={() => handleSelectOrder(order.id)}
-                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                        />
-                      </td>
-                      <td className="px-6 py-4">
-                        <div>
-                          <div className="font-semibold text-gray-900">CMD-{order.id}</div>
-                          <div className="text-sm text-gray-500 mt-1">{order.items.length} article(s)</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div>
-                          <div className="font-semibold text-gray-900">{pointOfSaleName}</div>
-                          <div className="text-sm text-gray-500 mt-1">{order.point_of_sale_details?.address || ''}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {order.date ? new Date(order.date).toLocaleDateString('fr-FR') : 'Non spécifiée'}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          Livraison: {order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('fr-FR') : 'Non spécifiée'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${statusInfo.color} bg-white border ${statusInfo.borderColor}`}>
-                          {React.createElement(statusInfo.icon, { size: 12, className: "mr-1" })}
-                          {statusInfo.label}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center">
-                          <Star className={getPriorityColor(order.priority)} size={16} />
-                          <span className="ml-2 text-sm font-medium text-gray-700">
-                            {order.priority === 'high' ? 'Haute' : 
-                             order.priority === 'medium' ? 'Moyenne' : 'Basse'}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="font-semibold text-gray-900">{formatCurrency(order.total)}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center space-x-2">
-                          <button 
-                            onClick={() => {
-                              setSelectedOrder(order);
-                              setShowDetailsModal(true);
-                            }}
-                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                            title="Voir détails"
-                          >
-                            <Eye size={18} />
-                          </button>
-                          {userRole?.createcommande && (
-                            <>
-                              <button 
-                                onClick={() => handleEditOrder(order)}
-                                className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                                title="Modifier"
-                              >
-                                <Edit size={18} />
-                              </button>
-                              <button 
-                                onClick={() => deleteOrder(order.id)}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Supprimer"
-                              >
-                                <Trash2 size={18} />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={8} className="py-16 text-center">
-                    <div className="flex flex-col items-center justify-center">
-                      <Package className="text-gray-300 mb-4" size={64} />
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Aucune commande trouvée</h3>
-                      <p className="text-gray-600 mb-6 max-w-md text-center">
-                        {searchTerm || statusFilter !== 'all' || dateFilter !== 'all' 
-                          ? 'Aucune commande ne correspond aux critères de recherche.'
-                          : 'Aucune commande n\'a été trouvée.'}
-                      </p>
-                      {userRole?.createcommande && (!searchTerm && statusFilter === 'all' && dateFilter === 'all') && (
-                        <button 
-                          onClick={() => setShowAddModal(true)}
-                          className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors inline-flex items-center gap-2 font-medium shadow-sm"
-                        >
-                          <Plus size={18} />
-                          Créer une Commande
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 bg-gray-50">
-            <div className="text-sm text-gray-600 font-medium">
-              Affichage de <span className="text-gray-900">{indexOfFirstOrder + 1}</span> à <span className="text-gray-900">{Math.min(indexOfLastOrder, filteredOrdersLength)}</span> sur <span className="text-gray-900">{filteredOrdersLength}</span> commandes
-            </div>
-            <div className="flex items-center space-x-2">
-              <button 
-                onClick={() => setCurrentPage((prev: number) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-              >
-                Précédent
-              </button>
-              {[...Array(totalPages)].map((_, index) => {
-                const page = index + 1;
-                if (page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)) {
-                  return (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={`px-3 py-2 text-sm border rounded-lg font-medium transition-colors ${
-                        currentPage === page 
-                          ? 'bg-indigo-600 text-white border-indigo-600' 
-                          : 'border-gray-300 hover:bg-white text-gray-700'
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  );
-                } else if (page === currentPage - 2 || page === currentPage + 2) {
-                  return <span key={page} className="text-gray-500 px-2">...</span>;
-                }
-                return null;
-              })}
-              <button 
-                onClick={() => setCurrentPage((prev: number) => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-              >
-                Suivant
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const CreateOrderView = ({ productVariants, setShowAddModal, formatCurrency }: any) => {
-  return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Créer une nouvelle commande</h2>
-          <p className="text-gray-600 mt-2">Sélectionnez les produits à commander</p>
-        </div>
-        <button 
-          onClick={() => setShowAddModal(true)}
-          className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors flex items-center gap-2 font-medium shadow-sm"
-        >
-          <Plus size={18} />
-          Nouvelle Commande
-        </button>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {productVariants.map((variant: any) => (
-          <div key={variant.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex-1">
-                <h3 className="font-semibold text-lg text-gray-900 mb-1">{variant.product?.name || 'Produit inconnu'}</h3>
-                <p className="text-gray-600 text-sm">{variant.format?.name || 'Sans format'}</p>
-              </div>
-              {variant.image && (
-                <img 
-                  src={variant.image} 
-                  alt={`${variant.product?.name || 'Produit'} ${variant.format?.name || ''}`}
-                  className="w-16 h-16 object-cover rounded-lg"
-                />
-              )}
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3 text-sm mb-4">
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <span className="text-gray-600 block mb-1">Prix:</span>
-                <span className="font-semibold text-gray-900">{formatCurrency(variant.price)}</span>
-              </div>
-              <div className={`p-3 rounded-lg ${
-                (variant.current_stock || 0) <= (variant.min_stock || 0) ? 'bg-red-50' : 
-                (variant.current_stock || 0) >= (variant.max_stock || 0) ? 'bg-emerald-50' : 'bg-gray-50'
-              }`}>
-                <span className="text-gray-600 block mb-1">Stock:</span>
-                <span className={`font-semibold ${
-                  (variant.current_stock || 0) <= (variant.min_stock || 0) ? 'text-red-600' : 
-                  (variant.current_stock || 0) >= (variant.max_stock || 0) ? 'text-emerald-600' : 'text-gray-900'
-                }`}>
-                  {variant.current_stock || 0}
-                </span>
-              </div>
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <span className="text-gray-600 block mb-1">Stock min:</span>
-                <span className="font-semibold text-gray-900">{variant.min_stock || 0}</span>
-              </div>
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <span className="text-gray-600 block mb-1">Stock max:</span>
-                <span className="font-semibold text-gray-900">{variant.max_stock || 0}</span>
-              </div>
-            </div>
-            
-            <button 
-              onClick={() => {
-                setShowAddModal(true);
-              }}
-              className="w-full py-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors font-medium flex items-center justify-center gap-2"
-            >
-              <Plus size={16} />
-              Ajouter à la commande
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const AddOrderModal = ({
-  showAddModal,
-  setShowAddModal,
-  error,
-  newOrder,
-  setNewOrder,
-  productVariants,
-  pointsOfSale,
-  handleCreateOrder,
-  formatCurrency,
-  handleAddOrderItem,
-  handleRemoveOrderItem,
-  handleOrderItemChange
-}: any) => {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b bg-gradient-to-r from-indigo-50 to-white">
-          <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-bold text-gray-900">Nouvelle Commande</h3>
-            <button 
-              onClick={() => setShowAddModal(false)}
-              className="text-gray-400 hover:text-gray-600 transition-colors p-2 hover:bg-gray-100 rounded-lg"
-            >
-              <XCircle size={24} />
-            </button>
-          </div>
-        </div>
         <div className="p-6">
-          <form onSubmit={handleCreateOrder} className="space-y-6">
-            {error && (
-              <div className="text-red-700 bg-red-50 p-4 rounded-xl text-sm border border-red-200 font-medium">
-                {error}
-              </div>
-            )}
-            
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="col-span-full">
-                <label className="block text-sm font-semibold text-gray-900 mb-3">
-                  <MapPin className="inline w-4 h-4 mr-2 text-indigo-600" />
-                  Point de vente *
-                </label>
-                <select
-                  required
-                  value={newOrder.point_of_sale_id || ''}
-                  onChange={(e) => setNewOrder({...newOrder, point_of_sale_id: parseInt(e.target.value) || null})}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
-                >
-                  <option value="">Sélectionner un point de vente</option>
-                  {pointsOfSale.map((pos: any) => (
-                    <option key={pos.id} value={pos.id}>
-                      {pos.name} - {pos.address || 'Adresse non spécifiée'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-        
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-3">
-                  <Star className="inline w-4 h-4 mr-2 text-indigo-600" />
-                  Priorité *
-                </label>
-                <select 
-                  value={newOrder.priority}
-                  onChange={(e) => setNewOrder({...newOrder, priority: e.target.value as 'low' | 'medium' | 'high'})}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors">
-                  <option value="low">Basse</option>
-                  <option value="medium">Moyenne</option>
-                  <option value="high">Haute</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-3">
-                  <Calendar className="inline w-4 h-4 mr-2 text-indigo-600" />
-                  Date de Commande *
-                </label>
-                <input 
-                  type="date"
-                  required
-                  value={newOrder.date}
-                  onChange={(e) => setNewOrder({...newOrder, date: e.target.value})}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-3">
-                  <Calendar className="inline w-4 h-4 mr-2 text-indigo-600" />
-                  Date de Livraison *
-                </label>
-                <input 
-                  type="date"
-                  required
-                  value={newOrder.delivery_date}
-                  onChange={(e) => setNewOrder({...newOrder, delivery_date: e.target.value})}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
-                />
-              </div>
-            </div>
-            
-            <div className="col-span-full">
-              <label className="block text-sm font-semibold text-gray-900 mb-4">
-                <Package className="inline w-4 h-4 mr-2 text-indigo-600" />
-                Articles à commander
-              </label>
-              <div className="border border-gray-300 rounded-xl p-6 space-y-4 bg-gray-50">
-                <div className="grid grid-cols-12 gap-3 text-sm font-semibold text-gray-900">
-                  <div className="col-span-5">Produit</div>
-                  <div className="col-span-2">Format</div>
-                  <div className="col-span-2">Quantité</div>
-                  <div className="col-span-2">Prix Unitaire</div>
-                  <div className="col-span-1">Total</div>
-                </div>
-                {newOrder.items.map((item: any, index: number) => {
-                  const variant = productVariants.find((v: any) => v.id === item.product_variant_id);
-                  return (
-                    <div key={index} className="grid grid-cols-12 gap-3 items-center bg-white p-3 rounded-lg border border-gray-200">
-                      <div className="col-span-5">
-                        <select 
-                          required
-                          value={item.product_variant_id}
-                          onChange={(e) => handleOrderItemChange(index, 'product_variant_id', parseInt(e.target.value))}
-                          className="w-full text-sm border border-gray-300 px-4 py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors">
-                          <option value="0">Sélectionner un produit</option>
-                          {productVariants.map((v: any) => (
-                            <option key={v.id} value={v.id}>
-                              {v.product?.name || 'Produit inconnu'} - {v.format?.name || 'Sans format'}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="col-span-2 text-sm text-gray-600 font-medium">
-                        {variant?.format?.name || '-'}
-                      </div>
-                      <div className="col-span-2">
-                        <input 
-                          type="number"
-                          required
-                          min="1"
-                          max={variant?.current_stock || 1}
-                          value={item.quantity}
-                          onChange={(e) => handleOrderItemChange(index, 'quantity', parseInt(e.target.value))}
-                          className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors"
-                          placeholder="Qty"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <input 
-                          type="text"
-                          readOnly
-                          value={formatCurrency(item.price)}
-                          className="w-full px-4 py-2.5 text-sm border text-gray-600 bg-gray-100 rounded-lg font-medium"
-                        />
-                      </div>
-                      <div className="col-span-1 flex items-center text-sm font-semibold text-gray-900">
-                        {formatCurrency((parseFloat(item.price) * item.quantity).toString())}
-                        <button 
-                          type="button"
-                          onClick={() => handleRemoveOrderItem(index)}
-                          className="ml-2 text-red-600 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors"
-                        >
-                          <XCircle size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-                <button 
-                  type="button"
-                  onClick={handleAddOrderItem}
-                  className="w-full py-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-600 hover:text-gray-700 hover:border-gray-400 transition-colors bg-white flex items-center justify-center gap-2 font-medium"
-                >
-                  <Plus size={16} />
-                  Ajouter un article
-                </button>
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-3">
-                <FileText className="inline w-4 h-4 mr-2 text-indigo-600" />
-                Notes
-              </label>
-              <textarea 
-                value={newOrder.notes}
-                onChange={(e) => setNewOrder({...newOrder, notes: e.target.value})}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-colors resize-none"
-                rows={4}
-                placeholder="Instructions spéciales, remarques..."
-              />
-            </div>
-            
-            <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-              <button 
-                type="button"
-                onClick={() => setShowAddModal(false)}
-                className="px-6 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium"
-              >
-                Annuler
-              </button>
-              <button 
-                type="submit"
-                className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-sm"
-              >
-                Créer la Commande
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {error && <ErrorBanner message={error} onClose={() => setError(null)} />}
+
+            <FormField label="Vendeur ambulant" icon={<Users size={14} />} required>
+              <select required value={form.vendor || ''} onChange={e => setForm(p => ({ ...p, vendor: parseInt(e.target.value) || null }))} className={inputClass}>
+                <option value="">Sélectionner un vendeur</option>
+                {vendors.map(v => <option key={v.id} value={v.id}>{v.full_name}{v.phone ? ` — ${v.phone}` : ''}</option>)}
+              </select>
+            </FormField>
+
+            <FormField label="Type d'activité" required>
+              <select value={form.activity_type} onChange={e => setForm(p => ({ ...p, activity_type: e.target.value }))} className={inputClass}>
+                {ACTIVITY_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </FormField>
+
+            <FormField label="Quantité à affecter" required>
+              <input type="number" required min={1} max={item.quantity} value={form.quantity_assignes || ''} onChange={e => setForm(p => ({ ...p, quantity_assignes: parseInt(e.target.value) || null }))} className={inputClass} />
+              <p className="text-xs text-gray-400 mt-1">Maximum disponible : {item.quantity}</p>
+            </FormField>
+
+            <FormField label="Notes">
+              <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} className={inputClass + ' resize-none'} rows={3} placeholder="Notes supplémentaires…" />
+            </FormField>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+              <button type="button" onClick={onClose} className="px-5 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors text-sm font-medium">Annuler</button>
+              <button type="submit" disabled={submitting} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors text-sm font-semibold shadow-sm disabled:opacity-60">
+                {submitting ? 'Affectation…' : 'Affecter'}
               </button>
             </div>
           </form>
         </div>
       </div>
+    </ModalWrapper>
+  );
+};
+
+// ─── Product Catalog View ─────────────────────────────────────────────────────
+
+const ProductCatalogView: React.FC<{
+  productVariants: ProductVariant[];
+  onNewOrder: () => void;
+}> = ({ productVariants, onNewOrder }) => (
+  <div className="p-6">
+    <div className="flex justify-between items-center mb-6">
+      <div>
+        <h2 className="text-xl font-bold text-gray-900">Catalogue produits</h2>
+        <p className="text-sm text-gray-500 mt-0.5">Sélectionnez les produits à commander</p>
+      </div>
+      <button onClick={onNewOrder} className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors text-sm font-semibold shadow-sm">
+        <Plus size={16} /> Nouvelle commande
+      </button>
+    </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {productVariants.map(v => {
+        const stockOk = (v.current_stock || 0) > (v.min_stock || 0);
+        return (
+          <div key={v.id} className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="font-semibold text-gray-900">{v.product?.name || '—'}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{v.format?.name || 'Sans format'}</p>
+              </div>
+              {v.image && <img src={v.image} alt="" className="w-14 h-14 object-cover rounded-lg border border-gray-100" />}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-sm mb-4">
+              <div className="bg-gray-50 p-2.5 rounded-lg"><span className="text-xs text-gray-500 block">Prix</span><span className="font-semibold text-gray-900">{formatCurrency(v.price)}</span></div>
+              <div className={`p-2.5 rounded-lg ${stockOk ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                <span className="text-xs text-gray-500 block">Stock</span>
+                <span className={`font-semibold ${stockOk ? 'text-emerald-700' : 'text-red-700'}`}>{v.current_stock || 0}</span>
+              </div>
+            </div>
+            <button onClick={onNewOrder} className="w-full py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors text-sm font-medium flex items-center justify-center gap-1.5">
+              <Plus size={14} /> Ajouter à une commande
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
+
+// ─── Orders Table View ────────────────────────────────────────────────────────
+
+const OrdersTableView: React.FC<{
+  orders: Order[];
+  userRole?: UserRole;
+  onView: (order: Order) => void;
+  onEdit: (order: Order) => void;
+  onDelete: (id: number) => void;
+  onNewOrder: () => void;
+  onRefresh: () => void;
+}> = ({ orders, userRole, onView, onEdit, onDelete, onNewOrder, onRefresh }) => {
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [sortKey, setSortKey] = useState<'date' | 'total'>('date');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [selected, setSelected] = useState<number[]>([]);
+  const [page, setPage] = useState(1);
+
+  const filtered = orders
+    .filter(o => {
+      const q = search.toLowerCase();
+      const matchSearch = String(o.id).includes(q) || (o.point_of_sale_details?.name || '').toLowerCase().includes(q);
+      const matchStatus = statusFilter === 'all' || o.status === statusFilter;
+      const matchDate = dateFilter === 'all' || (o.date && (
+        (dateFilter === 'today' && isToday(o.date)) ||
+        (dateFilter === 'week' && isThisWeek(o.date)) ||
+        (dateFilter === 'month' && isThisMonth(o.date))
+      ));
+      return matchSearch && matchStatus && matchDate;
+    })
+    .sort((a, b) => {
+      const av = sortKey === 'date' ? new Date(a.date).getTime() : parseFloat(a.total);
+      const bv = sortKey === 'date' ? new Date(b.date).getTime() : parseFloat(b.total);
+      return sortDir === 'asc' ? av - bv : bv - av;
+    });
+
+  const totalPages = Math.ceil(filtered.length / ORDERS_PER_PAGE);
+  const paginated = filtered.slice((page - 1) * ORDERS_PER_PAGE, page * ORDERS_PER_PAGE);
+  const allSelected = selected.length === filtered.length && filtered.length > 0;
+
+  const toggleSelect = (id: number) => setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+  const toggleAll = () => setSelected(allSelected ? [] : filtered.map(o => o.id));
+
+  return (
+    <div className="p-6 space-y-4">
+      {/* Toolbar */}
+      <div className="flex flex-col lg:flex-row gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+          <input type="text" placeholder="Rechercher…" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
+            className="pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full text-sm transition-colors" />
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className={inputClass + ' max-w-[160px]'}>
+            <option value="all">Tous les statuts</option>
+            {Object.entries(STATUS_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+          <select value={dateFilter} onChange={e => { setDateFilter(e.target.value); setPage(1); }} className={inputClass + ' max-w-[160px]'}>
+            <option value="all">Toutes les dates</option>
+            <option value="today">Aujourd'hui</option>
+            <option value="week">Cette semaine</option>
+            <option value="month">Ce mois</option>
+          </select>
+          <select value={`${sortKey}-${sortDir}`} onChange={e => { const [k, d] = e.target.value.split('-'); setSortKey(k as any); setSortDir(d as any); }} className={inputClass + ' max-w-[180px]'}>
+            <option value="date-desc">Plus récentes</option>
+            <option value="date-asc">Plus anciennes</option>
+            <option value="total-desc">Montant ↓</option>
+            <option value="total-asc">Montant ↑</option>
+          </select>
+        </div>
+        <div className="flex gap-2 ml-auto">
+          <button onClick={onRefresh} className="inline-flex items-center gap-1.5 px-4 py-2.5 border border-gray-300 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors text-sm font-medium">
+            <RefreshCw size={15} /> Actualiser
+          </button>
+          {userRole?.createcommande && (
+            <button onClick={onNewOrder} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors text-sm font-semibold shadow-sm">
+              <Plus size={15} /> Nouvelle commande
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Bulk action bar */}
+      {selected.length > 0 && (
+        <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-xl border border-indigo-200">
+          <span className="text-sm font-semibold text-indigo-800">{selected.length} sélectionnée(s)</span>
+          <button onClick={() => setSelected([])} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Désélectionner tout</button>
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-4 py-3"><input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" /></th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Commande</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Point de vente</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Date</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Statut</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Priorité</th>
+                <th className="px-4 py-3 text-right font-semibold text-gray-700">Total</th>
+                <th className="px-4 py-3 text-center font-semibold text-gray-700">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {paginated.length === 0 ? (
+                <tr><td colSpan={8} className="py-16 text-center">
+                  <Package className="text-gray-200 mx-auto mb-3" size={52} />
+                  <p className="text-gray-500 font-medium">Aucune commande trouvée</p>
+                  <p className="text-gray-400 text-xs mt-1">Essayez d'ajuster vos filtres</p>
+                </td></tr>
+              ) : paginated.map(order => (
+                <tr key={order.id} className={`hover:bg-gray-50 transition-colors ${selected.includes(order.id) ? 'bg-indigo-25' : ''}`}>
+                  <td className="px-4 py-3">
+                    <input type="checkbox" checked={selected.includes(order.id)} onChange={() => toggleSelect(order.id)} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="font-semibold text-gray-900">CMD-{order.id}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">{order.items.length} article(s)</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-gray-800">{order.point_of_sale_details?.name || '—'}</div>
+                    <div className="text-xs text-gray-400 mt-0.5 truncate max-w-[160px]">{order.point_of_sale_details?.address || ''}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="text-gray-800 font-medium">{formatDate(order.date)}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">Livr. {formatDate(order.delivery_date)}</div>
+                  </td>
+                  <td className="px-4 py-3"><StatusBadge status={order.status} /></td>
+                  <td className="px-4 py-3"><PriorityBadge priority={order.priority} /></td>
+                  <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(order.total)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-center gap-1">
+                      <button onClick={() => onView(order)} className="p-1.5 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors" title="Détails"><Eye size={16} /></button>
+                      {userRole?.createcommande && <>
+                        <button onClick={() => onEdit(order)} className="p-1.5 text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors" title="Modifier"><Edit size={16} /></button>
+                        <button onClick={() => onDelete(order.id)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition-colors" title="Supprimer"><Trash2 size={16} /></button>
+                      </>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+            <span className="text-xs text-gray-500">
+              {(page - 1) * ORDERS_PER_PAGE + 1}–{Math.min(page * ORDERS_PER_PAGE, filtered.length)} sur {filtered.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-1.5 rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-white transition-colors">
+                <ChevronLeft size={15} />
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1).map((p, i, arr) => (
+                <React.Fragment key={p}>
+                  {i > 0 && arr[i - 1] !== p - 1 && <span className="text-gray-400 px-1 text-xs">…</span>}
+                  <button onClick={() => setPage(p)} className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${p === page ? 'bg-indigo-600 text-white' : 'border border-gray-200 hover:bg-white text-gray-700'}`}>{p}</button>
+                </React.Fragment>
+              ))}
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-1.5 rounded-lg border border-gray-200 disabled:opacity-40 hover:bg-white transition-colors">
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+const OrderManagement: React.FC = () => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [productVariants, setProductVariants] = useState<ProductVariant[]>([]);
+  const [pointsOfSale, setPointsOfSale] = useState<PointOfSale[]>([]);
+  const [mobileVendors, setMobileVendors] = useState<MobileVendor[]>([]);
+  const [activeTab, setActiveTab] = useState<'received' | 'create'>('received');
+
+  // Modal state
+  const [showAdd, setShowAdd] = useState(false);
+  const [detailsOrder, setDetailsOrder] = useState<Order | null>(null);
+  const [editOrder, setEditOrder] = useState<Order | null>(null);
+  const [assignData, setAssignData] = useState<{ order: Order; item: OrderItem } | null>(null);
+
+  const userRole = userProfile?.profile?.role;
+  const canView = userRole?.vuecommande ?? false;
+  const canCreate = userRole?.createcommande ?? false;
+
+  const fetchData = useCallback(async () => {
+    const headers = getAuthHeaders();
+    if (!headers) { setError('Veuillez vous connecter.'); setLoading(false); return; }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const profileRes = await fetch(`${API_BASE}/me/`, { headers });
+      if (!profileRes.ok) throw new Error('Impossible de récupérer le profil utilisateur.');
+      const profile: UserProfile = await profileRes.json();
+      setUserProfile(profile);
+
+      const role = profile.profile?.role;
+      if (role?.vuecommande) setActiveTab('received');
+      else if (role?.createcommande) setActiveTab('create');
+
+      const fetches = await Promise.allSettled([
+        role?.vuecommande ? fetch(`${API_BASE}/orders/`, { headers }) : Promise.resolve(null),
+        fetch(`${API_BASE}/product-variants/`, { headers }),
+        fetch(`${API_BASE}/points-vente/`, { headers }),
+        fetch(`${API_BASE}/mobile-vendors/`, { headers }),
+      ]);
+
+      const [ordersRes, variantsRes, posRes, vendorsRes] = fetches;
+
+      if (ordersRes.status === 'fulfilled' && ordersRes.value?.ok) {
+        setOrders(await ordersRes.value.json());
+      }
+      if (variantsRes.status === 'fulfilled' && variantsRes.value?.ok) {
+        setProductVariants(await variantsRes.value.json());
+      }
+      if (posRes.status === 'fulfilled' && posRes.value?.ok) {
+        setPointsOfSale(await posRes.value.json());
+      }
+      if (vendorsRes.status === 'fulfilled' && vendorsRes.value?.ok) {
+        setMobileVendors(await vendorsRes.value.json());
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const updateOrderStatus = async (orderId: number, newStatus: OrderStatus) => {
+    const headers = getAuthHeaders();
+    if (!headers) return;
+    try {
+      const res = await fetch(`${API_BASE}/orders/${orderId}/`, {
+        method: 'PATCH', headers, body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error('Échec de la mise à jour du statut.');
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      if (detailsOrder?.id === orderId) setDetailsOrder(prev => prev ? { ...prev, status: newStatus } : null);
+    } catch (err: any) { setError(err.message); }
+  };
+
+  const handleDelete = async (orderId: number) => {
+    if (!window.confirm('Supprimer cette commande ?')) return;
+    const headers = getAuthHeaders();
+    if (!headers) return;
+    try {
+      const res = await fetch(`${API_BASE}/orders/${orderId}/`, { method: 'DELETE', headers });
+      if (!res.ok) throw new Error('Échec de la suppression.');
+      setOrders(prev => prev.filter(o => o.id !== orderId));
+      if (detailsOrder?.id === orderId) setDetailsOrder(null);
+    } catch (err: any) { setError(err.message); }
+  };
+
+  const handleEdit = (order: Order) => {
+    if (!canCreate) { setError('Permission insuffisante.'); return; }
+    setDetailsOrder(null);
+    setEditOrder(order);
+  };
+
+  // Stats
+  const revenue = orders.reduce((sum, o) => sum + (parseFloat(o.total) || 0), 0);
+
+  if (loading) return <Spinner />;
+
+  if (!canView && !canCreate) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 max-w-sm text-center">
+          <div className="p-3 bg-red-50 rounded-xl inline-block mb-4"><XCircle className="text-red-500" size={40} /></div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Accès refusé</h2>
+          <p className="text-sm text-gray-500">Vous n'avez pas les permissions pour accéder à la gestion des commandes. Contactez votre administrateur.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const showTabs = canView && canCreate;
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-screen-xl mx-auto p-6 space-y-6">
+        {error && <ErrorBanner message={error} onClose={() => setError(null)} />}
+
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Gestion des Commandes</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {userProfile?.username && <>Connecté : <strong>{userProfile.username}</strong>{userRole?.name && <> — {userRole.name}</>}</>}
+            </p>
+          </div>
+          <button onClick={fetchData} className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-xl text-gray-600 hover:bg-white transition-colors text-sm font-medium shadow-sm">
+            <RefreshCw size={14} /> Actualiser
+          </button>
+        </div>
+
+        {/* Stats */}
+        {canView && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard label="Total commandes" value={orders.length} icon={Package} iconBg="bg-indigo-100" iconColor="text-indigo-600" trend="+12% ce mois" trendColor="text-emerald-600" />
+            <StatCard label="En attente" value={orders.filter(o => o.status === 'pending').length} icon={Clock} iconBg="bg-amber-100" iconColor="text-amber-600" trend="Nécessite attention" trendColor="text-amber-600" />
+            <StatCard label="Livrées" value={orders.filter(o => o.status === 'delivered').length} icon={CheckCircle} iconBg="bg-emerald-100" iconColor="text-emerald-600" trend="+8% cette semaine" trendColor="text-emerald-600" />
+            <StatCard label="Chiffre d'affaires" value={formatCurrency(revenue)} icon={DollarSign} iconBg="bg-purple-100" iconColor="text-purple-600" trend="Performance globale" trendColor="text-purple-600" />
+          </div>
+        )}
+
+        {/* Main panel */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200">
+          {showTabs && (
+            <div className="flex border-b border-gray-200 px-2">
+              {[
+                { key: 'received', label: 'Commandes reçues', icon: List, badge: orders.length },
+                { key: 'create',   label: 'Créer une commande', icon: ShoppingCart },
+              ].map(({ key, label, icon: Icon, badge }) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key as any)}
+                  className={`flex items-center gap-2 px-5 py-4 text-sm font-semibold border-b-2 transition-colors ${
+                    activeTab === key ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Icon size={16} />
+                  {label}
+                  {badge !== undefined && (
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${activeTab === key ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>{badge}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {(canView && (!showTabs || activeTab === 'received')) && (
+            <OrdersTableView
+              orders={orders}
+              userRole={userRole}
+              onView={setDetailsOrder}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onNewOrder={() => setShowAdd(true)}
+              onRefresh={fetchData}
+            />
+          )}
+
+          {(canCreate && (!showTabs || activeTab === 'create')) && (
+            <ProductCatalogView
+              productVariants={productVariants}
+              onNewOrder={() => setShowAdd(true)}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Modals */}
+      {showAdd && (
+        <AddOrderModal
+          onClose={() => setShowAdd(false)}
+          onCreated={order => setOrders(prev => [order, ...prev])}
+          productVariants={productVariants}
+          pointsOfSale={pointsOfSale}
+        />
+      )}
+
+      {detailsOrder && (
+        <OrderDetailsModal
+          order={detailsOrder}
+          canEdit={canCreate}
+          onClose={() => setDetailsOrder(null)}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onStatusChange={updateOrderStatus}
+          onAssign={(order, item) => { setAssignData({ order, item }); setDetailsOrder(null); }}
+        />
+      )}
+
+      {editOrder && (
+        <EditOrderModal
+          order={editOrder}
+          onClose={() => setEditOrder(null)}
+          onUpdated={updated => { setOrders(prev => prev.map(o => o.id === updated.id ? updated : o)); setEditOrder(null); }}
+          productVariants={productVariants}
+        />
+      )}
+
+      {assignData && (
+        <AssignVendorModal
+          order={assignData.order}
+          item={assignData.item}
+          vendors={mobileVendors}
+          onClose={() => setAssignData(null)}
+        />
+      )}
     </div>
   );
 };
