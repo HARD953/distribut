@@ -132,7 +132,7 @@ const StatCard = ({
   title, value, growth, icon: Icon, color = 'green', subtitle,
 }: {
   title: string; value: string; growth?: number;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number; color?: string }>;
   color?: ColorKey; subtitle?: string;
 }) => {
   const p = CARD_PALETTE[color];

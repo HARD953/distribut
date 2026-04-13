@@ -1172,7 +1172,7 @@ export default function LanfiaLinkDashboard() {
                     <PieChart>
                       <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={100}
                            paddingAngle={2} dataKey="value"
-                           label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                           label={({ name, percent }: { name: string; percent?: number }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                            labelLine={false}>
                         {pieData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                       </Pie>
