@@ -286,31 +286,97 @@ const UserModal: React.FC<UserModalProps> = ({ show, onClose, modalType, selecte
     return null;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const err = validate();
-    if (err) { setFormError(err); return; }
-    try {
-      setFormError(null); setIsSubmitting(true);
-      const posIds = (formData.points_of_sale_ids || []).map(id => parseInt(id, 10));
-      const base = {
-        user: modalType === 'edit' ? { email: formData.user.email, first_name: formData.user.first_name || '', last_name: formData.user.last_name || '' } : { ...formData.user },
-        phone: formData.phone || '', location: formData.location || '', status: formData.status, role_id: formData.role || '',
-        establishment_name: formData.establishment_name, establishment_type: formData.establishment_type,
-        establishment_address: formData.establishment_address, establishment_phone: formData.establishment_phone || '',
-        establishment_email: formData.establishment_email || '', points_of_sale_ids: posIds,
-      };
-      const res = modalType === 'edit' && selectedUser
-        ? await apiService.updateUser(selectedUser.id, base)
-        : await apiService.createUser(base);
-      if (!res.ok) { const d = await res.json(); throw new Error(d?.detail || d?.message || 'Erreur serveur'); }
-      const updated = await res.json();
-      onUserUpdated(updated, modalType);
-      onClose();
-    } catch (err: any) {
-      if (err.message !== 'Session expired') setFormError(err.message || 'Une erreur est survenue');
-    } finally { setIsSubmitting(false); }
-  };
+    const handleSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      const err = validate();
+      if (err) { setFormError(err); return; }
+    
+      try {
+        setFormError(null);
+        setIsSubmitting(true);
+    
+        // ⚠️ FIX 1 : filtrer les IDs invalides
+        const posIds = (formData.points_of_sale_ids || [])
+          .map(id => parseInt(id, 10))
+          .filter(id => !isNaN(id));
+    
+        if (modalType === 'edit' && selectedUser) {
+          // ⚠️ FIX 2 : on n'envoie jamais le username en edit (non modifiable)
+          //            on n'envoie le password que s'il est renseigné
+          const userPayload: Record<string, string> = {
+            email: formData.user.email,
+            first_name: formData.user.first_name || '',
+            last_name: formData.user.last_name || '',
+          };
+          if (formData.user.password && formData.user.password.trim()) {
+            userPayload.password = formData.user.password;
+          }
+    
+          const body = {
+            user: userPayload,
+            phone: formData.phone || '',
+            location: formData.location || '',
+            status: formData.status,
+            // ⚠️ FIX 3 : le backend attend role_id (write_only), pas role
+            role_id: formData.role || null,
+            establishment_name: formData.establishment_name,
+            establishment_type: formData.establishment_type,
+            establishment_address: formData.establishment_address,
+            establishment_phone: formData.establishment_phone || '',
+            establishment_email: formData.establishment_email || '',
+            points_of_sale_ids: posIds,
+          };
+    
+          const res = await apiService.updateUser(selectedUser.id, body);
+          if (!res.ok) {
+            const d = await res.json();
+            throw new Error(d?.detail || d?.message || JSON.stringify(d?.errors) || 'Erreur serveur');
+          }
+          const updated = await res.json();
+          onUserUpdated(updated, 'edit');
+    
+        } else {
+          // Mode création
+          const body = {
+            user: {
+              username: formData.user.username,
+              email: formData.user.email,
+              first_name: formData.user.first_name || '',
+              last_name: formData.user.last_name || '',
+              password: formData.user.password,
+            },
+            phone: formData.phone || '',
+            location: formData.location || '',
+            status: formData.status,
+            // ⚠️ FIX 3 : même chose pour la création
+            role_id: formData.role || null,
+            establishment_name: formData.establishment_name,
+            establishment_type: formData.establishment_type,
+            establishment_address: formData.establishment_address,
+            establishment_phone: formData.establishment_phone || '',
+            establishment_email: formData.establishment_email || '',
+            points_of_sale_ids: posIds,
+          };
+    
+          const res = await apiService.createUser(body);
+          if (!res.ok) {
+            const d = await res.json();
+            throw new Error(d?.detail || d?.message || JSON.stringify(d?.errors) || 'Erreur serveur');
+          }
+          const created = await res.json();
+          onUserUpdated(created, 'add');
+        }
+    
+        onClose();
+    
+      } catch (err: any) {
+        if (err.message !== 'Session expired') {
+          setFormError(err.message || 'Une erreur est survenue');
+        }
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
 
   if (!show) return null;
 

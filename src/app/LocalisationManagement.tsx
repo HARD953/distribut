@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, MapPin, Search, X, Save, Building2, Map, Globe, AlertTriangle } from 'lucide-react';
+import { Plus, Edit, Trash2, MapPin, Search, X, Save, Building2, Globe, AlertTriangle } from 'lucide-react';
 
 interface District {
   id: number;
@@ -29,22 +29,9 @@ interface Quartier {
 
 const LocalisationManagement = () => {
   const [activeTab, setActiveTab] = useState<'districts' | 'villes' | 'quartiers'>('districts');
-  const [districts, setDistricts] = useState<District[]>([
-    { id: 1, nom: 'Abidjan', villes_count: 5, date_creation: '2024-01-15' },
-    { id: 2, nom: 'Bouaké', villes_count: 3, date_creation: '2024-01-16' },
-    { id: 3, nom: 'Yamoussoukro', villes_count: 4, date_creation: '2024-01-17' },
-  ]);
-  const [villes, setVilles] = useState<Ville[]>([
-    { id: 1, nom: 'Cocody', district: 1, district_nom: 'Abidjan', quartiers_count: 8, date_creation: '2024-01-17' },
-    { id: 2, nom: 'Yopougon', district: 1, district_nom: 'Abidjan', quartiers_count: 12, date_creation: '2024-01-18' },
-    { id: 3, nom: 'Plateau', district: 1, district_nom: 'Abidjan', quartiers_count: 6, date_creation: '2024-01-19' },
-  ]);
-  const [quartiers, setQuartiers] = useState<Quartier[]>([
-    { id: 1, nom: 'Angré', ville: 1, ville_nom: 'Cocody', district_nom: 'Abidjan', date_creation: '2024-01-19' },
-    { id: 2, nom: 'Riviera', ville: 1, ville_nom: 'Cocody', district_nom: 'Abidjan', date_creation: '2024-01-20' },
-    { id: 3, nom: 'Ananeraie', ville: 2, ville_nom: 'Yopougon', district_nom: 'Abidjan', date_creation: '2024-01-21' },
-  ]);
-  
+  const [districts, setDistricts] = useState<District[]>([]);
+  const [villes, setVilles] = useState<Ville[]>([]);
+  const [quartiers, setQuartiers] = useState<Quartier[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -54,6 +41,67 @@ const LocalisationManagement = () => {
     district: '',
     ville: ''
   });
+
+  // Charger les données
+  const loadDistricts = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('access');
+      const response = await fetch('https://api.lanfialink.com/api/districts/', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setDistricts(data);
+      }
+    } catch (error) {
+      console.error('Erreur chargement districts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadVilles = async () => {
+    try {
+      const token = localStorage.getItem('access');
+      const response = await fetch('https://api.lanfialink.com/api/villes/', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setVilles(data);
+      } 
+    } catch (error) {
+      console.error('Erreur chargement villes:', error);
+    }
+  };
+
+  const loadQuartiers = async () => {
+    try {
+      const token = localStorage.getItem('access');
+      const response = await fetch('https://api.lanfialink.com/api/quartiers/', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setQuartiers(data);
+      }
+    } catch (error) {
+      console.error('Erreur chargement quartiers:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadDistricts();
+    loadVilles();
+    loadQuartiers();
+  }, []);
 
   const handleCreate = () => {
     setEditingItem(null);
@@ -71,18 +119,117 @@ const LocalisationManagement = () => {
     setShowForm(true);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      setShowForm(false);
+    
+    try {
+      const token = localStorage.getItem('access');
+      let url = '';
+      let method = '';
+      let payload: any = { nom: formData.nom };
+
+      // Configuration selon l'onglet actif
+      if (activeTab === 'districts') {
+        url = editingItem 
+          ? `https://api.lanfialink.com/api/districts/${editingItem.id}/`
+          : 'https://api.lanfialink.com/api/districts/';
+        method = editingItem ? 'PUT' : 'POST';
+      } 
+      else if (activeTab === 'villes') {
+        url = editingItem 
+          ? `https://api.lanfialink.com/api/villes/${editingItem.id}/`
+          : 'https://api.lanfialink.com/api/villes/';
+        method = editingItem ? 'PUT' : 'POST';
+        payload.district = parseInt(formData.district);
+      } 
+      else if (activeTab === 'quartiers') {
+        url = editingItem 
+          ? `https://api.lanfialink.com/api/quartiers/${editingItem.id}/`
+          : 'https://api.lanfialink.com/api/quartiers/';
+        method = editingItem ? 'PUT' : 'POST';
+        payload.ville = parseInt(formData.ville);
+      }
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        setShowForm(false);
+        // Recharger les données selon l'onglet
+        if (activeTab === 'districts') {
+          await loadDistricts();
+          await loadVilles(); // Pour mettre à jour les références
+          await loadQuartiers(); // Pour mettre à jour les références
+        } else if (activeTab === 'villes') {
+          await loadVilles();
+          await loadQuartiers();
+        } else {
+          await loadQuartiers();
+        }
+      } else {
+        const error = await response.json();
+        console.error('Erreur API:', error);
+        alert('Erreur lors de la sauvegarde');
+      }
+    } catch (error) {
+      console.error('Erreur sauvegarde:', error);
+      alert('Erreur de connexion');
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cet élément ?')) return;
+    
     setLoading(true);
-    setTimeout(() => setLoading(false), 500);
+    try {
+      const token = localStorage.getItem('access');
+      let url = '';
+      
+      if (activeTab === 'districts') {
+        url = `https://api.lanfialink.com/api/districts/${id}/`;
+      } else if (activeTab === 'villes') {
+        url = `https://api.lanfialink.com/api/villes/${id}/`;
+      } else {
+        url = `https://api.lanfialink.com/api/quartiers/${id}/`;
+      }
+
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        // Recharger les données selon l'onglet
+        if (activeTab === 'districts') {
+          await loadDistricts();
+          await loadVilles();
+          await loadQuartiers();
+        } else if (activeTab === 'villes') {
+          await loadVilles();
+          await loadQuartiers();
+        } else {
+          await loadQuartiers();
+        }
+      } else {
+        alert('Erreur lors de la suppression');
+      }
+    } catch (error) {
+      console.error('Erreur suppression:', error);
+      alert('Erreur de connexion');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filteredData = {
@@ -132,7 +279,7 @@ const LocalisationManagement = () => {
           <div>
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#C07A2F' }}>
-                <Map size={20} style={{ color: '#FAF7F0' }} />
+                <MapPin size={20} style={{ color: '#FAF7F0' }} />
               </div>
               <div>
                 <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#FAF7F0' }}>
@@ -143,12 +290,10 @@ const LocalisationManagement = () => {
                 </p>
               </div>
             </div>
-            {/* Accent bar */}
             <div className="w-16 h-1 rounded-full" style={{ background: '#F0C878' }} />
           </div>
           
           <div className="flex items-center gap-3">
-            {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2" size={18} style={{ color: '#A89880' }} />
               <input
@@ -165,7 +310,6 @@ const LocalisationManagement = () => {
               />
             </div>
             
-            {/* Add button */}
             <button
               onClick={handleCreate}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all hover:scale-105"
@@ -178,7 +322,7 @@ const LocalisationManagement = () => {
         </div>
       </div>
 
-      {/* Tabs avec style africain */}
+      {/* Tabs */}
       <div className="bg-white rounded-2xl shadow-sm mb-6 overflow-hidden" style={{ border: '1px solid #E8D9B8' }}>
         <div className="flex border-b" style={{ borderColor: '#E8D9B8' }}>
           {(Object.keys(tabInfo) as Array<keyof typeof tabInfo>).map((tabKey) => {
@@ -219,11 +363,10 @@ const LocalisationManagement = () => {
         </div>
       </div>
 
-      {/* Modal Form avec style africain */}
+      {/* Modal Form */}
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" style={{ border: '2px solid #D4C4A0' }}>
-            {/* Header avec kente */}
             <div className="relative overflow-hidden rounded-t-2xl p-6" style={{ background: '#2D5A3D' }}>
               <div className="absolute top-0 left-0 right-0 h-1" style={{
                 background: 'linear-gradient(90deg,#9A5E1A 0%,#D4A843 50%,#9A5E1A 100%)',
@@ -243,107 +386,112 @@ const LocalisationManagement = () => {
               </div>
             </div>
             
-            {/* Form content */}
-            <div className="p-6 space-y-5">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#7A6A52' }}>
-                  Nom
-                </label>
-                <input
-                  type="text"
-                  value={formData.nom}
-                  onChange={(e) => setFormData({...formData, nom: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border-0 text-sm"
-                  style={{
-                    background: '#F2EDE0',
-                    color: '#2A1A08',
-                    outline: 'none'
-                  }}
-                  placeholder="Entrez le nom..."
-                />
-              </div>
-              
-              {activeTab === 'villes' && (
+            <form onSubmit={handleSubmit}>
+              <div className="p-6 space-y-5">
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#7A6A52' }}>
-                    District
+                    Nom
                   </label>
-                  <select
-                    value={formData.district}
-                    onChange={(e) => setFormData({...formData, district: e.target.value})}
+                  <input
+                    type="text"
+                    value={formData.nom}
+                    onChange={(e) => setFormData({...formData, nom: e.target.value})}
+                    required
                     className="w-full px-4 py-3 rounded-xl border-0 text-sm"
                     style={{
                       background: '#F2EDE0',
                       color: '#2A1A08',
                       outline: 'none'
                     }}
-                  >
-                    <option value="">Sélectionner un district</option>
-                    {districts.map(district => (
-                      <option key={district.id} value={district.id}>
-                        {district.nom}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Entrez le nom..."
+                  />
                 </div>
-              )}
-              
-              {activeTab === 'quartiers' && (
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#7A6A52' }}>
-                    Ville
-                  </label>
-                  <select
-                    value={formData.ville}
-                    onChange={(e) => setFormData({...formData, ville: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border-0 text-sm"
+                
+                {activeTab === 'villes' && (
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#7A6A52' }}>
+                      District
+                    </label>
+                    <select
+                      value={formData.district}
+                      onChange={(e) => setFormData({...formData, district: e.target.value})}
+                      required
+                      className="w-full px-4 py-3 rounded-xl border-0 text-sm"
+                      style={{
+                        background: '#F2EDE0',
+                        color: '#2A1A08',
+                        outline: 'none'
+                      }}
+                    >
+                      <option value="">Sélectionner un district</option>
+                      {districts.map(district => (
+                        <option key={district.id} value={district.id}>
+                          {district.nom}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                
+                {activeTab === 'quartiers' && (
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#7A6A52' }}>
+                      Ville
+                    </label>
+                    <select
+                      value={formData.ville}
+                      onChange={(e) => setFormData({...formData, ville: e.target.value})}
+                      required
+                      className="w-full px-4 py-3 rounded-xl border-0 text-sm"
+                      style={{
+                        background: '#F2EDE0',
+                        color: '#2A1A08',
+                        outline: 'none'
+                      }}
+                    >
+                      <option value="">Sélectionner une ville</option>
+                      {villes.map(ville => (
+                        <option key={ville.id} value={ville.id}>
+                          {ville.nom} - {ville.district_nom}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowForm(false)}
+                    className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all"
                     style={{
                       background: '#F2EDE0',
-                      color: '#2A1A08',
-                      outline: 'none'
+                      color: '#7A6A52',
+                      border: '1px solid #E8D9B8'
                     }}
                   >
-                    <option value="">Sélectionner une ville</option>
-                    {villes.map(ville => (
-                      <option key={ville.id} value={ville.id}>
-                        {ville.nom} - {ville.district_nom}
-                      </option>
-                    ))}
-                  </select>
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all hover:scale-105 disabled:opacity-50"
+                    style={{
+                      background: '#2D5A3D',
+                      color: 'white'
+                    }}
+                  >
+                    <Save size={18} />
+                    <span>{editingItem ? 'Modifier' : 'Créer'}</span>
+                  </button>
                 </div>
-              )}
-              
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => setShowForm(false)}
-                  className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all"
-                  style={{
-                    background: '#F2EDE0',
-                    color: '#7A6A52',
-                    border: '1px solid #E8D9B8'
-                  }}
-                >
-                  Annuler
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  disabled={loading}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all hover:scale-105 disabled:opacity-50"
-                  style={{
-                    background: '#2D5A3D',
-                    color: 'white'
-                  }}
-                >
-                  <Save size={18} />
-                  <span>{editingItem ? 'Modifier' : 'Créer'}</span>
-                </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Table avec style africain */}
+      {/* Table */}
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden" style={{ border: '1px solid #E8D9B8' }}>
         {loading ? (
           <div className="flex flex-col justify-center items-center p-12">
@@ -476,7 +624,7 @@ const LocalisationManagement = () => {
         )}
       </div>
 
-      {/* Footer avec motif */}
+      {/* Footer */}
       <div className="mt-8 text-center">
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full" style={{ background: '#F2EDE0' }}>
           <div className="w-2 h-2 rounded-full" style={{ background: '#C07A2F' }} />

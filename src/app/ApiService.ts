@@ -1,10 +1,3 @@
-// services/ApiService.ts
-// ─────────────────────────────────────────────────────────────────────────────
-// Service API unifié LanfiaLink
-// Contient TOUTES les ressources existantes + les nouveaux endpoints
-// points-vente (dashboard analytique) créés pour LanfiaLinkDashboard
-// ─────────────────────────────────────────────────────────────────────────────
-
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lanfialink.com/api';
 
 class ApiService {
@@ -82,7 +75,6 @@ class ApiService {
 
   // ── HTTP methods ──────────────────────────────────────────────────────────
   async get(endpoint: string, params: Record<string, any> = {}): Promise<Response> {
-    // Filtre les valeurs vides/null pour éviter d'envoyer des params inutiles
     const cleaned = Object.fromEntries(
       Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
     );
@@ -224,7 +216,7 @@ class ApiService {
   // ══════════════════════════════════════════════════════════════════════════
   async getCategories(): Promise<Response> { return this.get('/categories/'); }
   async createCategory(data: any): Promise<Response> { return this.post('/categories/', data); }
-  async updateCategory(id: number, data: any): Promise<Response> { return this.put(`/categories/${id}/`, data); }
+  async updateCategory(id: number, data: any): Promise<Response> { return this.patch(`/categories/${id}/`, data); }
   async deleteCategory(id: number): Promise<Response> { return this.delete(`/categories/${id}/`); }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -232,12 +224,11 @@ class ApiService {
   // ══════════════════════════════════════════════════════════════════════════
   async getSuppliers(): Promise<Response> { return this.get('/suppliers/'); }
   async createSupplier(data: any, isFormData = false): Promise<Response> { return this.post('/suppliers/', data, isFormData); }
-  async updateSupplier(id: number, data: any, isFormData = false): Promise<Response> { return this.put(`/suppliers/${id}/`, data, isFormData); }
+  async updateSupplier(id: number, data: any, isFormData = false): Promise<Response> { return this.patch(`/suppliers/${id}/`, data, isFormData); }
   async deleteSupplier(id: number): Promise<Response> { return this.delete(`/suppliers/${id}/`); }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // POINTS DE VENTE — CRUD CLASSIQUE (endpoints existants)
-  // Conservés tels quels pour rétrocompatibilité
+  // POINTS DE VENTE — CRUD CLASSIQUE
   // ══════════════════════════════════════════════════════════════════════════
   async getPointsVente(): Promise<Response> {
     return this.get('/points-vente/');
@@ -248,7 +239,7 @@ class ApiService {
   }
 
   async updatePointVente(posId: number, data: any): Promise<Response> {
-    return this.put(`/points-vente/${posId}/`, data);
+    return this.patch(`/points-vente/${posId}/`, data);
   }
 
   async deletePointVente(posId: number): Promise<Response> {
@@ -256,94 +247,69 @@ class ApiService {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // POINTS DE VENTE — DASHBOARD ANALYTIQUE (nouveaux endpoints)
-  // Ajoutés pour LanfiaLinkDashboard — ne remplacent PAS les méthodes ci-dessus
+  // POINTS DE VENTE — DASHBOARD ANALYTIQUE
   // ══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Liste filtrée avec tous les champs analytiques (scores A/D/E, éligibilités…)
-   * Params : commune, district, region, type, status, potentiel,
-   *          branding ("true"/"false"), marque_brander, search
-   */
   async getPointsVenteAnalytics(params: Record<string, any> = {}): Promise<Response> {
     return this.get('/points-of-vente/', params);
   }
 
-  /**
-   * Détail complet d'un PDV avec tableau photos[] pour la lightbox
-   */
   async getPointVenteDetail(id: number): Promise<Response> {
     return this.get(`/points-of-vente/${id}/`);
   }
 
-  /**
-   * Création PDV avec support multipart/form-data (avatar + branding_image)
-   */
   async createPointVenteFormData(data: FormData): Promise<Response> {
     return this.post('/points-of-vente/', data, true);
   }
 
-  /**
-   * Mise à jour partielle PDV (PATCH) avec support FormData pour images
-   */
   async patchPointVente(id: number, data: FormData): Promise<Response> {
     return this.patch(`/points-of-vente/${id}/`, data, true);
   }
 
-  /**
-   * Supprimer un PDV (alias typé pour le dashboard)
-   */
   async deletePointVenteById(id: number): Promise<Response> {
     return this.delete(`/points-of-vente/${id}/`);
   }
 
-  /**
-   * Options dynamiques pour les <select> du dashboard
-   * Retourne : { communes[], districts[], regions[], marques[], types[], potentiels[] }
-   */
   async getFilterOptions(): Promise<Response> {
     return this.get('/points-of-vente/filter-options/');
   }
 
-  /**
-   * Performance par agent collecteur terrain
-   * Retourne : { agent, agent_name, total, gps_rate, complete_rate, photo_avg }[]
-   */
   async getAgentsPerformance(): Promise<Response> {
     return this.get('/points-of-vente/agents-performance/');
   }
 
-  /**
-   * KPIs globaux pour la vue "Direction"
-   * Retourne : { total, brandes, non_brandes, actifs, premium,
-   *              eligibles_branding, gps_valides, score_moyen, … }
-   */
   async getPointsVenteStats(): Promise<Response> {
     return this.get('/points-of-vente/stats/');
   }
 
-  /**
-   * Ajouter des photos à un PDV existant
-   * FormData champ "images" (multiple) + optionnels "type", "caption"
-   */
   async addPhotosToPointVente(posId: number, formData: FormData): Promise<Response> {
     return this.post(`/points-of-vente/${posId}/photos/`, formData, true);
   }
 
-  /**
-   * Supprimer une photo spécifique
-   */
   async deletePhotoFromPointVente(posId: number, photoId: number): Promise<Response> {
     return this.delete(`/points-of-vente/${posId}/photos/${photoId}/`);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
   // UTILISATEURS
+  // ⚠️ FIX PRINCIPAL : updateUser utilise désormais PATCH (partial update)
+  //    et non PUT (full replace) — évite les erreurs de champs requis manquants
   // ══════════════════════════════════════════════════════════════════════════
   async getUsers(): Promise<Response> { return this.get('/users/'); }
   async createUser(data: any): Promise<Response> { return this.post('/users/', data); }
-  async updateUser(id: number, data: any): Promise<Response> { return this.put(`/users/${id}/`, data); }
-  async patchUser(id: number, data: any): Promise<Response> { return this.patch(`/users/${id}/`, data); }
+
+  /**
+   * Mise à jour partielle d'un utilisateur.
+   * PATCH au lieu de PUT : seuls les champs envoyés sont modifiés côté Django.
+   * Cela évite les ValidationError sur les champs non fournis (ex: password en edit).
+   */
+  async updateUser(id: number, data: any): Promise<Response> {
+    return this.patch(`/users/${id}/`, data);   // ← PATCH, plus PUT
+  }
+
+  async patchUser(id: number, data: any): Promise<Response> {
+    return this.patch(`/users/${id}/`, data);
+  }
+
   async deleteUser(id: number): Promise<Response> { return this.delete(`/users/${id}/`); }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -351,12 +317,12 @@ class ApiService {
   // ══════════════════════════════════════════════════════════════════════════
   async getProducts(): Promise<Response> { return this.get('/products/'); }
   async createProduct(data: any): Promise<Response> { return this.post('/products/', data); }
-  async updateProduct(id: number, data: any): Promise<Response> { return this.put(`/products/${id}/`, data); }
+  async updateProduct(id: number, data: any): Promise<Response> { return this.patch(`/products/${id}/`, data); }
   async deleteProduct(id: number): Promise<Response> { return this.delete(`/products/${id}/`); }
 
   async getProductVariants(): Promise<Response> { return this.get('/product-variants/'); }
   async createProductVariant(data: any): Promise<Response> { return this.post('/product-variants/', data); }
-  async updateProductVariant(id: number, data: any): Promise<Response> { return this.put(`/product-variants/${id}/`, data); }
+  async updateProductVariant(id: number, data: any): Promise<Response> { return this.patch(`/product-variants/${id}/`, data); }
   async deleteProductVariant(id: number): Promise<Response> { return this.delete(`/product-variants/${id}/`); }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -364,7 +330,7 @@ class ApiService {
   // ══════════════════════════════════════════════════════════════════════════
   async getOrders(): Promise<Response> { return this.get('/orders/'); }
   async createOrder(data: any): Promise<Response> { return this.post('/orders/', data); }
-  async updateOrder(id: number, data: any): Promise<Response> { return this.put(`/orders/${id}/`, data); }
+  async updateOrder(id: number, data: any): Promise<Response> { return this.patch(`/orders/${id}/`, data); }
   async deleteOrder(id: number): Promise<Response> { return this.delete(`/orders/${id}/`); }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -372,12 +338,12 @@ class ApiService {
   // ══════════════════════════════════════════════════════════════════════════
   async getMobileVendors(): Promise<Response> { return this.get('/mobile-vendors/'); }
   async createMobileVendor(data: any): Promise<Response> { return this.post('/mobile-vendors/', data); }
-  async updateMobileVendor(id: number, data: any): Promise<Response> { return this.put(`/mobile-vendors/${id}/`, data); }
+  async updateMobileVendor(id: number, data: any): Promise<Response> { return this.patch(`/mobile-vendors/${id}/`, data); }
   async deleteMobileVendor(id: number): Promise<Response> { return this.delete(`/mobile-vendors/${id}/`); }
 
   async getVendorActivities(): Promise<Response> { return this.get('/vendor-activities/'); }
   async createVendorActivity(data: any): Promise<Response> { return this.post('/vendor-activities/', data); }
-  async updateVendorActivity(id: number, data: any): Promise<Response> { return this.put(`/vendor-activities/${id}/`, data); }
+  async updateVendorActivity(id: number, data: any): Promise<Response> { return this.patch(`/vendor-activities/${id}/`, data); }
   async deleteVendorActivity(id: number): Promise<Response> { return this.delete(`/vendor-activities/${id}/`); }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -385,12 +351,12 @@ class ApiService {
   // ══════════════════════════════════════════════════════════════════════════
   async getPurchases(): Promise<Response> { return this.get('/purchases/'); }
   async createPurchase(data: any): Promise<Response> { return this.post('/purchases/', data); }
-  async updatePurchase(id: number, data: any): Promise<Response> { return this.put(`/purchases/${id}/`, data); }
+  async updatePurchase(id: number, data: any): Promise<Response> { return this.patch(`/purchases/${id}/`, data); }
   async deletePurchase(id: number): Promise<Response> { return this.delete(`/purchases/${id}/`); }
 
   async getSales(): Promise<Response> { return this.get('/sales/'); }
   async createSale(data: any): Promise<Response> { return this.post('/sales/', data); }
-  async updateSale(id: number, data: any): Promise<Response> { return this.put(`/sales/${id}/`, data); }
+  async updateSale(id: number, data: any): Promise<Response> { return this.patch(`/sales/${id}/`, data); }
   async deleteSale(id: number): Promise<Response> { return this.delete(`/sales/${id}/`); }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -398,7 +364,7 @@ class ApiService {
   // ══════════════════════════════════════════════════════════════════════════
   async getDisputes(): Promise<Response> { return this.get('/disputes/'); }
   async createDispute(data: any): Promise<Response> { return this.post('/disputes/', data); }
-  async updateDispute(id: number, data: any): Promise<Response> { return this.put(`/disputes/${id}/`, data); }
+  async updateDispute(id: number, data: any): Promise<Response> { return this.patch(`/disputes/${id}/`, data); }
   async deleteDispute(id: number): Promise<Response> { return this.delete(`/disputes/${id}/`); }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -406,12 +372,12 @@ class ApiService {
   // ══════════════════════════════════════════════════════════════════════════
   async getTokens(): Promise<Response> { return this.get('/tokens/'); }
   async createToken(data: any): Promise<Response> { return this.post('/tokens/', data); }
-  async updateToken(id: number, data: any): Promise<Response> { return this.put(`/tokens/${id}/`, data); }
+  async updateToken(id: number, data: any): Promise<Response> { return this.patch(`/tokens/${id}/`, data); }
   async deleteToken(id: number): Promise<Response> { return this.delete(`/tokens/${id}/`); }
 
   async getTokenTransactions(): Promise<Response> { return this.get('/token-transactions/'); }
   async createTokenTransaction(data: any): Promise<Response> { return this.post('/token-transactions/', data); }
-  async updateTokenTransaction(id: number, data: any): Promise<Response> { return this.put(`/token-transactions/${id}/`, data); }
+  async updateTokenTransaction(id: number, data: any): Promise<Response> { return this.patch(`/token-transactions/${id}/`, data); }
   async deleteTokenTransaction(id: number): Promise<Response> { return this.delete(`/token-transactions/${id}/`); }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -419,12 +385,12 @@ class ApiService {
   // ══════════════════════════════════════════════════════════════════════════
   async getRoles(): Promise<Response> { return this.get('/roles/'); }
   async createRole(data: any): Promise<Response> { return this.post('/roles/', data); }
-  async updateRole(id: number, data: any): Promise<Response> { return this.put(`/roles/${id}/`, data); }
+  async updateRole(id: number, data: any): Promise<Response> { return this.patch(`/roles/${id}/`, data); }
   async deleteRole(id: number): Promise<Response> { return this.delete(`/roles/${id}/`); }
 
   async getPermissions(): Promise<Response> { return this.get('/permissions/'); }
   async createPermission(data: any): Promise<Response> { return this.post('/permissions/', data); }
-  async updatePermission(id: number, data: any): Promise<Response> { return this.put(`/permissions/${id}/`, data); }
+  async updatePermission(id: number, data: any): Promise<Response> { return this.patch(`/permissions/${id}/`, data); }
   async deletePermission(id: number): Promise<Response> { return this.delete(`/permissions/${id}/`); }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -432,7 +398,7 @@ class ApiService {
   // ══════════════════════════════════════════════════════════════════════════
   async getPushcarts(): Promise<Response> { return this.get('/pushcarts/'); }
   async createPushcart(data: any): Promise<Response> { return this.post('/pushcarts/', data); }
-  async updatePushcart(id: number, data: any): Promise<Response> { return this.put(`/pushcarts/${id}/`, data); }
+  async updatePushcart(id: number, data: any): Promise<Response> { return this.patch(`/pushcarts/${id}/`, data); }
   async deletePushcart(id: number): Promise<Response> { return this.delete(`/pushcarts/${id}/`); }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -440,7 +406,7 @@ class ApiService {
   // ══════════════════════════════════════════════════════════════════════════
   async getUserProfiles(): Promise<Response> { return this.get('/user-profiles/'); }
   async createUserProfile(data: any): Promise<Response> { return this.post('/user-profiles/', data); }
-  async updateUserProfile(id: number, data: any): Promise<Response> { return this.put(`/user-profiles/${id}/`, data); }
+  async updateUserProfile(id: number, data: any): Promise<Response> { return this.patch(`/user-profiles/${id}/`, data); }
   async deleteUserProfile(id: number): Promise<Response> { return this.delete(`/user-profiles/${id}/`); }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -448,7 +414,7 @@ class ApiService {
   // ══════════════════════════════════════════════════════════════════════════
   async getProductFormats(): Promise<Response> { return this.get('/product-formats/'); }
   async createProductFormat(data: any): Promise<Response> { return this.post('/product-formats/', data); }
-  async updateProductFormat(id: number, data: any): Promise<Response> { return this.put(`/product-formats/${id}/`, data); }
+  async updateProductFormat(id: number, data: any): Promise<Response> { return this.patch(`/product-formats/${id}/`, data); }
   async deleteProductFormat(id: number): Promise<Response> { return this.delete(`/product-formats/${id}/`); }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -464,7 +430,8 @@ class ApiService {
   }
 
   async updateResource(endpoint: string, id: string | number, data: any, isFormData = false): Promise<Response> {
-    return this.put(`${endpoint}/${id}/`, data, isFormData);
+    // ⚠️ FIX : patch au lieu de put pour la cohérence globale
+    return this.patch(`${endpoint}/${id}/`, data, isFormData);
   }
 
   async patchResource(endpoint: string, id: string | number, data: any, isFormData = false): Promise<Response> {
