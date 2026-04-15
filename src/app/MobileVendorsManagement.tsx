@@ -410,7 +410,7 @@ const Field = ({ label, children, span }: { label: string; children: React.React
 
 /* ─────────────────────────────────────────────
    ZONES MULTI-SELECT — dropdown dynamique
-   Fetche https://backendsupply.onrender.com/api/villes/
+   Fetche https://api.lanfialink.com/api/villes/
    et utilise le champ `nom` comme valeur
 ───────────────────────────────────────────── */
 const ZonesSelect = ({
@@ -899,7 +899,7 @@ const MobileVendorsManagement = ({ selectedPOS }: Props) => {
     (async () => {
       try {
         setLoadingVilles(true);
-        const r = await fetch('https://backendsupply.onrender.com/api/villes/');
+        const r = await fetch('https://api.lanfialink.com/api/villes/');
         if (r.ok) setVilles(await r.json());
       } catch { /* ignore */ }
       finally { setLoadingVilles(false); }

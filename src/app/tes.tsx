@@ -139,7 +139,7 @@ const AdminDashboard = () => {
           return;
         }
 
-        const response = await fetch('https://backendsupply.onrender.com/api/me', {
+        const response = await fetch('https://api.lanfialink.com/api/me', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'

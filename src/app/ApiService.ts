@@ -5,7 +5,7 @@
 // points-vente (dashboard analytique) créés pour LanfiaLinkDashboard
 // ─────────────────────────────────────────────────────────────────────────────
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://backendsupply.onrender.com/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lanfialink.com/api';
 
 class ApiService {
   private baseURL: string;

@@ -124,7 +124,7 @@ interface VendorActivity {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const API_BASE = 'https://backendsupply.onrender.com/api';
+const API_BASE = 'https://api.lanfialink.com/api';
 const ORDERS_PER_PAGE = 10;
 
 // ─── Palette LanfiaLink ───────────────────────────────────────────────────────
