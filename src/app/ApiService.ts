@@ -290,6 +290,30 @@ class ApiService {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // LOCALISATION (Districts, Villes, Quartiers)
+  // ══════════════════════════════════════════════════════════════════════════
+  async getDistricts(): Promise<Response> { return this.get('/districts/'); }
+  async createDistrict(data: any): Promise<Response> { return this.post('/districts/', data); }
+  async updateDistrict(id: number, data: any): Promise<Response> { return this.patch(`/districts/${id}/`, data); }
+  async deleteDistrict(id: number): Promise<Response> { return this.delete(`/districts/${id}/`); }
+
+  // /districts/{id}/villes/  ← action @detail
+  async getVilles(districtId: number): Promise<Response> {
+    return this.get(`/districts/${districtId}/villes/`);
+  }
+  async createVille(data: any): Promise<Response> { return this.post('/villes/', data); }
+  async updateVille(id: number, data: any): Promise<Response> { return this.patch(`/villes/${id}/`, data); }
+  async deleteVille(id: number): Promise<Response> { return this.delete(`/villes/${id}/`); }
+
+  // /villes/{id}/quartiers/  ← action @detail
+  async getQuartiers(villeId: number): Promise<Response> {
+    return this.get(`/villes/${villeId}/quartiers/`);
+  }
+  async createQuartier(data: any): Promise<Response> { return this.post('/quartiers/', data); }
+  async updateQuartier(id: number, data: any): Promise<Response> { return this.patch(`/quartiers/${id}/`, data); }
+  async deleteQuartier(id: number): Promise<Response> { return this.delete(`/quartiers/${id}/`); }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // UTILISATEURS
   // ⚠️ FIX PRINCIPAL : updateUser utilise désormais PATCH (partial update)
   //    et non PUT (full replace) — évite les erreurs de champs requis manquants
@@ -442,6 +466,8 @@ class ApiService {
     return this.delete(`${endpoint}/${id}/`);
   }
 
+  
+
   // ══════════════════════════════════════════════════════════════════════════
   // UTILITAIRES
   // ══════════════════════════════════════════════════════════════════════════
@@ -463,6 +489,8 @@ class ApiService {
     return this.get(url);
   }
 }
+
+
 
 export const apiService = new ApiService();
 export default ApiService;

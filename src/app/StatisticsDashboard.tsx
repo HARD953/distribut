@@ -1,494 +1,344 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+// components/dashboard/StatisticsDashboard.tsx
+// Vue Analytiques — même langage visuel que la vue Activations (blanc / bleu, à plat)
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  BarChart3, TrendingUp, Users, MapPin, Package, ShoppingCart,
-  DollarSign, Download, Filter, ArrowUp, ArrowDown, AlertCircle,
-  RefreshCw, BarChart, ShoppingBag, ChevronLeft, ChevronRight,
-  X, Search, SlidersHorizontal, ChevronDown, ChevronUp, Building2
+  BarChart3, TrendingUp, Users, MapPin, Package, ShoppingCart, DollarSign, Download,
+  ArrowUp, ArrowDown, AlertTriangle, RefreshCw, ShoppingBag, ChevronLeft, ChevronRight,
+  X, Search, SlidersHorizontal, ChevronDown, ChevronUp, Loader2, Wallet,
 } from 'lucide-react';
 import { apiService } from './ApiService';
 import {
-  Chart as ChartJS,
-  CategoryScale, LinearScale, BarElement, LineElement,
+  Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement,
   PointElement, ArcElement, Title, Tooltip, Legend,
-  ChartData as ChartJSData,
 } from 'chart.js';
 import { Bar, Line, Pie } from 'react-chartjs-2';
 
-ChartJS.register(
-  CategoryScale, LinearScale, BarElement, LineElement,
-  PointElement, ArcElement, Title, Tooltip, Legend
-);
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Title, Tooltip, Legend);
 
-// ─── Palette LanfiaLink ────────────────────────────────────────────────────────
-const P = {
-  forest:       '#2D5A3D',
-  forestLight:  '#3E7A54',
-  forestPale:   '#EAF2EC',
-  ocre:         '#C07A2F',
-  ocreLight:    '#D4A843',
-  gold:         '#F0C878',
-  cream:        '#FAF7F0',
-  sand:         '#F2EDE0',
-  sandBorder:   '#E8D9B8',
-  sandDark:     '#D4C4A0',
-  textDark:     '#2A1A08',
-  textMid:      '#7A6A52',
-  textMuted:    '#A89880',
-  textLighter:  '#C8B898',
-  teal:         '#2D8C72',
-  tealPale:     '#E0F5EF',
-  red:          '#C05030',
-  redPale:      '#FDECEA',
+/* ─── Palette (identique à la vue Activations) ────────────── */
+const C = {
+  blue: '#1A8FD1', blueD: '#0D6FAB', blueL: '#4FB3E8', navy: '#0D4E7A',
+  pale: '#EDF5FA', surface: '#F0F5F9', line: '#C0D4E6', lineL: '#D4E4F0',
+  text: '#0A1E2E', sub: '#2A4A62', muted: '#5A7A92',
+  green: '#0A9E7A', greenBg: '#DCF5EC', greenTx: '#044D38',
+  amber: '#D08A00', amberBg: '#FBEFD6', amberTx: '#7A4F00',
+  red: '#B03318', redBg: '#FCE4DC', redTx: '#7A2410',
+  greyBg: '#EAF0F5', greyTx: '#3A5A72',
+  violet: '#2E4DB0', violetBg: '#D4DCFA',
 };
+const CHART_COLORS = ['#1A8FD1', '#0D4E7A', '#4FB3E8', '#0A9E7A', '#D08A00', '#2E4DB0', '#B03318', '#6A8AA2'];
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+/* ─── Types ───────────────────────────────────────────────── */
 interface POSStat {
-  id: number; name: string; type: string; region: string;
-  commune: string; quartier?: string; total_sales: number;
-  total_orders: number; average_order_value: number;
-  mobile_vendors_count: number; performance_score: number;
-  turnover: number; sales_growth?: number;
+  id: number; name: string; type: string; region: string; commune: string; quartier?: string;
+  total_sales: number; total_orders: number; average_order_value: number;
+  mobile_vendors_count: number; performance_score: number; turnover: number; sales_growth?: number;
 }
 interface VendorStat {
-  id: number; full_name: string; phone: string; status: string;
-  vehicle_type: string; zone?: string; commune?: string; quartier?: string;
-  total_sales: number; total_purchases: number; average_purchase_value: number;
-  active_days: number; efficiency_rate: number; performance: number;
-  sales_growth?: number;
+  id: number; full_name: string; phone: string; status: string; vehicle_type: string;
+  zone?: string; commune?: string; quartier?: string; total_sales: number; total_purchases: number;
+  average_purchase_value: number; active_days: number; efficiency_rate: number; performance: number; sales_growth?: number;
 }
 interface ProductStat {
   id: number; name: string; sku: string; category: string; status: string;
-  total_quantity_sold: number; total_revenue: number;
-  average_price: number; stock_rotation: number; revenue_growth?: number;
+  total_quantity_sold: number; total_revenue: number; average_price: number; stock_rotation: number; revenue_growth?: number;
 }
 interface TopPurchaseVendor {
-  vendor_id: number; vendor_full_name: string; vendor_phone: string;
-  vendor_status: string; point_of_sale: string;
-  total_purchase_amount: number; total_purchase_count: number;
-  average_purchase_value: number; total_sales_from_purchases: number;
-  total_sales_count: number; purchase_to_sales_efficiency: number;
-  top_purchases: { id: number; full_name: string; zone: string; purchase_amount: number; sales_amount: number; efficiency: number; }[];
+  vendor_id: number; vendor_full_name: string; vendor_phone: string; vendor_status: string; point_of_sale: string;
+  total_purchase_amount: number; total_purchase_count: number; average_purchase_value: number;
+  total_sales_from_purchases: number; total_sales_count: number; purchase_to_sales_efficiency: number;
 }
 interface PurchaseDetail {
-  purchase_id: number; purchase_full_name: string; purchase_zone: string;
-  purchase_amount: number; purchase_date: string; purchase_base: string;
-  purchase_pushcard_type: string; purchase_phone: string;
+  purchase_id: number; purchase_full_name: string; purchase_zone: string; purchase_amount: number;
+  purchase_date: string; purchase_base: string; purchase_pushcard_type: string; purchase_phone: string;
   total_sales_amount: number; total_sales_count: number; sales_efficiency: number;
-  main_mobile_vendor: { id: number; full_name: string; phone: string; total_sales_to_purchase: number; sales_count_to_purchase: number; } | null;
-  main_vendor_ratio: number; latitude: number; longitude: number;
+  main_mobile_vendor: { id: number; full_name: string; phone: string } | null;
 }
 interface DashboardSummary {
-  total_sales: number; total_orders: number; total_mobile_vendors: number;
-  total_points_of_sale: number; active_purchases: number;
-  sales_growth: number; revenue_growth: number;
+  total_sales: number; total_orders: number; total_mobile_vendors: number; total_points_of_sale: number;
+  active_purchases: number; sales_growth: number; revenue_growth: number;
   period?: string; start_date?: string; end_date?: string;
 }
-interface ChartDataset {
-  label: string; data: number[];
-  borderColor?: string; backgroundColor?: string | string[]; yAxisID?: string;
-}
-interface ChartData { labels: string[]; datasets: ChartDataset[]; }
+interface ChartDataset { label: string; data: number[] }
+interface ChartData { labels: string[]; datasets: ChartDataset[] }
 interface FilterState {
   start_date?: string; end_date?: string; period?: string;
-  point_of_sale?: number[]; vendor?: number[]; category?: number[];
-  region?: string[]; commune?: string[]; quartier?: string[];
-  zone?: string[]; status?: string; vehicle_type?: string;
-  group_by?: string; search?: string;
+  region?: string[]; commune?: string[]; quartier?: string[]; zone?: string[];
+  status?: string; vehicle_type?: string; group_by?: string;
 }
 interface StatsState {
-  summary: DashboardSummary | null;
-  posStats: POSStat[]; vendorStats: VendorStat[];
-  productStats: ProductStat[]; topPurchaseVendors: TopPurchaseVendor[];
-  purchaseDetails: PurchaseDetail[];
-  salesChart: ChartData | null; performanceChart: ChartData | null;
+  summary: DashboardSummary | null; posStats: POSStat[]; vendorStats: VendorStat[]; productStats: ProductStat[];
+  topPurchaseVendors: TopPurchaseVendor[]; purchaseDetails: PurchaseDetail[]; salesChart: ChartData | null;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const fmtCFA = (n: number) => new Intl.NumberFormat('fr-FR').format(n || 0) + ' FCFA';
-const fmtNum = (n: number) => new Intl.NumberFormat('fr-FR').format(n || 0);
-const perfColor = (s: number) => s >= 80 ? P.forest : s >= 60 ? P.ocre : P.red;
+/* ─── Helpers ─────────────────────────────────────────────── */
+const fmtNum = (n: number) => new Intl.NumberFormat('fr-FR').format(Math.round(n || 0));
+const fmtCFA = (n: number) => `${fmtNum(n)} FCFA`;
+const fmtCompact = (n: number) => new Intl.NumberFormat('fr-FR', { notation: 'compact' }).format(n || 0);
+const fmtDate = (d?: string) => (d ? new Date(d).toLocaleDateString('fr-FR') : '—');
+const toArr = (d: any): any[] => (Array.isArray(d) ? d : Array.isArray(d?.results) ? d.results : []);
+const uniq = (arr: (string | undefined)[]) => [...new Set(arr.filter((v): v is string => !!v))].sort();
 
-// ─── Kente top band ────────────────────────────────────────────────────────────
-const KenteBar = ({ bottom = false }: { bottom?: boolean }) => (
-  <div style={{
-    height: bottom ? 2 : 3,
-    background: bottom
-      ? `linear-gradient(90deg,${P.forest} 0%,${P.ocre} 30%,${P.ocreLight} 60%,${P.forest} 100%)`
-      : `linear-gradient(90deg,#9A5E1A 0%,#D4A843 25%,#9A5E1A 50%,#D4A843 75%,#9A5E1A 100%)`,
-    opacity: bottom ? 0.55 : 1,
-  }} />
+const formatChart = (raw: any): ChartData | null => {
+  if (!raw?.labels?.length || !raw?.datasets?.length) return null;
+  return { labels: raw.labels, datasets: raw.datasets.map((d: any) => ({ label: d.label || '', data: d.data || [] })) };
+};
+
+/* ─── Styles partagés ─────────────────────────────────────── */
+const card: React.CSSProperties = { background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16 };
+const inputStyle: React.CSSProperties = {
+  width: '100%', height: 36, borderRadius: 10, padding: '0 10px', fontSize: 13, background: '#fff',
+  border: `1.5px solid ${C.line}`, color: C.text, outline: 'none', fontFamily: 'inherit',
+};
+const btn = (bg: string, color = '#fff'): React.CSSProperties => ({
+  display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: bg,
+  color, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
+});
+const btnGhost: React.CSSProperties = { ...btn('#fff', C.sub), border: `1px solid ${C.line}` };
+
+const GLOBAL_CSS = `
+@keyframes st-spin { to { transform: rotate(360deg); } }
+.st-spin { animation: st-spin .8s linear infinite; }
+.st-row:hover { background: #F5FAFD; }
+.st-th { cursor: pointer; user-select: none; }
+.st-th:hover { color: ${C.blueD}; }
+@media (prefers-reduced-motion: reduce) { .st-spin { animation: none; } }
+`;
+
+/* ─── Petits composants ───────────────────────────────────── */
+const Pill = ({ bg, tx, children }: { bg: string; tx: string; children: React.ReactNode }) => (
+  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, fontWeight: 700, background: bg, color: tx, whiteSpace: 'nowrap' }}>{children}</span>
 );
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
-type ColorKey = 'green' | 'ocre' | 'gold' | 'teal';
-const CARD_PALETTE: Record<ColorKey, { accent: string; iconBg: string; iconStroke: string }> = {
-  green: { accent: `linear-gradient(90deg,${P.forest},${P.forestLight})`, iconBg: P.forestPale, iconStroke: P.forest },
-  ocre:  { accent: `linear-gradient(90deg,${P.ocre},${P.ocreLight})`,     iconBg: '#FFF3E8',    iconStroke: P.ocre  },
-  gold:  { accent: `linear-gradient(90deg,#9A5E1A,${P.gold})`,            iconBg: '#FBF4E0',    iconStroke: '#9A5E1A' },
-  teal:  { accent: `linear-gradient(90deg,${P.teal},#3DAAA0)`,            iconBg: P.tealPale,   iconStroke: P.teal  },
-};
-const StatCard = ({
-  title, value, growth, icon: Icon, color = 'green', subtitle,
-}: {
-  title: string; value: string; growth?: number;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number; color?: string }>;
-  color?: ColorKey; subtitle?: string;
-}) => {
-  const p = CARD_PALETTE[color];
-  return (
-    <div style={{
-      background: 'white', borderRadius: 14,
-      border: `1px solid ${P.sandBorder}`, padding: 18,
-      position: 'relative', overflow: 'hidden',
-    }}>
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2.5, background: p.accent }} />
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: P.textMuted, marginBottom: 6 }}>{title}</p>
-          <p style={{ fontSize: 22, fontWeight: 500, color: P.textDark, lineHeight: 1.1 }}>{value}</p>
-          {subtitle && <p style={{ fontSize: 11, color: P.textMuted, marginTop: 2 }}>{subtitle}</p>}
-          {growth !== undefined && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 8, fontSize: 11, fontWeight: 500, color: growth >= 0 ? P.forest : P.red }}>
-              {growth >= 0 ? <ArrowUp size={11} /> : <ArrowDown size={11} />}
-              {Math.abs(growth).toFixed(1)}% vs période précédente
-            </div>
-          )}
-        </div>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: p.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 12 }}>
-          <Icon size={18} strokeWidth={1.6} color={p.iconStroke} />
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ─── Progress Bar ──────────────────────────────────────────────────────────────
-const ProgressBar = ({ value, max }: { value: number; max: number }) => {
-  const pct = Math.min((value / (max || 1)) * 100, 100);
-  const bg = value >= 80 ? `linear-gradient(90deg,${P.forest},${P.forestLight})` : value >= 60 ? `linear-gradient(90deg,${P.ocre},${P.ocreLight})` : `linear-gradient(90deg,${P.red},#E07050)`;
-  return (
-    <div style={{ height: 4, background: P.sand, borderRadius: 2, overflow: 'hidden', marginTop: 4 }}>
-      <div style={{ width: `${pct}%`, height: 4, borderRadius: 2, background: bg, transition: 'width 0.7s' }} />
-    </div>
-  );
-};
-
-// ─── Status Badge ──────────────────────────────────────────────────────────────
 const StatusBadge = ({ status }: { status: string }) => {
-  const cfg: Record<string, { bg: string; color: string }> = {
-    actif:    { bg: P.forestPale, color: P.forest },
-    inactif:  { bg: P.redPale,    color: P.red },
-    suspendu: { bg: '#FFF3E8',    color: '#9A5E1A' },
+  const m: Record<string, [string, string]> = {
+    actif: [C.greenBg, C.greenTx], inactif: [C.redBg, C.redTx], suspendu: [C.amberBg, C.amberTx],
+    en_stock: [C.greenBg, C.greenTx], stock_faible: [C.amberBg, C.amberTx], rupture: [C.redBg, C.redTx], surstockage: [C.violetBg, C.violet],
   };
-  const s = cfg[status] || { bg: '#F1EFE8', color: P.textMid };
+  const [bg, tx] = m[status] || [C.greyBg, C.greyTx];
+  return <Pill bg={bg} tx={tx}>{(status || '—').replace('_', ' ')}</Pill>;
+};
+
+const PerfBadge = ({ score }: { score: number }) => {
+  const s = Number(score || 0);
+  const [bg, tx] = s >= 80 ? [C.greenBg, C.greenTx] : s >= 60 ? [C.amberBg, C.amberTx] : [C.redBg, C.redTx];
+  return <Pill bg={bg} tx={tx}>{s.toFixed(1)} %</Pill>;
+};
+
+const MiniBar = ({ value, color }: { value: number; color?: string }) => {
+  const c = color || (value >= 80 ? C.green : value >= 60 ? C.amber : C.red);
   return (
-    <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: 20, fontSize: 10.5, fontWeight: 600, background: s.bg, color: s.color }}>
-      {status}
-    </span>
+    <div style={{ height: 5, borderRadius: 99, background: C.surface, overflow: 'hidden', width: 80 }}>
+      <div style={{ width: `${Math.max(0, Math.min(100, value))}%`, height: '100%', background: c, transition: 'width .4s' }} />
+    </div>
   );
 };
 
-// ─── Perf Badge ───────────────────────────────────────────────────────────────
-const PerfBadge = ({ score }: { score: number }) => (
-  <span style={{ fontSize: 11, fontWeight: 500, color: perfColor(score) }}>{score.toFixed(1)}%</span>
+const Kpi = ({ label, value, sub, growth, icon: Icon, color }: {
+  label: string; value: string; sub?: string; growth?: number; icon: React.ComponentType<any>; color: string;
+}) => (
+  <div style={{ ...card, padding: 16 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+      <p style={{ fontSize: 12, color: C.muted, fontWeight: 500 }}>{label}</p>
+      <Icon size={15} style={{ color, flexShrink: 0 }} />
+    </div>
+    <p style={{ fontSize: 24, fontWeight: 700, color, marginTop: 4, lineHeight: 1.1 }}>{value}</p>
+    {growth !== undefined && (
+      <p style={{ fontSize: 11, fontWeight: 700, marginTop: 6, display: 'flex', alignItems: 'center', gap: 3, color: growth >= 0 ? C.green : C.red }}>
+        {growth >= 0 ? <ArrowUp size={11} /> : <ArrowDown size={11} />}{Math.abs(growth).toFixed(1)} % vs période précédente
+      </p>
+    )}
+    {sub && growth === undefined && <p style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>{sub}</p>}
+  </div>
 );
 
-// ─── Ocre Accent ──────────────────────────────────────────────────────────────
-const OcreAccent = () => (
-  <div style={{ width: 32, height: 2, borderRadius: 2, background: P.ocre, marginBottom: 16 }} />
-);
-
-// ─── Card shell ───────────────────────────────────────────────────────────────
-const Card = ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) => (
-  <div style={{ background: 'white', borderRadius: 14, border: `1px solid ${P.sandBorder}`, padding: 20, ...style }}>
+const Panel = ({ title, icon: Icon, right, children }: {
+  title: string; icon: React.ComponentType<any>; right?: React.ReactNode; children: React.ReactNode;
+}) => (
+  <div style={{ ...card, padding: 16 }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingBottom: 12, marginBottom: 12, borderBottom: `0.5px solid ${C.lineL}`, flexWrap: 'wrap' }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: C.text }}>
+        <Icon size={14} style={{ color: C.blue }} />{title}
+      </span>
+      {right}
+    </div>
     {children}
   </div>
 );
 
-const CardHeader = ({ title, onExport }: { title: string; onExport?: () => void }) => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-    <span style={{ fontSize: 13.5, fontWeight: 500, color: P.textDark }}>{title}</span>
-    {onExport && (
-      <button onClick={onExport} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: P.ocre, background: 'none', border: 'none', cursor: 'pointer' }}>
-        <Download size={12} /> Exporter
-      </button>
-    )}
+const Empty = ({ icon: Icon, title, text }: { icon: React.ComponentType<any>; title: string; text?: string }) => (
+  <div style={{ padding: '32px 16px', textAlign: 'center' }}>
+    <Icon size={28} style={{ color: '#B8D4E8', margin: '0 auto 10px' }} />
+    <p style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: 4 }}>{title}</p>
+    {text && <p style={{ fontSize: 12, color: C.muted, maxWidth: 340, margin: '0 auto' }}>{text}</p>}
   </div>
 );
 
-// ─── Filter Panel ─────────────────────────────────────────────────────────────
-interface FilterPanelProps {
-  filters: FilterState; onUpdate: (k: keyof FilterState, v: any) => void;
-  onReset: () => void; onClose: () => void;
-  availableRegions: string[]; availableCommunes: string[];
-  availableQuartiers: string[]; availableZones: string[];
-}
-const FilterPanel = ({ filters, onUpdate, onReset, onClose, availableRegions, availableCommunes, availableQuartiers, availableZones }: FilterPanelProps) => {
-  const toggleArr = (key: keyof FilterState, val: string) => {
-    const cur = (filters[key] as string[] | undefined) || [];
-    const upd = cur.includes(val) ? cur.filter(v => v !== val) : [...cur, val];
-    onUpdate(key, upd.length > 0 ? upd : undefined);
+const LinkBtn = ({ onClick, children, busy }: { onClick: () => void; children: React.ReactNode; busy?: boolean }) => (
+  <button onClick={onClick} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.blue, background: 'none', border: 'none', cursor: busy ? 'wait' : 'pointer', fontWeight: 700, fontFamily: 'inherit' }}>
+    {busy ? <Loader2 size={12} className="st-spin" /> : <Download size={12} />}{children}
+  </button>
+);
+
+/* ─── Graphique ───────────────────────────────────────────── */
+function ChartBlock({ data, type = 'bar', height = 260, money = true }: {
+  data: ChartData | null; type?: 'bar' | 'line' | 'pie'; height?: number; money?: boolean;
+}) {
+  if (!data?.labels?.length) {
+    return <div style={{ height }}><Empty icon={BarChart3} title="Pas de données sur cette période" text="Élargissez la période ou retirez un filtre." /></div>;
+  }
+  const fmtVal = (v: number) => (money ? fmtCFA(v) : fmtNum(v));
+  const chart = {
+    labels: data.labels,
+    datasets: data.datasets.map((ds, i) => ({
+      label: ds.label, data: ds.data,
+      backgroundColor: type === 'pie' ? CHART_COLORS : type === 'line' ? `${CHART_COLORS[i % CHART_COLORS.length]}22` : CHART_COLORS[i % CHART_COLORS.length],
+      borderColor: type === 'pie' ? '#fff' : CHART_COLORS[i % CHART_COLORS.length],
+      borderWidth: type === 'bar' ? 0 : 2, borderRadius: type === 'bar' ? 4 : 0,
+      fill: type === 'line', tension: 0.3, pointRadius: type === 'line' ? 3 : 0,
+    })),
   };
-
-  const MultiSelect = ({ label, options, selected, filterKey }: { label: string; options: string[]; selected: string[]; filterKey: keyof FilterState }) => {
-    const [open, setOpen] = useState(false);
-    if (!options.length) return null;
-    return (
-      <div style={{ position: 'relative' }}>
-        <button type="button" onClick={() => setOpen(o => !o)} style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '7px 10px', border: `1.5px solid ${P.sandBorder}`, borderRadius: 8,
-          background: P.sand, color: P.textDark, fontSize: 12, cursor: 'pointer',
-        }}>
-          <span>{label}</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            {selected.length > 0 && (
-              <span style={{ background: P.forestPale, color: P.forest, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20 }}>{selected.length}</span>
-            )}
-            {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          </div>
-        </button>
-        {open && (
-          <div style={{ position: 'absolute', zIndex: 20, top: '100%', marginTop: 4, width: '100%', background: 'white', border: `1px solid ${P.sandBorder}`, borderRadius: 10, boxShadow: '0 4px 16px rgba(42,26,8,.10)', maxHeight: 180, overflowY: 'auto' }}>
-            {options.map(opt => (
-              <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', cursor: 'pointer', fontSize: 12, color: P.textDark }}>
-                <input type="checkbox" checked={selected.includes(opt)} onChange={() => toggleArr(filterKey, opt)} style={{ accentColor: P.forest }} />
-                {opt}
-              </label>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '7px 10px', border: `1.5px solid ${P.sandBorder}`,
-    borderRadius: 8, background: P.sand, fontSize: 12, color: P.textDark, outline: 'none',
-  };
-  const labelStyle: React.CSSProperties = { display: 'block', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: P.textMuted, marginBottom: 6 };
-
-  return (
-    <div style={{ background: 'white', borderRadius: 14, border: `1px solid ${P.sandBorder}`, marginBottom: 20, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderBottom: `1px solid ${P.sand}`, background: P.sand }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <SlidersHorizontal size={16} color={P.forest} />
-          <span style={{ fontSize: 13, fontWeight: 500, color: P.textDark }}>Filtres avancés</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={onReset} style={{ fontSize: 11, color: P.textMuted, background: 'none', border: 'none', cursor: 'pointer' }}>Réinitialiser</button>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={15} color={P.textMid} /></button>
-        </div>
-      </div>
-      <div style={{ padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
-        {[
-          { label: 'Date début', key: 'start_date' as const, type: 'date' },
-          { label: 'Date fin',   key: 'end_date'   as const, type: 'date' },
-        ].map(({ label, key, type }) => (
-          <div key={key}>
-            <label style={labelStyle}>{label}</label>
-            <input type={type} value={filters[key] || ''} onChange={e => onUpdate(key, e.target.value || undefined)} style={inputStyle} />
-          </div>
-        ))}
-        <div>
-          <label style={labelStyle}>Groupement</label>
-          <select value={filters.group_by || 'day'} onChange={e => onUpdate('group_by', e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
-            <option value="day">Par jour</option>
-            <option value="week">Par semaine</option>
-            <option value="month">Par mois</option>
-          </select>
-        </div>
-        <div>
-          <label style={labelStyle}>Statut commercial</label>
-          <select value={filters.status || ''} onChange={e => onUpdate('status', e.target.value || undefined)} style={{ ...inputStyle, cursor: 'pointer' }}>
-            <option value="">Tous</option>
-            <option value="actif">Actif</option>
-            <option value="inactif">Inactif</option>
-            <option value="suspendu">Suspendu</option>
-          </select>
-        </div>
-        <div>
-          <label style={labelStyle}>Type de véhicule</label>
-          <select value={filters.vehicle_type || ''} onChange={e => onUpdate('vehicle_type', e.target.value || undefined)} style={{ ...inputStyle, cursor: 'pointer' }}>
-            <option value="">Tous</option>
-            <option value="moto">Moto</option>
-            <option value="velo">Vélo</option>
-            <option value="tricycle">Tricycle</option>
-            <option value="pieton">Piéton</option>
-          </select>
-        </div>
-        {[
-          { label: 'Région(s)', key: 'region' as const, opts: availableRegions },
-          { label: 'Commune(s)', key: 'commune' as const, opts: availableCommunes },
-          { label: 'Quartier(s)', key: 'quartier' as const, opts: availableQuartiers },
-          { label: 'Zone(s)', key: 'zone' as const, opts: availableZones },
-        ].map(({ label, key, opts }) => (
-          <div key={key}>
-            <label style={labelStyle}>{label}</label>
-            <MultiSelect label={`Sélectionner ${label.toLowerCase()}`} options={opts} selected={(filters[key] as string[]) || []} filterKey={key} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// ─── Chart Component ───────────────────────────────────────────────────────────
-const ChartComponent = ({ chartData, title, type = 'bar', height = '280px' }: {
-  chartData: ChartData | null; title: string; type?: 'bar' | 'line' | 'pie'; height?: string;
-}) => {
-  const options = {
+  const options: any = {
     responsive: true, maintainAspectRatio: false,
     plugins: {
-      legend: { position: 'top' as const, labels: { font: { size: 11 }, padding: 14 } },
-      tooltip: { callbacks: { label: (ctx: any) => `${ctx.dataset.label}: ${fmtCFA(ctx.raw)}` } },
+      legend: { display: type === 'pie' || data.datasets.length > 1, position: type === 'pie' ? 'right' : 'top', labels: { boxWidth: 10, font: { size: 11 }, color: C.sub } },
+      tooltip: { callbacks: { label: (ctx: any) => `${ctx.label && type === 'pie' ? ctx.label : ctx.dataset.label}: ${fmtVal(ctx.raw)}` } },
     },
-    scales: type !== 'pie' ? {
-      y: {
-        beginAtZero: true,
-        grid: { color: P.sand },
-        ticks: { color: P.textMuted, callback: (v: any) => new Intl.NumberFormat('fr-FR', { notation: 'compact' }).format(v) },
-      },
-      x: { grid: { display: false }, ticks: { color: P.textMuted } },
-    } : undefined,
+    scales: type === 'pie' ? undefined : {
+      y: { beginAtZero: true, grid: { color: C.surface }, border: { display: false }, ticks: { color: C.muted, font: { size: 11 }, callback: (v: any) => (money ? fmtCompact(v) : v) } },
+      x: { grid: { display: false }, ticks: { color: C.muted, font: { size: 11 }, maxRotation: 0, autoSkip: true } },
+    },
   };
-
-  if (!chartData?.labels?.length) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: P.sand, borderRadius: 10, border: `1px dashed ${P.sandBorder}`, height }}>
-        <BarChart size={32} color={P.textLighter} />
-        <p style={{ fontSize: 12, color: P.textMuted, marginTop: 8 }}>Aucune donnée pour « {title} »</p>
-      </div>
-    );
-  }
-
-  const toChartJS = () => ({
-    labels: chartData.labels,
-    datasets: chartData.datasets.map((ds, i) => ({
-      label: ds.label, data: ds.data,
-      backgroundColor: ds.backgroundColor || (
-        type === 'pie'
-          ? [P.forest, P.ocre, P.teal, '#9A5E1A', P.red, '#2D8C72']
-          : i === 0 ? P.forest : P.ocre
-      ),
-      borderColor: ds.borderColor || (i === 0 ? P.forestLight : P.ocreLight),
-      borderWidth: type === 'pie' ? 0 : 2,
-      borderRadius: type === 'bar' ? 5 : 0,
-    })),
-  });
-
   return (
     <div style={{ height, position: 'relative' }}>
-      {type === 'bar'  && <Bar  data={toChartJS() as ChartJSData<'bar',  number[], string>} options={options as any} />}
-      {type === 'line' && <Line data={toChartJS() as ChartJSData<'line', number[], string>} options={options as any} />}
-      {type === 'pie'  && <Pie  data={toChartJS() as ChartJSData<'pie',  number[], string>} options={{ ...options, scales: undefined } as any} />}
+      {type === 'bar' && <Bar data={chart as any} options={options} />}
+      {type === 'line' && <Line data={chart as any} options={options} />}
+      {type === 'pie' && <Pie data={chart as any} options={options} />}
     </div>
   );
-};
+}
 
-// ─── Data Table ───────────────────────────────────────────────────────────────
+/* ─── Tableau : tri, recherche, pagination, export CSV ────── */
 interface Column<T> {
   key: string; label: string; align?: 'left' | 'right' | 'center';
   render: (row: T) => React.ReactNode;
+  sort?: (row: T) => number | string;
+  csv?: (row: T) => string | number;
 }
-function DataTable<T extends { id?: number }>({
-  data, columns, searchKeys, emptyIcon: EmptyIcon = Package, emptyMsg = 'Aucune donnée', initialPerPage = 10,
-}: {
-  data: T[]; columns: Column<T>[]; searchKeys?: (keyof T)[];
-  emptyIcon?: React.ComponentType<{ size?: number; color?: string }>;
-  emptyMsg?: string; initialPerPage?: number;
+
+function paginationRange(current: number, total: number): (number | string)[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  if (current <= 4) return [1, 2, 3, 4, 5, '…', total];
+  if (current >= total - 3) return [1, '…', total - 4, total - 3, total - 2, total - 1, total];
+  return [1, '…', current - 1, current, current + 1, '…', total];
+}
+
+function DataTable<T extends { id: number }>({ data, columns, searchKeys, emptyIcon = Package, emptyMsg, exportName, initialPerPage = 10 }: {
+  data: T[]; columns: Column<T>[]; searchKeys?: string[]; emptyIcon?: React.ComponentType<any>;
+  emptyMsg: string; exportName: string; initialPerPage?: number;
 }) {
   const [search, setSearch] = useState('');
-  const [page, setPage]   = useState(1);
+  const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(initialPerPage);
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [asc, setAsc] = useState(false);
 
-  const filtered = search && searchKeys
-    ? data.filter(r => searchKeys.some(k => String(r[k] ?? '').toLowerCase().includes(search.toLowerCase())))
-    : data;
-  const totalPages = Math.ceil(filtered.length / perPage);
-  const slice = filtered.slice((page - 1) * perPage, page * perPage);
+  const rows = useMemo(() => {
+    let r = data;
+    const q = search.trim().toLowerCase();
+    if (q && searchKeys) r = r.filter((row) => searchKeys.some((k) => String((row as any)[k] ?? '').toLowerCase().includes(q)));
+    const col = columns.find((c) => c.key === sortKey);
+    if (col?.sort) {
+      const f = col.sort;
+      r = [...r].sort((a, b) => {
+        const x = f(a), y = f(b);
+        const cmp = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'fr');
+        return asc ? cmp : -cmp;
+      });
+    }
+    return r;
+  }, [data, search, searchKeys, columns, sortKey, asc]);
 
-  useEffect(() => setPage(1), [search, perPage, data]);
+  // Retour page 1 seulement quand la recherche, le tri ou la taille changent (pas à chaque rendu)
+  useEffect(() => setPage(1), [search, perPage, sortKey, asc, data.length]);
 
-  const thStyle: React.CSSProperties = {
-    padding: '8px 12px', fontSize: 10, fontWeight: 600,
-    textTransform: 'uppercase', letterSpacing: '0.07em',
-    color: P.textMid, background: P.sand, borderBottom: `1px solid ${P.sandBorder}`,
-    whiteSpace: 'nowrap',
+  const totalPages = Math.max(1, Math.ceil(rows.length / perPage));
+  const slice = rows.slice((page - 1) * perPage, page * perPage);
+
+  const toggleSort = (c: Column<T>) => {
+    if (!c.sort) return;
+    if (sortKey === c.key) setAsc((a) => !a); else { setSortKey(c.key); setAsc(false); }
   };
-  const tdStyle: React.CSSProperties = { padding: '9px 12px', borderBottom: `1px solid ${P.sand}`, color: P.textDark };
-  const pageBtnBase: React.CSSProperties = {
-    padding: '5px 10px', border: `1.5px solid ${P.sandBorder}`, borderRadius: 7,
-    background: 'white', color: P.textMid, cursor: 'pointer', fontSize: 12,
+
+  const exportCsv = () => {
+    const cols = columns.filter((c) => c.csv || c.sort);
+    const val = (c: Column<T>, r: T) => (c.csv ? c.csv(r) : c.sort!(r));
+    const csv = [cols.map((c) => c.label).join(';'),
+      ...rows.map((r) => cols.map((c) => `"${String(val(c, r)).replace(/"/g, '""')}"`).join(';'))].join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }));
+    a.download = `${exportName}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
   };
 
-  if (!data.length) return (
-    <div style={{ textAlign: 'center', padding: '48px 0', color: P.textMuted }}>
-      <EmptyIcon size={36} color={P.textLighter} />
-      <p style={{ fontSize: 12, marginTop: 8 }}>{emptyMsg}</p>
-    </div>
-  );
+  if (!data.length) return <Empty icon={emptyIcon} title={emptyMsg} text="Aucune donnée sur la période et les filtres choisis." />;
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
-        {searchKeys && (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+        {searchKeys ? (
           <div style={{ position: 'relative' }}>
-            <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: P.textMuted }} />
-            <input
-              type="text" placeholder="Rechercher…" value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{ paddingLeft: 30, paddingRight: 10, paddingTop: 7, paddingBottom: 7, border: `1.5px solid ${P.sandBorder}`, borderRadius: 8, background: P.sand, fontSize: 12, color: P.textDark, outline: 'none', width: 220 }}
-            />
+            <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: C.muted }} />
+            <input aria-label="Rechercher dans le tableau" placeholder="Rechercher…" value={search} onChange={(e) => setSearch(e.target.value)}
+              style={{ ...inputStyle, paddingLeft: 30, width: 230 }} />
           </div>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto' }}>
-          <span style={{ fontSize: 11, color: P.textMuted }}>{fmtNum(filtered.length)} entrée{filtered.length > 1 ? 's' : ''}</span>
-          <select value={perPage} onChange={e => setPerPage(Number(e.target.value))} style={{ border: `1px solid ${P.sandBorder}`, borderRadius: 7, fontSize: 11, padding: '4px 8px', background: 'white', color: P.textMid }}>
-            {[10, 20, 50].map(n => <option key={n} value={n}>{n} / page</option>)}
+        ) : <span />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{fmtNum(rows.length)} résultat{rows.length > 1 ? 's' : ''}</span>
+          <select aria-label="Lignes par page" value={perPage} onChange={(e) => setPerPage(Number(e.target.value))} style={{ ...inputStyle, height: 30, width: 'auto', fontSize: 11 }}>
+            {[10, 20, 50].map((n) => <option key={n} value={n}>{n} / page</option>)}
           </select>
+          <button onClick={exportCsv} style={{ ...btnGhost, padding: '5px 10px' }}><Download size={12} /> CSV</button>
         </div>
       </div>
-      <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${P.sand}` }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
-            <tr>
-              {columns.map(c => (
-                <th key={c.key} style={{ ...thStyle, textAlign: c.align || 'left' }}>{c.label}</th>
+            <tr style={{ borderBottom: `1px solid ${C.lineL}` }}>
+              {columns.map((c) => (
+                <th key={c.key} className={c.sort ? 'st-th' : undefined} onClick={() => toggleSort(c)}
+                  aria-sort={sortKey === c.key ? (asc ? 'ascending' : 'descending') : undefined}
+                  style={{ padding: '0 12px 10px 0', textAlign: c.align || 'left', fontSize: 11, fontWeight: 700, color: sortKey === c.key ? C.blueD : C.muted, whiteSpace: 'nowrap' }}>
+                  {c.label}{sortKey === c.key && (asc ? ' ↑' : ' ↓')}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {slice.map((row, i) => (
-              <tr key={row.id ?? i} style={{ transition: 'background .1s' }}
-                onMouseEnter={e => (e.currentTarget.style.background = P.cream)}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                {columns.map(c => (
-                  <td key={c.key} style={{ ...tdStyle, textAlign: c.align || 'left' }}>{c.render(row)}</td>
+            {slice.map((row) => (
+              <tr key={row.id} className="st-row" style={{ borderBottom: `1px solid ${C.surface}` }}>
+                {columns.map((c) => (
+                  <td key={c.key} style={{ padding: '10px 12px 10px 0', textAlign: c.align || 'left', color: C.text }}>{c.render(row)}</td>
                 ))}
               </tr>
             ))}
+            {slice.length === 0 && <tr><td colSpan={columns.length}><Empty icon={Search} title="Aucun résultat" text="Modifiez la recherche." /></td></tr>}
           </tbody>
         </table>
       </div>
+
       {totalPages > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
-          <span style={{ fontSize: 11, color: P.textMuted }}>Page {page} / {totalPages}</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, flexWrap: 'wrap', gap: 8 }}>
+          <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Page {page} sur {totalPages}</span>
           <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={() => setPage(1)} disabled={page === 1} style={pageBtnBase}>«</button>
-            <button onClick={() => setPage(p => p - 1)} disabled={page === 1} style={pageBtnBase}><ChevronLeft size={13} /></button>
-            {Array.from({ length: Math.min(5, totalPages) }, (_, idx) => {
-              const p = totalPages <= 5 ? idx + 1 : page <= 3 ? idx + 1 : page >= totalPages - 2 ? totalPages - 4 + idx : page - 2 + idx;
-              return (
-                <button key={p} onClick={() => setPage(p)}
-                  style={{ ...pageBtnBase, ...(page === p ? { background: P.forestPale, color: P.forest, borderColor: P.forest, fontWeight: 600 } : {}) }}>
-                  {p}
-                </button>
-              );
-            })}
-            <button onClick={() => setPage(p => p + 1)} disabled={page === totalPages} style={pageBtnBase}><ChevronRight size={13} /></button>
-            <button onClick={() => setPage(totalPages)} disabled={page === totalPages} style={pageBtnBase}>»</button>
+            <PagBtn onClick={() => setPage((p) => p - 1)} disabled={page === 1} label="Page précédente"><ChevronLeft size={13} /></PagBtn>
+            {paginationRange(page, totalPages).map((p, i) =>
+              p === '…' ? <span key={`e${i}`} style={{ padding: '0 6px', color: C.muted }}>…</span>
+                : <PagBtn key={p} onClick={() => setPage(p as number)} active={page === p} label={`Page ${p}`}>{p}</PagBtn>)}
+            <PagBtn onClick={() => setPage((p) => p + 1)} disabled={page === totalPages} label="Page suivante"><ChevronRight size={13} /></PagBtn>
           </div>
         </div>
       )}
@@ -496,472 +346,554 @@ function DataTable<T extends { id?: number }>({
   );
 }
 
-// ─── Main Dashboard ────────────────────────────────────────────────────────────
-export default function StatisticsDashboard() {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [timeRange, setTimeRange] = useState('30');
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<FilterState>({ period: '30', group_by: 'day' });
+const PagBtn = ({ onClick, disabled, active, label, children }: { onClick: () => void; disabled?: boolean; active?: boolean; label: string; children: React.ReactNode }) => (
+  <button onClick={onClick} disabled={disabled} aria-label={label} aria-current={active ? 'page' : undefined}
+    style={{ minWidth: 30, height: 30, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+      border: `1px solid ${active ? C.blue : C.line}`, background: active ? C.blue : '#fff', color: active ? '#fff' : disabled ? C.muted : C.sub, opacity: disabled ? 0.5 : 1 }}>
+    {children}
+  </button>
+);
 
-  const [availableRegions,   setAvailableRegions]   = useState<string[]>([]);
-  const [availableCommunes,  setAvailableCommunes]  = useState<string[]>([]);
-  const [availableQuartiers, setAvailableQuartiers] = useState<string[]>([]);
-  const [availableZones,     setAvailableZones]     = useState<string[]>([]);
-
-  const [stats, setStats] = useState<StatsState>({
-    summary: null, posStats: [], vendorStats: [], productStats: [],
-    topPurchaseVendors: [], purchaseDetails: [],
-    salesChart: null, performanceChart: null,
-  });
-
-  const formatChart = (raw: any): ChartData | null => {
-    if (!raw?.labels?.length || !raw?.datasets?.length) return null;
-    return { labels: raw.labels, datasets: raw.datasets.map((d: any) => ({ label: d.label || '', data: d.data || [], backgroundColor: d.backgroundColor, borderColor: d.borderColor, yAxisID: d.yAxisID })) };
+/* ─── Filtres ─────────────────────────────────────────────── */
+function MultiSelect({ label, options, selected, onChange }: { label: string; options: string[]; selected: string[]; onChange: (v: string[] | undefined) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+  const toggle = (o: string) => {
+    const next = selected.includes(o) ? selected.filter((v) => v !== o) : [...selected, o];
+    onChange(next.length ? next : undefined);
   };
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
+        style={{ ...inputStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', textAlign: 'left' }}>
+        <span style={{ color: selected.length ? C.text : C.muted }}>{selected.length ? `${selected.length} sélectionné${selected.length > 1 ? 's' : ''}` : (options.length ? 'Tous' : 'Aucune option')}</span>
+        {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+      </button>
+      {open && options.length > 0 && (
+        <div style={{ position: 'absolute', zIndex: 20, top: '100%', marginTop: 4, width: '100%', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 10, boxShadow: '0 8px 24px rgba(13,27,42,.12)', maxHeight: 200, overflowY: 'auto' }}>
+          {options.map((o) => (
+            <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', cursor: 'pointer', fontSize: 12, color: C.text }}>
+              <input type="checkbox" checked={selected.includes(o)} onChange={() => toggle(o)} style={{ accentColor: C.blue }} />{o}
+            </label>
+          ))}
+        </div>
+      )}
+      <span className="sr-only" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>{label}</span>
+    </div>
+  );
+}
 
-  const uniq = <T,>(arr: T[], fn: (i: T) => string | undefined) =>
-    [...new Set(arr.map(fn).filter((v): v is string => !!v))].sort();
+const FieldLabel = ({ children }: { children: React.ReactNode }) => (
+  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.sub, marginBottom: 5 }}>{children}</span>
+);
+
+/* ═══════════════════════════════════════════════════════════
+   Composant principal
+   ═══════════════════════════════════════════════════════════ */
+type TabId = 'overview' | 'points-of-sale' | 'vendors' | 'products' | 'pushcart' | 'analytics';
+const EMPTY_FILTERS: FilterState = { group_by: 'day' };
+
+export default function StatisticsDashboard() {
+  const [activeTab, setActiveTab] = useState<TabId>('overview');
+  const [timeRange, setTimeRange] = useState('30');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [applied, setApplied] = useState<FilterState>(EMPTY_FILTERS);
+  const [draft, setDraft] = useState<FilterState>(EMPTY_FILTERS);
+  const [exporting, setExporting] = useState<string | null>(null);
+  const [salesView, setSalesView] = useState<'bar' | 'line'>('bar');
+  const [perfScope, setPerfScope] = useState<'vendors' | 'products' | 'pos'>('vendors');
+  const [perfChart, setPerfChart] = useState<ChartData | null>(null);
+  const [stats, setStats] = useState<StatsState>({
+    summary: null, posStats: [], vendorStats: [], productStats: [], topPurchaseVendors: [], purchaseDetails: [], salesChart: null,
+  });
+  const reqId = useRef(0);
+
+  /** Paramètres envoyés à l'API : des dates précises remplacent la période glissante. */
+  const params = useMemo<FilterState>(() => {
+    const p: FilterState = { ...applied };
+    if (applied.start_date || applied.end_date) delete p.period; else p.period = timeRange;
+    return p;
+  }, [applied, timeRange]);
 
   const loadStats = useCallback(async (isRefresh = false) => {
+    const id = ++reqId.current;
+    isRefresh ? setRefreshing(true) : setLoading(true);
+    setError(null);
+    const endpoints: { label: string; call: () => Promise<Response> }[] = [
+      { label: 'synthèse', call: () => apiService.getDashboardSummary(params) },
+      { label: 'points de vente', call: () => apiService.getPOSStatistics(params) },
+      { label: 'commerciaux', call: () => apiService.getMobileVendorStatistics(timeRange, params) },
+      { label: 'produits', call: () => apiService.getProductStatistics(timeRange, params) },
+      { label: 'top prospects', call: () => apiService.get('/statistics/top_purchase/', params) },
+      { label: 'détail prospects', call: () => apiService.get('/statistics/purchase_stat/', params) },
+      { label: 'courbe des ventes', call: () => apiService.getSalesChart(params) },
+    ];
     try {
-      isRefresh ? setRefreshing(true) : setLoading(true);
-      setError(null);
-      const f = { ...filters, period: timeRange };
-      const results = await Promise.allSettled([
-        apiService.getDashboardSummary(f),
-        apiService.getPOSStatistics(f),
-        apiService.getMobileVendorStatistics(timeRange, f),
-        apiService.getProductStatistics(timeRange, f),
-        apiService.get('/statistics/top_purchase/', f),
-        apiService.get('/statistics/purchase_stat/', f),
-        apiService.getSalesChart(f),
-        apiService.getPerformanceChart('vendors', f),
-      ]);
-
-      const parse = async (r: PromiseSettledResult<Response>) => {
-        if (r.status !== 'fulfilled') return null;
-        try { return await r.value.json(); } catch { return null; }
-      };
-      const [summary, pos, vendors, products, topPurchase, purchaseDetails, salesChart, perfChart] =
-        await Promise.all(results.map(parse));
-
-      const posArr     = Array.isArray(pos)            ? pos            : [];
-      const vendArr    = Array.isArray(vendors)        ? vendors        : [];
-      const prodArr    = Array.isArray(products)       ? products       : [];
-      const topArr     = Array.isArray(topPurchase)    ? topPurchase    : [];
-      const purchArr   = Array.isArray(purchaseDetails)? purchaseDetails: [];
-
-      setAvailableRegions(uniq(posArr, (p: POSStat) => p.region));
-      setAvailableCommunes(uniq([...posArr, ...vendArr], (p: any) => p.commune));
-      setAvailableQuartiers(uniq([...posArr, ...vendArr], (p: any) => p.quartier));
-      setAvailableZones(uniq([...vendArr, ...purchArr], (p: any) => p.zone || p.purchase_zone));
-
+      const results = await Promise.allSettled(endpoints.map((e) => e.call()));
+      const failedNow: string[] = [];
+      const parsed = await Promise.all(results.map(async (r, i) => {
+        if (r.status !== 'fulfilled' || !r.value.ok) { failedNow.push(endpoints[i].label); return null; }
+        try { return await r.value.json(); } catch { failedNow.push(endpoints[i].label); return null; }
+      }));
+      if (id !== reqId.current) return; // une requête plus récente a pris le relais
+      const [summary, pos, vendors, products, top, purchases, sales] = parsed;
       setStats({
-        summary: summary || { total_sales: 0, total_orders: 0, total_mobile_vendors: 0, total_points_of_sale: 0, active_purchases: 0, sales_growth: 0, revenue_growth: 0 },
-        posStats: posArr, vendorStats: vendArr, productStats: prodArr,
-        topPurchaseVendors: topArr, purchaseDetails: purchArr,
-        salesChart: formatChart(salesChart), performanceChart: formatChart(perfChart),
+        summary: summary || null,
+        posStats: toArr(pos), vendorStats: toArr(vendors), productStats: toArr(products),
+        topPurchaseVendors: toArr(top), purchaseDetails: toArr(purchases), salesChart: formatChart(sales),
       });
+      setFailed(failedNow);
     } catch (e: any) {
-      setError(e.message || 'Erreur lors du chargement');
+      if (id === reqId.current) setError(e?.message || 'Impossible de charger les statistiques.');
     } finally {
-      setLoading(false); setRefreshing(false);
+      if (id === reqId.current) { setLoading(false); setRefreshing(false); }
     }
-  }, [filters, timeRange]);
+  }, [params, timeRange]);
 
   useEffect(() => { loadStats(); }, [loadStats]);
 
+  // Graphique de performance : contrôlé, rechargé avec les filtres
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await apiService.getPerformanceChart(perfScope, params);
+        const data = res.ok ? await res.json() : null;
+        if (alive) setPerfChart(formatChart(data));
+      } catch { if (alive) setPerfChart(null); }
+    })();
+    return () => { alive = false; };
+  }, [perfScope, params]);
+
   const handleExport = async (type: string) => {
+    setExporting(type); setError(null);
     try {
-      const res = await apiService.exportData({ format: 'excel', report_type: type, filters: { ...filters, period: timeRange } });
-      if (!res.ok) return;
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href = url; a.download = `${type}_${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(a); a.click();
-      URL.revokeObjectURL(url); document.body.removeChild(a);
-    } catch { setError("Erreur lors de l'export"); }
+      const res = await apiService.exportData({ format: 'excel', report_type: type, filters: params });
+      if (!res.ok) throw new Error();
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url; a.download = `${type}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch { setError("L'export a échoué. Réessayez dans un instant."); }
+    finally { setExporting(null); }
   };
 
-  const updateFilter = (key: keyof FilterState, value: any) =>
-    setFilters(prev => ({ ...prev, [key]: value }));
-  const resetFilters = () => setFilters({ period: timeRange, group_by: 'day' });
+  /* Options de filtres, dérivées des données chargées */
+  const options = useMemo(() => ({
+    regions: uniq(stats.posStats.map((p) => p.region)),
+    communes: uniq([...stats.posStats.map((p) => p.commune), ...stats.vendorStats.map((v) => v.commune)]),
+    quartiers: uniq([...stats.posStats.map((p) => p.quartier), ...stats.vendorStats.map((v) => v.quartier)]),
+    zones: uniq([...stats.vendorStats.map((v) => v.zone), ...stats.purchaseDetails.map((p) => p.purchase_zone)]),
+  }), [stats.posStats, stats.vendorStats, stats.purchaseDetails]);
+  const optionsRef = useRef(options);
+  if (options.regions.length || options.communes.length) optionsRef.current = options; // évite de vider les listes quand un filtre réduit les résultats
 
-  const activeFiltersCount = Object.entries(filters).filter(([k, v]) =>
-    !['period', 'group_by'].includes(k) && v !== undefined && (Array.isArray(v) ? v.length > 0 : v !== '')
-  ).length;
+  /* Pastilles de filtres actifs */
+  const chips = useMemo(() => {
+    const out: { key: string; label: string; clear: () => void }[] = [];
+    const drop = (patch: Partial<FilterState>) => { setApplied((f) => ({ ...f, ...patch })); setDraft((f) => ({ ...f, ...patch })); };
+    (['region', 'commune', 'quartier', 'zone'] as const).forEach((k) => {
+      (applied[k] || []).forEach((v) => out.push({
+        key: `${k}-${v}`, label: `${k === 'region' ? 'Région' : k === 'commune' ? 'Commune' : k === 'quartier' ? 'Quartier' : 'Zone'} : ${v}`,
+        clear: () => { const rest = (applied[k] || []).filter((x) => x !== v); drop({ [k]: rest.length ? rest : undefined }); },
+      }));
+    });
+    if (applied.status) out.push({ key: 'status', label: `Statut : ${applied.status}`, clear: () => drop({ status: undefined }) });
+    if (applied.vehicle_type) out.push({ key: 'veh', label: `Véhicule : ${applied.vehicle_type}`, clear: () => drop({ vehicle_type: undefined }) });
+    if (applied.start_date || applied.end_date) out.push({ key: 'dates', label: `Du ${fmtDate(applied.start_date)} au ${fmtDate(applied.end_date)}`, clear: () => drop({ start_date: undefined, end_date: undefined }) });
+    return out;
+  }, [applied]);
 
-  // ─── Tabs ──────────────────────────────────────────────────────────────────
-  const tabs = [
-    { id: 'overview',       label: "Vue d'ensemble",  icon: BarChart3 },
-    { id: 'points-of-sale', label: 'Points de vente', icon: MapPin    },
-    { id: 'vendors',        label: 'Commerciaux',      icon: Users     },
-    { id: 'products',       label: 'Produits',          icon: Package   },
-    { id: 'pushcart',       label: 'Prospects',         icon: ShoppingBag },
-    { id: 'analytics',      label: 'Analytiques',       icon: TrendingUp },
+  /* Indicateurs dérivés des données chargées */
+  const s = stats.summary;
+  const avgBasket = s && s.total_orders ? s.total_sales / s.total_orders : 0;
+
+  const salesByCommune = useMemo<ChartData | null>(() => {
+    const m = new Map<string, number>();
+    stats.posStats.forEach((p) => m.set(p.commune || 'Non renseignée', (m.get(p.commune || 'Non renseignée') || 0) + (p.total_sales || 0)));
+    const rows = [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+    return rows.length ? { labels: rows.map((r) => r[0]), datasets: [{ label: 'Ventes', data: rows.map((r) => r[1]) }] } : null;
+  }, [stats.posStats]);
+
+  const vendorPerfSplit = useMemo<ChartData | null>(() => {
+    const v = stats.vendorStats;
+    if (!v.length) return null;
+    const hi = v.filter((x) => x.performance >= 80).length, mid = v.filter((x) => x.performance >= 60 && x.performance < 80).length;
+    return { labels: ['≥ 80 %', '60 – 79 %', '< 60 %'], datasets: [{ label: 'Commerciaux', data: [hi, mid, v.length - hi - mid] }] };
+  }, [stats.vendorStats]);
+
+  const attention = useMemo(() => {
+    const lowVendors = stats.vendorStats.filter((v) => v.status === 'actif' && v.performance < 40);
+    const slowProducts = stats.productStats.filter((p) => p.total_quantity_sold > 0 && p.stock_rotation < 1);
+    const outOfStock = stats.productStats.filter((p) => p.status === 'rupture');
+    const lowPOS = stats.posStats.filter((p) => p.performance_score < 50);
+    return [
+      { id: 'v', n: lowVendors.length, text: 'commerciaux actifs sous 40 % de performance', tab: 'vendors' as TabId, color: C.red },
+      { id: 'r', n: outOfStock.length, text: 'produits en rupture', tab: 'products' as TabId, color: C.red },
+      { id: 's', n: slowProducts.length, text: 'produits à rotation lente (< 1×)', tab: 'products' as TabId, color: C.amber },
+      { id: 'p', n: lowPOS.length, text: 'points de vente sous 50 % de performance', tab: 'points-of-sale' as TabId, color: C.amber },
+    ].filter((a) => a.n > 0);
+  }, [stats.vendorStats, stats.productStats, stats.posStats]);
+
+  const topVendors = useMemo(() => [...stats.vendorStats].sort((a, b) => b.total_sales - a.total_sales).slice(0, 5), [stats.vendorStats]);
+  const topProducts = useMemo(() => [...stats.productStats].sort((a, b) => b.total_revenue - a.total_revenue).slice(0, 5), [stats.productStats]);
+  const topPurchaseRows = useMemo(() => stats.topPurchaseVendors.map((v) => ({ ...v, id: v.vendor_id })), [stats.topPurchaseVendors]);
+  const purchaseRows = useMemo(() => stats.purchaseDetails.map((p) => ({ ...p, id: p.purchase_id })), [stats.purchaseDetails]);
+
+  const tabs: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
+    { id: 'overview', label: "Vue d'ensemble", icon: BarChart3 },
+    { id: 'points-of-sale', label: 'Points de vente', icon: MapPin },
+    { id: 'vendors', label: 'Commerciaux', icon: Users },
+    { id: 'products', label: 'Produits', icon: Package },
+    { id: 'pushcart', label: 'Prospects', icon: ShoppingBag },
+    { id: 'analytics', label: 'Rapports', icon: TrendingUp },
   ];
 
-  // ─── Overview ──────────────────────────────────────────────────────────────
-  const OverviewTab = () => (
-    <div>
-      {error && (
-        <div style={{ background: '#FFF3E8', border: `1px solid #E8C090`, borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 20 }}>
-          <AlertCircle size={16} color={P.ocre} style={{ flexShrink: 0, marginTop: 1 }} />
-          <p style={{ fontSize: 12.5, color: '#9A5E1A' }}>{error}</p>
-        </div>
-      )}
-      {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 24 }}>
-        <StatCard title="Ventes totales"    value={fmtCFA(stats.summary?.total_sales          || 0)} growth={stats.summary?.sales_growth}    icon={DollarSign}  color="green" />
-        <StatCard title="Commandes"          value={fmtNum(stats.summary?.total_orders          || 0)}                                          icon={ShoppingCart} color="ocre"  />
-        <StatCard title="Commerciaux actifs" value={fmtNum(stats.summary?.total_mobile_vendors  || 0)}                                          icon={Users}        color="gold"  />
-        <StatCard title="Points de vente"   value={fmtNum(stats.summary?.total_points_of_sale  || 0)}                                          icon={MapPin}       color="teal"  />
+  const periodLabel = applied.start_date || applied.end_date
+    ? `Du ${fmtDate(applied.start_date)} au ${fmtDate(applied.end_date)}`
+    : s?.start_date && s?.end_date ? `Du ${fmtDate(s.start_date)} au ${fmtDate(s.end_date)}` : `${timeRange} derniers jours`;
+
+  /* ─── Onglets (fonctions de rendu, pas des composants : l'état des tableaux est conservé) ─── */
+  const renderOverview = () => (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
+        <Kpi label="Ventes totales" value={fmtCFA(s?.total_sales || 0)} growth={s?.sales_growth} icon={DollarSign} color={C.blueD} />
+        <Kpi label="Commandes" value={fmtNum(s?.total_orders || 0)} sub="Sur la période" icon={ShoppingCart} color={C.violet} />
+        <Kpi label="Panier moyen" value={fmtCFA(avgBasket)} sub="Ventes ÷ commandes" icon={Wallet} color={C.green} />
+        <Kpi label="Commerciaux actifs" value={fmtNum(s?.total_mobile_vendors || 0)} sub="Sur le terrain" icon={Users} color={C.amber} />
+        <Kpi label="Points de vente" value={fmtNum(s?.total_points_of_sale || 0)} sub="Dans le périmètre" icon={MapPin} color={C.navy} />
       </div>
-      {/* Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 16 }}>
-        <Card>
-          <CardHeader title="Évolution des ventes" onExport={() => handleExport('sales')} />
-          <ChartComponent chartData={stats.salesChart} title="Ventes" type="bar" height="260px" />
-        </Card>
-        <Card>
-          <CardHeader title="Performance comparative" />
-          <div style={{ marginBottom: 12 }}>
-            <select onChange={async e => {
-              try {
-                const res  = await apiService.getPerformanceChart(e.target.value, filters);
-                const data = await res.json();
-                setStats(prev => ({ ...prev, performanceChart: formatChart(data) }));
-              } catch { setStats(prev => ({ ...prev, performanceChart: null })); }
-            }} style={{ padding: '5px 8px', border: `1.5px solid ${P.sandBorder}`, borderRadius: 7, background: P.sand, fontSize: 12, color: P.textDark }}>
-              <option value="vendors">Commerciaux</option>
-              <option value="products">Produits</option>
-              <option value="pos">Points de vente</option>
-            </select>
+
+      {attention.length > 0 && (
+        <Panel title="Points d'attention" icon={AlertTriangle}>
+          <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+            {attention.map((a) => (
+              <button key={a.id} onClick={() => setActiveTab(a.tab)}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, borderRadius: 12, background: C.pale, border: `1px solid ${C.lineL}`, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
+                <span style={{ fontSize: 20, fontWeight: 700, color: a.color, minWidth: 32 }}>{a.n}</span>
+                <span style={{ flex: 1, fontSize: 12, color: C.sub }}>{a.text}</span>
+                <ChevronRight size={14} style={{ color: C.muted }} />
+              </button>
+            ))}
           </div>
-          <ChartComponent chartData={stats.performanceChart} title="Performance" type="bar" height="220px" />
-        </Card>
-      </div>
-      {/* Top 5 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
-        <Card>
-          <CardHeader title="Top 5 commerciaux" onExport={() => handleExport('vendors')} />
-          {stats.vendorStats.slice(0, 5).map((v, i) => (
-            <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < 4 ? `1px solid ${P.sand}` : 'none' }}>
-              <div style={{ width: 22, height: 22, borderRadius: 6, background: i < 2 ? '#FBF4E0' : P.forestPale, color: i < 2 ? '#9A5E1A' : P.forest, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, flexShrink: 0 }}>{i + 1}</div>
+        </Panel>
+      )}
+
+      <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 440px), 1fr))' }}>
+        <Panel title="Évolution des ventes" icon={BarChart3} right={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'inline-flex', gap: 2, padding: 3, borderRadius: 10, background: C.pale, border: `0.5px solid ${C.line}` }}>
+              {(['bar', 'line'] as const).map((t) => (
+                <button key={t} onClick={() => setSalesView(t)} aria-pressed={salesView === t}
+                  style={{ padding: '3px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'inherit', background: salesView === t ? C.blue : 'transparent', color: salesView === t ? '#fff' : C.greyTx }}>
+                  {t === 'bar' ? 'Barres' : 'Courbe'}
+                </button>
+              ))}
+            </div>
+            <LinkBtn onClick={() => handleExport('sales')} busy={exporting === 'sales'}>Excel</LinkBtn>
+          </div>}>
+          <ChartBlock data={stats.salesChart} type={salesView} />
+        </Panel>
+
+        <Panel title="Performance comparative" icon={Users} right={
+          <select aria-label="Périmètre de comparaison" value={perfScope} onChange={(e) => setPerfScope(e.target.value as any)} style={{ ...inputStyle, height: 30, width: 'auto', fontSize: 12 }}>
+            <option value="vendors">Commerciaux</option><option value="products">Produits</option><option value="pos">Points de vente</option>
+          </select>}>
+          <ChartBlock data={perfChart} money={false} />
+        </Panel>
+
+        <Panel title="Ventes par commune" icon={MapPin} right={<LinkBtn onClick={() => handleExport('pos')} busy={exporting === 'pos'}>Excel</LinkBtn>}>
+          <ChartBlock data={salesByCommune} />
+        </Panel>
+
+        <Panel title="Répartition des commerciaux par performance" icon={Users}>
+          <ChartBlock data={vendorPerfSplit} type="pie" money={false} height={240} />
+        </Panel>
+
+        <Panel title="Top 5 commerciaux" icon={Users} right={<LinkBtn onClick={() => setActiveTab('vendors')} >Voir tout</LinkBtn>}>
+          {topVendors.length === 0 ? <Empty icon={Users} title="Aucun commercial" /> : topVendors.map((v, i) => (
+            <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: i < topVendors.length - 1 ? `1px solid ${C.surface}` : 'none' }}>
+              <span style={{ width: 24, height: 24, borderRadius: 7, background: i === 0 ? C.amberBg : C.pale, color: i === 0 ? C.amberTx : C.blueD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 12.5, fontWeight: 500, color: P.textDark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.full_name}</p>
-                <p style={{ fontSize: 11, color: P.textMuted }}>{v.phone}</p>
+                <p style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.full_name}</p>
+                <p style={{ fontSize: 11, color: C.muted }}>{v.commune || v.zone || v.phone}</p>
               </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <p style={{ fontSize: 12.5, fontWeight: 500, color: P.textDark }}>{fmtCFA(v.total_sales)}</p>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{fmtCFA(v.total_sales)}</p>
                 <PerfBadge score={v.performance} />
               </div>
             </div>
           ))}
-        </Card>
-        <Card>
-          <CardHeader title="Top 5 produits" onExport={() => handleExport('products')} />
-          {stats.productStats.slice(0, 5).map((p, i) => (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < 4 ? `1px solid ${P.sand}` : 'none' }}>
-              <div style={{ width: 22, height: 22, borderRadius: 6, background: i < 2 ? '#FBF4E0' : P.forestPale, color: i < 2 ? '#9A5E1A' : P.forest, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, flexShrink: 0 }}>{i + 1}</div>
+        </Panel>
+
+        <Panel title="Top 5 produits" icon={Package} right={<LinkBtn onClick={() => setActiveTab('products')}>Voir tout</LinkBtn>}>
+          {topProducts.length === 0 ? <Empty icon={Package} title="Aucun produit" /> : topProducts.map((p, i) => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: i < topProducts.length - 1 ? `1px solid ${C.surface}` : 'none' }}>
+              <span style={{ width: 24, height: 24, borderRadius: 7, background: i === 0 ? C.amberBg : C.pale, color: i === 0 ? C.amberTx : C.blueD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 12.5, fontWeight: 500, color: P.textDark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
-                <p style={{ fontSize: 11, color: P.textMuted }}>{p.sku}</p>
+                <p style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
+                <p style={{ fontSize: 11, color: C.muted }}>{p.sku}</p>
               </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <p style={{ fontSize: 12.5, fontWeight: 500, color: P.textDark }}>{fmtCFA(p.total_revenue)}</p>
-                <p style={{ fontSize: 11, color: P.textMuted }}>{fmtNum(p.total_quantity_sold)} unités</p>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{fmtCFA(p.total_revenue)}</p>
+                <p style={{ fontSize: 11, color: C.muted }}>{fmtNum(p.total_quantity_sold)} unités</p>
               </div>
             </div>
           ))}
-        </Card>
+        </Panel>
       </div>
     </div>
   );
 
-  // ─── POS Tab ───────────────────────────────────────────────────────────────
-  const PointsOfSaleTab = () => (
-    <Card>
-      <CardHeader title="Points de vente" onExport={() => handleExport('pos')} />
-      <DataTable<POSStat>
-        data={stats.posStats} emptyIcon={MapPin} emptyMsg="Aucun point de vente"
+  const renderPOS = () => (
+    <Panel title="Points de vente" icon={MapPin} right={<LinkBtn onClick={() => handleExport('pos')} busy={exporting === 'pos'}>Excel</LinkBtn>}>
+      <DataTable<POSStat> data={stats.posStats} emptyIcon={MapPin} emptyMsg="Aucun point de vente" exportName="points_de_vente"
         searchKeys={['name', 'region', 'commune', 'quartier']}
         columns={[
-          { key: 'name',              label: 'Point de vente', render: r => <span style={{ fontWeight: 500 }}>{r.name}</span> },
-          { key: 'type',              label: 'Type',            render: r => <span style={{ color: P.textMid, textTransform: 'capitalize' }}>{r.type}</span> },
-          { key: 'region',            label: 'Région',          render: r => <span style={{ color: P.textMid }}>{r.region}</span> },
-          { key: 'commune',           label: 'Commune',         render: r => <span style={{ color: P.textMid }}>{r.commune || '—'}</span> },
-          { key: 'total_sales',       label: 'Ventes',   align: 'right', render: r => <span style={{ fontWeight: 500 }}>{fmtCFA(r.total_sales)}</span> },
-          { key: 'total_orders',      label: 'Commandes', align: 'right', render: r => <span>{fmtNum(r.total_orders)}</span> },
-          { key: 'performance_score', label: 'Performance', align: 'right', render: r => (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-              <PerfBadge score={r.performance_score} />
-              <ProgressBar value={r.performance_score} max={100} />
-            </div>
-          )},
-        ]}
-      />
-    </Card>
+          { key: 'name', label: 'Point de vente', sort: (r) => r.name, render: (r) => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+          { key: 'type', label: 'Type', sort: (r) => r.type || '', render: (r) => <Pill bg={C.pale} tx={C.blueD}>{r.type || '—'}</Pill> },
+          { key: 'region', label: 'Région', sort: (r) => r.region || '', render: (r) => <span style={{ fontSize: 12, color: C.muted }}>{r.region || '—'}</span> },
+          { key: 'commune', label: 'Commune', sort: (r) => r.commune || '', render: (r) => <span style={{ fontSize: 12, color: C.muted }}>{r.commune || '—'}</span> },
+          { key: 'sales', label: 'Ventes', align: 'right', sort: (r) => r.total_sales, csv: (r) => r.total_sales, render: (r) => <strong>{fmtCFA(r.total_sales)}</strong> },
+          { key: 'orders', label: 'Commandes', align: 'right', sort: (r) => r.total_orders, render: (r) => fmtNum(r.total_orders) },
+          { key: 'aov', label: 'Panier moyen', align: 'right', sort: (r) => r.average_order_value || 0, render: (r) => <span style={{ fontSize: 12, color: C.muted }}>{fmtCFA(r.average_order_value)}</span> },
+          { key: 'perf', label: 'Performance', align: 'right', sort: (r) => r.performance_score, render: (r) => (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}><PerfBadge score={r.performance_score} /><MiniBar value={r.performance_score} /></div>) },
+        ]} />
+    </Panel>
   );
 
-  // ─── Vendors Tab ──────────────────────────────────────────────────────────
-  const VendorsTab = () => (
-    <Card>
-      <CardHeader title="Commerciaux ambulants" onExport={() => handleExport('vendors')} />
-      <DataTable<VendorStat>
-        data={stats.vendorStats} emptyIcon={Users} emptyMsg="Aucun commercial"
+  const renderVendors = () => (
+    <Panel title="Commerciaux ambulants" icon={Users} right={<LinkBtn onClick={() => handleExport('vendors')} busy={exporting === 'vendors'}>Excel</LinkBtn>}>
+      <DataTable<VendorStat> data={stats.vendorStats} emptyIcon={Users} emptyMsg="Aucun commercial" exportName="commerciaux"
         searchKeys={['full_name', 'phone', 'commune', 'zone']}
         columns={[
-          { key: 'full_name', label: 'Nom', render: r => (
-            <div><p style={{ fontWeight: 500, color: P.textDark }}>{r.full_name}</p><p style={{ fontSize: 11, color: P.textMuted }}>{r.phone}</p></div>
-          )},
-          { key: 'status',       label: 'Statut',    render: r => <StatusBadge status={r.status} /> },
-          { key: 'vehicle_type', label: 'Véhicule',  render: r => <span style={{ fontSize: 11, color: P.textMid, textTransform: 'capitalize' }}>{r.vehicle_type || '—'}</span> },
-          { key: 'commune',      label: 'Commune',   render: r => <span style={{ color: P.textMid }}>{r.commune || '—'}</span> },
-          { key: 'zone',         label: 'Zone',      render: r => <span style={{ fontSize: 11, color: P.textMuted }}>{r.zone || '—'}</span> },
-          { key: 'total_sales',  label: 'Ventes', align: 'right', render: r => <span style={{ fontWeight: 500 }}>{fmtCFA(r.total_sales)}</span> },
-          { key: 'performance',  label: 'Efficacité', align: 'right', render: r => <PerfBadge score={r.performance} /> },
-          { key: 'active_days',  label: 'Jours actifs', align: 'right', render: r => <span style={{ color: P.textMid }}>{r.active_days ?? 0}j</span> },
-        ]}
-      />
-    </Card>
+          { key: 'name', label: 'Nom', sort: (r) => r.full_name, csv: (r) => `${r.full_name} (${r.phone})`, render: (r) => (<div><p style={{ fontWeight: 600 }}>{r.full_name}</p><p style={{ fontSize: 11, color: C.muted }}>{r.phone}</p></div>) },
+          { key: 'status', label: 'Statut', sort: (r) => r.status, render: (r) => <StatusBadge status={r.status} /> },
+          { key: 'vehicle', label: 'Véhicule', sort: (r) => r.vehicle_type || '', render: (r) => <span style={{ fontSize: 12, color: C.muted, textTransform: 'capitalize' }}>{r.vehicle_type || '—'}</span> },
+          { key: 'commune', label: 'Commune', sort: (r) => r.commune || '', render: (r) => <span style={{ fontSize: 12, color: C.muted }}>{r.commune || '—'}</span> },
+          { key: 'zone', label: 'Zone', sort: (r) => r.zone || '', render: (r) => <span style={{ fontSize: 12, color: C.muted }}>{r.zone || '—'}</span> },
+          { key: 'sales', label: 'Ventes', align: 'right', sort: (r) => r.total_sales, render: (r) => <strong>{fmtCFA(r.total_sales)}</strong> },
+          { key: 'perf', label: 'Performance', align: 'right', sort: (r) => r.performance, render: (r) => <PerfBadge score={r.performance} /> },
+          { key: 'days', label: 'Jours actifs', align: 'right', sort: (r) => r.active_days || 0, render: (r) => <span style={{ fontSize: 12, color: C.muted }}>{r.active_days ?? 0} j</span> },
+        ]} />
+    </Panel>
   );
 
-  // ─── Products Tab ─────────────────────────────────────────────────────────
-  const ProductsTab = () => (
-    <Card>
-      <CardHeader title="Produits" onExport={() => handleExport('products')} />
-      <DataTable<ProductStat>
-        data={stats.productStats} emptyIcon={Package} emptyMsg="Aucun produit"
+  const renderProducts = () => (
+    <Panel title="Produits" icon={Package} right={<LinkBtn onClick={() => handleExport('products')} busy={exporting === 'products'}>Excel</LinkBtn>}>
+      <DataTable<ProductStat> data={stats.productStats} emptyIcon={Package} emptyMsg="Aucun produit" exportName="produits"
         searchKeys={['name', 'sku', 'category']}
         columns={[
-          { key: 'name', label: 'Produit', render: r => (
-            <div><p style={{ fontWeight: 500 }}>{r.name}</p><p style={{ fontSize: 11, color: P.textMuted }}>{r.sku}</p></div>
-          )},
-          { key: 'category', label: 'Catégorie', render: r => (
-            <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10.5, fontWeight: 600, background: P.forestPale, color: P.forest }}>{r.category}</span>
-          )},
-          { key: 'status',              label: 'Statut',     render: r => <StatusBadge status={r.status} /> },
-          { key: 'total_quantity_sold', label: 'Qté vendue', align: 'right', render: r => <span>{fmtNum(r.total_quantity_sold)}</span> },
-          { key: 'total_revenue',       label: 'Revenu',     align: 'right', render: r => <span style={{ fontWeight: 500 }}>{fmtCFA(r.total_revenue)}</span> },
-          { key: 'average_price',       label: 'Prix moyen', align: 'right', render: r => <span style={{ color: P.textMid }}>{fmtCFA(r.average_price)}</span> },
-          { key: 'stock_rotation', label: 'Rotation', align: 'right', render: r => (
-            <span style={{ fontWeight: 500, color: r.stock_rotation >= 2 ? P.forest : r.stock_rotation >= 1 ? P.ocre : P.red }}>
-              {(r.stock_rotation || 0).toFixed(1)}×
-            </span>
-          )},
-        ]}
-      />
-    </Card>
+          { key: 'name', label: 'Produit', sort: (r) => r.name, csv: (r) => `${r.name} (${r.sku})`, render: (r) => (<div><p style={{ fontWeight: 600 }}>{r.name}</p><p style={{ fontSize: 11, color: C.muted }}>{r.sku}</p></div>) },
+          { key: 'cat', label: 'Catégorie', sort: (r) => r.category || '', render: (r) => <Pill bg={C.pale} tx={C.blueD}>{r.category || '—'}</Pill> },
+          { key: 'status', label: 'Stock', sort: (r) => r.status, render: (r) => <StatusBadge status={r.status} /> },
+          { key: 'qty', label: 'Qté vendue', align: 'right', sort: (r) => r.total_quantity_sold, render: (r) => fmtNum(r.total_quantity_sold) },
+          { key: 'rev', label: 'Revenu', align: 'right', sort: (r) => r.total_revenue, render: (r) => <strong>{fmtCFA(r.total_revenue)}</strong> },
+          { key: 'price', label: 'Prix moyen', align: 'right', sort: (r) => r.average_price || 0, render: (r) => <span style={{ fontSize: 12, color: C.muted }}>{fmtCFA(r.average_price)}</span> },
+          { key: 'rot', label: 'Rotation', align: 'right', sort: (r) => r.stock_rotation || 0, render: (r) => {
+            const v = r.stock_rotation || 0;
+            const [bg, tx] = v >= 2 ? [C.greenBg, C.greenTx] : v >= 1 ? [C.amberBg, C.amberTx] : [C.redBg, C.redTx];
+            return <Pill bg={bg} tx={tx}>{v.toFixed(1)} ×</Pill>;
+          } },
+        ]} />
+    </Panel>
   );
 
-  // ─── Pushcart Tab ─────────────────────────────────────────────────────────
-  const PushcartTab = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <Card>
-        <CardHeader title="Commerciaux — Performance par achats" onExport={() => handleExport('pushcart')} />
-        <DataTable<TopPurchaseVendor & { id: number }>
-          data={stats.topPurchaseVendors.map(v => ({ ...v, id: v.vendor_id }))}
-          emptyIcon={ShoppingBag} emptyMsg="Aucune donnée"
-          searchKeys={['vendor_full_name', 'vendor_phone'] as any}
+  const renderPushcart = () => (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <Panel title="Commerciaux : performance par achats" icon={ShoppingBag} right={<LinkBtn onClick={() => handleExport('pushcart')} busy={exporting === 'pushcart'}>Excel</LinkBtn>}>
+        <DataTable data={topPurchaseRows} emptyIcon={ShoppingBag} emptyMsg="Aucune donnée d'achat" exportName="performance_achats"
+          searchKeys={['vendor_full_name', 'vendor_phone', 'point_of_sale']}
           columns={[
-            { key: 'vendor_full_name', label: 'Commercial', render: r => (
-              <div><p style={{ fontWeight: 500 }}>{r.vendor_full_name}</p><p style={{ fontSize: 11, color: P.textMuted }}>{r.vendor_phone}</p></div>
-            )},
-            { key: 'vendor_status',            label: 'Statut',        render: r => <StatusBadge status={r.vendor_status} /> },
-            { key: 'point_of_sale',             label: 'Point de vente', render: r => <span style={{ color: P.textMid }}>{r.point_of_sale}</span> },
-            { key: 'total_purchase_count',      label: 'Nb achats',   align: 'right', render: r => <span>{fmtNum(r.total_purchase_count)}</span> },
-            { key: 'total_purchase_amount',     label: 'Montant',     align: 'right', render: r => <span style={{ fontWeight: 500 }}>{fmtCFA(r.total_purchase_amount)}</span> },
-            { key: 'total_sales_from_purchases',label: 'Ventes générées', align: 'right', render: r => <span>{fmtCFA(r.total_sales_from_purchases)}</span> },
-            { key: 'purchase_to_sales_efficiency', label: 'Efficacité', align: 'right', render: r => <PerfBadge score={r.purchase_to_sales_efficiency} /> },
-          ]}
-        />
-      </Card>
-      <Card>
-        <CardHeader title="Détails des achats" onExport={() => handleExport('purchase-details')} />
-        <DataTable<PurchaseDetail & { id: number }>
-          data={stats.purchaseDetails.map(p => ({ ...p, id: p.purchase_id }))}
-          emptyIcon={ShoppingCart} emptyMsg="Aucun détail" initialPerPage={20}
-          searchKeys={['purchase_full_name', 'purchase_zone', 'purchase_base'] as any}
+            { key: 'name', label: 'Commercial', sort: (r) => r.vendor_full_name, csv: (r) => `${r.vendor_full_name} (${r.vendor_phone})`, render: (r) => (<div><p style={{ fontWeight: 600 }}>{r.vendor_full_name}</p><p style={{ fontSize: 11, color: C.muted }}>{r.vendor_phone}</p></div>) },
+            { key: 'status', label: 'Statut', sort: (r) => r.vendor_status, render: (r) => <StatusBadge status={r.vendor_status} /> },
+            { key: 'pos', label: 'Point de vente', sort: (r) => r.point_of_sale || '', render: (r) => <span style={{ fontSize: 12, color: C.muted }}>{r.point_of_sale}</span> },
+            { key: 'count', label: 'Nb achats', align: 'right', sort: (r) => r.total_purchase_count, render: (r) => fmtNum(r.total_purchase_count) },
+            { key: 'amount', label: 'Montant', align: 'right', sort: (r) => r.total_purchase_amount, render: (r) => <strong>{fmtCFA(r.total_purchase_amount)}</strong> },
+            { key: 'sales', label: 'Ventes générées', align: 'right', sort: (r) => r.total_sales_from_purchases, render: (r) => <strong>{fmtCFA(r.total_sales_from_purchases)}</strong> },
+            { key: 'eff', label: 'Efficacité', align: 'right', sort: (r) => r.purchase_to_sales_efficiency, render: (r) => <PerfBadge score={r.purchase_to_sales_efficiency} /> },
+          ]} />
+      </Panel>
+      <Panel title="Détail des achats" icon={ShoppingCart} right={<LinkBtn onClick={() => handleExport('purchase-details')} busy={exporting === 'purchase-details'}>Excel</LinkBtn>}>
+        <DataTable data={purchaseRows} emptyIcon={ShoppingCart} emptyMsg="Aucun achat" exportName="detail_achats" initialPerPage={20}
+          searchKeys={['purchase_full_name', 'purchase_zone', 'purchase_base', 'purchase_phone']}
           columns={[
-            { key: 'purchase_full_name',  label: 'Acheteur', render: r => (
-              <div><p style={{ fontWeight: 500 }}>{r.purchase_full_name}</p><p style={{ fontSize: 11, color: P.textMuted }}>{r.purchase_phone}</p></div>
-            )},
-            { key: 'purchase_zone',           label: 'Zone',          render: r => <span style={{ color: P.textMid }}>{r.purchase_zone || '—'}</span> },
-            { key: 'purchase_pushcard_type',  label: 'Type prospect', render: r => (
-              <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10.5, fontWeight: 600, background: P.tealPale, color: P.teal }}>{r.purchase_pushcard_type || '—'}</span>
-            )},
-            { key: 'purchase_amount',     label: 'Montant achat',   align: 'right', render: r => <span style={{ fontWeight: 500 }}>{fmtCFA(r.purchase_amount)}</span> },
-            { key: 'total_sales_amount',  label: 'Ventes générées', align: 'right', render: r => <span>{fmtCFA(r.total_sales_amount)}</span> },
-            { key: 'sales_efficiency',    label: 'Efficacité',      align: 'right', render: r => <PerfBadge score={r.sales_efficiency} /> },
-            { key: 'main_mobile_vendor',  label: 'Vendeur principal', render: r => r.main_mobile_vendor
-              ? <div><p style={{ fontSize: 12, fontWeight: 500 }}>{r.main_mobile_vendor.full_name}</p><p style={{ fontSize: 11, color: P.textMuted }}>{r.main_mobile_vendor.phone}</p></div>
-              : <span style={{ color: P.textLighter, fontSize: 12 }}>Non assigné</span>
-            },
-          ]}
-        />
-      </Card>
+            { key: 'buyer', label: 'Acheteur', sort: (r) => r.purchase_full_name, csv: (r) => `${r.purchase_full_name} (${r.purchase_phone})`, render: (r) => (<div><p style={{ fontWeight: 600 }}>{r.purchase_full_name}</p><p style={{ fontSize: 11, color: C.muted }}>{r.purchase_phone}</p></div>) },
+            { key: 'date', label: 'Date', sort: (r) => r.purchase_date || '', render: (r) => <span style={{ fontSize: 12, color: C.muted }}>{fmtDate(r.purchase_date)}</span> },
+            { key: 'zone', label: 'Zone', sort: (r) => r.purchase_zone || '', render: (r) => <span style={{ fontSize: 12, color: C.muted }}>{r.purchase_zone || '—'}</span> },
+            { key: 'type', label: 'Type', sort: (r) => r.purchase_pushcard_type || '', render: (r) => <Pill bg={C.pale} tx={C.blueD}>{r.purchase_pushcard_type || '—'}</Pill> },
+            { key: 'amount', label: 'Montant achat', align: 'right', sort: (r) => r.purchase_amount, render: (r) => <strong>{fmtCFA(r.purchase_amount)}</strong> },
+            { key: 'sales', label: 'Ventes générées', align: 'right', sort: (r) => r.total_sales_amount, render: (r) => <strong>{fmtCFA(r.total_sales_amount)}</strong> },
+            { key: 'eff', label: 'Efficacité', align: 'right', sort: (r) => r.sales_efficiency, render: (r) => <PerfBadge score={r.sales_efficiency} /> },
+            { key: 'vendor', label: 'Vendeur principal', sort: (r) => r.main_mobile_vendor?.full_name || '', render: (r) => r.main_mobile_vendor
+              ? <div><p style={{ fontWeight: 600, fontSize: 12 }}>{r.main_mobile_vendor.full_name}</p><p style={{ fontSize: 11, color: C.muted }}>{r.main_mobile_vendor.phone}</p></div>
+              : <Pill bg={C.amberBg} tx={C.amberTx}>Non assigné</Pill> },
+          ]} />
+      </Panel>
     </div>
   );
 
-  // ─── Analytics Tab ────────────────────────────────────────────────────────
-  const AnalyticsTab = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <Card>
-        <h3 style={{ fontSize: 13.5, fontWeight: 500, color: P.textDark, marginBottom: 16 }}>Exports & Rapports</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-          {[
-            { type: 'sales',       icon: BarChart,   label: 'Rapport des ventes',   desc: 'Export complet des ventes' },
-            { type: 'vendors',     icon: Users,      label: 'Rapport commerciaux',  desc: 'Performance des commerciaux' },
-            { type: 'products',    icon: Package,    label: 'Rapport produits',     desc: 'Stocks, rotation, revenus' },
-            { type: 'pos',         icon: MapPin,     label: 'Rapport PdV',          desc: 'Points de vente & communes' },
-            { type: 'inventory',   icon: Package,    label: 'Rapport inventaire',   desc: 'État des stocks' },
-            { type: 'performance', icon: TrendingUp, label: 'Rapport performance',  desc: 'KPIs globaux' },
-          ].map(({ type, icon: Icon, label, desc }) => (
-            <button key={type} onClick={() => handleExport(type)}
-              style={{ padding: 16, border: `1.5px dashed ${P.sandBorder}`, borderRadius: 12, background: 'transparent', textAlign: 'left', cursor: 'pointer', transition: 'background .15s, border-color .15s' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = P.forestPale; (e.currentTarget as HTMLElement).style.borderColor = P.forest; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.borderColor = P.sandBorder; }}>
-              <Icon size={26} color={P.textLighter} style={{ marginBottom: 10 }} />
-              <p style={{ fontSize: 12.5, fontWeight: 500, color: P.textDark }}>{label}</p>
-              <p style={{ fontSize: 11, color: P.textMuted, marginTop: 3 }}>{desc}</p>
+  const reports = [
+    { type: 'sales', icon: BarChart3, label: 'Ventes', desc: 'Toutes les ventes de la période' },
+    { type: 'vendors', icon: Users, label: 'Commerciaux', desc: 'Performance et activité terrain' },
+    { type: 'products', icon: Package, label: 'Produits', desc: 'Revenus, rotation et stock' },
+    { type: 'pos', icon: MapPin, label: 'Points de vente', desc: 'Résultats par commune et région' },
+    { type: 'inventory', icon: Package, label: 'Inventaire', desc: 'État des stocks' },
+    { type: 'performance', icon: TrendingUp, label: 'Performance', desc: 'Indicateurs globaux' },
+  ];
+
+  const renderReports = () => (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <Panel title="Exporter un rapport Excel" icon={Download}>
+        <p style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>
+          Chaque rapport respecte la période et les filtres actifs : <strong style={{ color: C.sub }}>{periodLabel}</strong>
+          {chips.length > 0 && <> · {chips.length} filtre{chips.length > 1 ? 's' : ''}</>}.
+        </p>
+        <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
+          {reports.map(({ type, icon: Icon, label, desc }) => (
+            <button key={type} onClick={() => handleExport(type)} disabled={exporting !== null}
+              style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 14, borderRadius: 12, background: C.pale, border: `1px solid ${C.lineL}`, cursor: exporting ? 'wait' : 'pointer', textAlign: 'left', fontFamily: 'inherit', opacity: exporting && exporting !== type ? 0.6 : 1 }}>
+              <span style={{ width: 36, height: 36, borderRadius: 10, background: '#D6EAF6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {exporting === type ? <Loader2 size={16} className="st-spin" style={{ color: C.blueD }} /> : <Icon size={16} style={{ color: C.blueD }} />}
+              </span>
+              <span><span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: C.text }}>{label}</span><span style={{ fontSize: 11, color: C.muted }}>{desc}</span></span>
             </button>
           ))}
         </div>
-      </Card>
-      <Card>
-        <h3 style={{ fontSize: 13.5, fontWeight: 500, color: P.textDark, marginBottom: 12 }}>Filtres actifs</h3>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: P.forestPale, color: P.forest }}>Période : {timeRange} derniers jours</span>
-          {filters.region?.map(r => <span key={r} style={{ padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: '#EDE8FF', color: '#5340A0' }}>Région : {r}</span>)}
-          {filters.commune?.map(c => <span key={c} style={{ padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: P.tealPale, color: P.teal }}>Commune : {c}</span>)}
-          {filters.status && <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: P.forestPale, color: P.forest }}>Statut : {filters.status}</span>}
-        </div>
-      </Card>
+      </Panel>
     </div>
   );
 
-  // ─── Loading ───────────────────────────────────────────────────────────────
-  if (loading && !refreshing) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: P.cream }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 40, height: 40, border: `3px solid ${P.forestPale}`, borderTopColor: P.forest, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-          <p style={{ fontSize: 12.5, color: P.textMuted, fontWeight: 500 }}>Chargement des statistiques…</p>
+  /* ─── Rendu ─── */
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <style>{GLOBAL_CSS}</style>
+
+      {/* Bandeau */}
+      <div style={{ background: C.navy, borderRadius: 16, padding: 20, display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <BarChart3 size={16} style={{ color: C.blueL }} />
+            <span style={{ color: 'rgba(200,230,248,.9)', fontSize: 12, fontWeight: 600 }}>LanfiaLink Analytiques</span>
+          </div>
+          <p style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>Ventes, terrain et stocks sur une même vue</p>
+          <p style={{ color: 'rgba(200,230,248,.85)', fontSize: 12, marginTop: 6 }}>{periodLabel}</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <select aria-label="Période" value={timeRange} onChange={(e) => setTimeRange(e.target.value)} disabled={!!(applied.start_date || applied.end_date)}
+            style={{ ...inputStyle, width: 'auto', height: 34, opacity: applied.start_date || applied.end_date ? 0.5 : 1 }}>
+            <option value="7">7 derniers jours</option><option value="30">30 derniers jours</option>
+            <option value="90">3 derniers mois</option><option value="365">1 an</option>
+          </select>
+          <button onClick={() => setShowFilters((f) => !f)} aria-expanded={showFilters}
+            style={{ ...btn(showFilters || chips.length ? C.blue : 'rgba(79,179,232,.18)', '#fff'), height: 34 }}>
+            <SlidersHorizontal size={13} /> Filtres
+            {chips.length > 0 && <span style={{ background: '#fff', color: C.blueD, borderRadius: 99, fontSize: 10, padding: '0 6px', fontWeight: 700 }}>{chips.length}</span>}
+          </button>
+          <button onClick={() => loadStats(true)} disabled={refreshing} style={{ ...btn('rgba(79,179,232,.18)'), height: 34, opacity: refreshing ? 0.7 : 1 }}>
+            <RefreshCw size={13} className={refreshing ? 'st-spin' : undefined} /> {refreshing ? 'Actualisation…' : 'Actualiser'}
+          </button>
         </div>
       </div>
-    );
-  }
 
-  // ─── Render ────────────────────────────────────────────────────────────────
-  return (
-    <div style={{ minHeight: '100vh', background: P.cream }}>
-      {/* ── Header ── */}
-      <header style={{ background: P.forest, position: 'relative', overflow: 'hidden' }}>
-        <KenteBar />
-        {/* Grid texture */}
-        <div style={{ position: 'absolute', inset: 0, opacity: 0.05, backgroundImage: `linear-gradient(rgba(250,247,240,.9) 1px,transparent 1px),linear-gradient(90deg,rgba(250,247,240,.9) 1px,transparent 1px)`, backgroundSize: '36px 36px', pointerEvents: 'none' }} />
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, position: 'relative', zIndex: 1, flexWrap: 'wrap' }}>
-          {/* Brand */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: P.ocre, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Building2 size={18} color="white" />
-            </div>
-            <div>
-              <p style={{ color: '#FAF7F0', fontWeight: 500, fontSize: 15, lineHeight: 1.1 }}>LanfiaLink</p>
-              <p style={{ color: 'rgba(250,247,240,.38)', fontSize: 10.5 }}>Tableau de bord statistiques</p>
-            </div>
+      {/* Erreurs */}
+      {error && (
+        <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', padding: 12, borderRadius: 12, background: C.redBg, color: C.redTx, fontSize: 12 }}>
+          <AlertTriangle size={14} /><span style={{ flex: 1 }}>{error}</span>
+          <button onClick={() => setError(null)} aria-label="Fermer" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.redTx }}><X size={14} /></button>
+        </div>
+      )}
+      {failed.length > 0 && !loading && (
+        <div role="status" style={{ display: 'flex', gap: 10, alignItems: 'center', padding: 12, borderRadius: 12, background: C.amberBg, color: C.amberTx, fontSize: 12 }}>
+          <AlertTriangle size={14} />
+          <span style={{ flex: 1 }}>Certaines données n'ont pas pu être chargées ({failed.join(', ')}). Les autres blocs restent à jour.</span>
+          <button onClick={() => loadStats(true)} style={{ ...btnGhost, padding: '4px 10px', color: C.amberTx }}>Réessayer</button>
+        </div>
+      )}
+
+      {/* Filtres */}
+      {showFilters && (
+        <div style={{ ...card, padding: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: C.text }}><SlidersHorizontal size={14} style={{ color: C.blue }} />Filtres avancés</span>
+            <button onClick={() => setShowFilters(false)} aria-label="Fermer les filtres" style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted }}><X size={16} /></button>
           </div>
-          {/* Controls */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            {/* Filters toggle */}
-            <button onClick={() => setShowFilters(f => !f)} style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px',
-              borderRadius: 10, border: `1px solid ${showFilters || activeFiltersCount > 0 ? P.ocre : 'rgba(250,247,240,.2)'}`,
-              background: showFilters || activeFiltersCount > 0 ? P.ocre : 'rgba(250,247,240,.08)',
-              color: 'rgba(250,247,240,.85)', fontSize: 12.5, cursor: 'pointer',
-            }}>
-              <SlidersHorizontal size={14} />
-              Filtres
-              {activeFiltersCount > 0 && (
-                <span style={{ background: 'rgba(250,247,240,.25)', padding: '0 5px', borderRadius: 10, fontSize: 10, fontWeight: 700 }}>{activeFiltersCount}</span>
-              )}
-            </button>
-            {/* Period */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(250,247,240,.08)', border: '1px solid rgba(250,247,240,.15)', borderRadius: 10, padding: '7px 10px' }}>
-              <Filter size={13} color="rgba(250,247,240,.5)" />
-              <select value={timeRange} onChange={e => setTimeRange(e.target.value)}
-                style={{ background: 'transparent', border: 'none', color: 'rgba(250,247,240,.85)', fontSize: 12.5, outline: 'none', cursor: 'pointer' }}>
-                <option value="7">7 derniers jours</option>
-                <option value="30">30 derniers jours</option>
-                <option value="90">3 derniers mois</option>
-                <option value="365">1 an</option>
-              </select>
-            </div>
-            {/* Refresh */}
-            <button onClick={() => loadStats(true)} disabled={refreshing}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, border: 'none', background: P.ocre, color: 'white', fontSize: 12.5, fontWeight: 500, cursor: refreshing ? 'not-allowed' : 'pointer', opacity: refreshing ? 0.6 : 1 }}>
-              <RefreshCw size={13} style={refreshing ? { animation: 'spin 0.8s linear infinite' } : {}} />
-              {refreshing ? 'Actualisation…' : 'Actualiser'}
-            </button>
+          <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
+            <label><FieldLabel>Date de début</FieldLabel><input type="date" style={inputStyle} value={draft.start_date || ''} max={draft.end_date} onChange={(e) => setDraft((d) => ({ ...d, start_date: e.target.value || undefined }))} /></label>
+            <label><FieldLabel>Date de fin</FieldLabel><input type="date" style={inputStyle} value={draft.end_date || ''} min={draft.start_date} onChange={(e) => setDraft((d) => ({ ...d, end_date: e.target.value || undefined }))} /></label>
+            <label><FieldLabel>Regrouper les ventes</FieldLabel>
+              <select style={inputStyle} value={draft.group_by || 'day'} onChange={(e) => setDraft((d) => ({ ...d, group_by: e.target.value }))}>
+                <option value="day">Par jour</option><option value="week">Par semaine</option><option value="month">Par mois</option>
+              </select></label>
+            <label><FieldLabel>Statut du commercial</FieldLabel>
+              <select style={inputStyle} value={draft.status || ''} onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value || undefined }))}>
+                <option value="">Tous</option><option value="actif">Actif</option><option value="inactif">Inactif</option><option value="suspendu">Suspendu</option>
+              </select></label>
+            <label><FieldLabel>Véhicule</FieldLabel>
+              <select style={inputStyle} value={draft.vehicle_type || ''} onChange={(e) => setDraft((d) => ({ ...d, vehicle_type: e.target.value || undefined }))}>
+                <option value="">Tous</option><option value="moto">Moto</option><option value="velo">Vélo</option><option value="tricycle">Tricycle</option><option value="pieton">Piéton</option>
+              </select></label>
+            {([['region', 'Région', optionsRef.current.regions], ['commune', 'Commune', optionsRef.current.communes], ['quartier', 'Quartier', optionsRef.current.quartiers], ['zone', 'Zone', optionsRef.current.zones]] as const).map(([k, label, opts]) => (
+              <div key={k}><FieldLabel>{label}</FieldLabel>
+                <MultiSelect label={label} options={opts} selected={(draft[k] as string[]) || []} onChange={(v) => setDraft((d) => ({ ...d, [k]: v }))} /></div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+            <button style={btnGhost} onClick={() => { setDraft(EMPTY_FILTERS); setApplied(EMPTY_FILTERS); }}>Réinitialiser</button>
+            <button style={btn(C.blue)} onClick={() => { setApplied(draft); setShowFilters(false); }}>Appliquer les filtres</button>
           </div>
         </div>
-        <KenteBar bottom />
-      </header>
+      )}
 
-      {/* ── Tabs ── */}
-      <nav style={{ background: 'white', borderBottom: `1px solid ${P.sandBorder}`, padding: '0 24px', display: 'flex', gap: 2, overflowX: 'auto' }}>
-        {tabs.map(({ id, label, icon: Icon }) => (
-          <button key={id} onClick={() => setActiveTab(id)} style={{
-            display: 'flex', alignItems: 'center', gap: 6, padding: '12px 14px',
-            border: 'none', borderBottom: `2px solid ${activeTab === id ? P.forest : 'transparent'}`,
-            background: 'transparent', color: activeTab === id ? P.forest : P.textMuted,
-            fontSize: 12.5, fontWeight: activeTab === id ? 500 : 400,
-            cursor: 'pointer', whiteSpace: 'nowrap', marginBottom: -1, transition: 'color .15s',
-          }}>
-            <Icon size={14} />
-            {label}
+      {/* Pastilles de filtres actifs */}
+      {chips.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {chips.map((c) => (
+            <span key={c.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 4px 4px 10px', borderRadius: 99, background: C.pale, border: `1px solid ${C.line}`, color: C.blueD, fontSize: 11, fontWeight: 600 }}>
+              {c.label}
+              <button onClick={c.clear} aria-label={`Retirer le filtre ${c.label}`} style={{ width: 18, height: 18, borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer', color: C.red, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={11} /></button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Onglets */}
+      <div style={{ display: 'inline-flex', gap: 2, padding: 4, borderRadius: 12, background: C.pale, border: `0.5px solid ${C.line}`, overflowX: 'auto', maxWidth: '100%', justifySelf: 'start' }}>
+        {tabs.map((t) => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)} aria-pressed={activeTab === t.id}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap', background: activeTab === t.id ? C.blue : 'transparent', color: activeTab === t.id ? '#fff' : C.greyTx }}>
+            <t.icon size={12} />{t.label}
           </button>
         ))}
-      </nav>
+      </div>
 
-      {/* ── Content ── */}
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: 24 }}>
-        <OcreAccent />
-
-        {/* Stats date range */}
-        {stats.summary?.start_date && stats.summary?.end_date && (
-          <p style={{ fontSize: 11.5, color: P.textMuted, marginBottom: 16, marginTop: -8 }}>
-            {new Date(stats.summary.start_date).toLocaleDateString('fr-FR')} – {new Date(stats.summary.end_date).toLocaleDateString('fr-FR')}
-          </p>
-        )}
-
-        {showFilters && (
-          <FilterPanel
-            filters={filters} onUpdate={updateFilter} onReset={resetFilters} onClose={() => setShowFilters(false)}
-            availableRegions={availableRegions} availableCommunes={availableCommunes}
-            availableQuartiers={availableQuartiers} availableZones={availableZones}
-          />
-        )}
-
-        <div key={activeTab}>
-          {activeTab === 'overview'       && <OverviewTab />}
-          {activeTab === 'points-of-sale' && <PointsOfSaleTab />}
-          {activeTab === 'vendors'        && <VendorsTab />}
-          {activeTab === 'products'       && <ProductsTab />}
-          {activeTab === 'pushcart'       && <PushcartTab />}
-          {activeTab === 'analytics'      && <AnalyticsTab />}
+      {/* Contenu */}
+      {loading ? (
+        <div style={{ ...card, padding: 48, textAlign: 'center' }}>
+          <Loader2 className="st-spin" size={24} style={{ color: C.blue, margin: '0 auto 10px' }} />
+          <p style={{ fontSize: 13, color: C.muted }}>Chargement des statistiques…</p>
         </div>
-
-        <footer style={{ textAlign: 'center', marginTop: 32, paddingTop: 16, borderTop: `1px solid ${P.sand}`, fontSize: 10.5, color: P.textLighter }}>
-          © {new Date().getFullYear()} LanfiaLink · Côte d'Ivoire · Chiffrement AES-256
-        </footer>
-      </main>
+      ) : (
+        <div style={{ opacity: refreshing ? 0.6 : 1, transition: 'opacity .2s' }}>
+          {activeTab === 'overview' && renderOverview()}
+          {activeTab === 'points-of-sale' && renderPOS()}
+          {activeTab === 'vendors' && renderVendors()}
+          {activeTab === 'products' && renderProducts()}
+          {activeTab === 'pushcart' && renderPushcart()}
+          {activeTab === 'analytics' && renderReports()}
+        </div>
+      )}
     </div>
   );
 }
